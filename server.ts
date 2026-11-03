@@ -1,4 +1,5 @@
 import express from 'express';
+import { createLiveChatRouter } from './integrations/live-chat/router.mjs';
 import { registerGptActions } from './src/lib/gptActions.mjs';
 import { sendChatError } from './src/lib/chatTransport.mjs';
 import { GoogleGenAI } from '@google/genai';
@@ -6535,6 +6536,14 @@ async function bootstrapTriadMission() {
   }
 }
 
+// Live-chat API is mounted but inaccessible until genuine auth middleware is wired.
+// This deliberately prevents impersonation of agents and unauthenticated message access.
+const liveChatAuthRequired = (_req: express.Request, res: express.Response) =>
+  res.status(503).json({ error: 'Live chat authentication not configured' });
+app.use('/api/live-chat', createLiveChatRouter({
+  requireUser: liveChatAuthRequired,
+  requireWorker: liveChatAuthRequired,
+}));
 // Unknown API requests must not fall through to the HTML application shell.
 app.use('/api', (_req, res) => {
   res.status(404).json({ success: false, error: 'Nieznany endpoint API. Sprawdź adres i wersję wdrożonego serwera.' });
