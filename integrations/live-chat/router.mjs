@@ -159,6 +159,20 @@ export function createLiveChatRouter(options = {}) {
     }
   });
 
+  router.post('/worker/jobs/:id/heartbeat', requireWorker, async (req, res) => {
+    try {
+      const job = await store.renewLease({
+        id: req.params.id,
+        agent: req.agentIdentity,
+        workerId: String(req.get('X-Worker-Id') || req.agentIdentity).slice(0, 128),
+        leaseMs,
+      });
+      return res.json({ success: true, leaseUntil: job.leaseUntil });
+    } catch (error) {
+      return res.status(errorStatus(error)).json({ error: error?.code || 'Unable to renew worker lease' });
+    }
+  });
+
   router.post('/worker/jobs/:id/fail', requireWorker, async (req, res) => {
     const errorText = typeof req.body?.error === 'string' ? req.body.error.slice(0, 1000) : 'Worker failed';
     try {

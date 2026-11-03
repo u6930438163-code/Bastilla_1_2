@@ -69,7 +69,10 @@ export function createAgentWorker(options = {}) {
 
     const job = claimed.job;
     const heartbeat = setInterval(() => {
-      request('worker/heartbeat', { method: 'POST', body: {}, signal }).catch(onError);
+      Promise.all([
+        request('worker/heartbeat', { method: 'POST', body: {}, signal }),
+        request('worker/jobs/' + encodeURIComponent(job.id) + '/heartbeat', { method: 'POST', body: {}, signal }),
+      ]).catch(onError);
     }, heartbeatIntervalMs);
 
     try {

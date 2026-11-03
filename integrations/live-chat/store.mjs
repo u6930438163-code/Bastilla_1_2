@@ -263,6 +263,15 @@ export class LiveChatStore {
     });
   }
 
+  async renewLease({ id, agent, workerId, leaseMs = 60000 }) {
+    return this.mutate((state) => {
+      const job = state.jobs.find((candidate) => candidate.id === id && candidate.to === agent);
+      if (!job || job.status !== 'running' || job.workerId !== workerId) throw makeError('JOB_NOT_OWNED');
+      job.leaseUntil = this.now() + Math.max(10000, leaseMs);
+      return job;
+    });
+  }
+
   async failJob({ id, agent, error, retryDelayMs = 3000, maxAttempts = this.maxJobAttempts }) {
     return this.mutate((state) => {
       const job = state.jobs.find((candidate) => candidate.id === id && candidate.to === agent);

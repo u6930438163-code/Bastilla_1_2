@@ -81,3 +81,24 @@ test('marks a failed job for retry and persists read state', async (t) => {
   const restarted = new LiveChatStore({ filePath });
   assert.equal(restarted.getHistory('Alex')[0].read, true);
 });
+
+
+test('renews a running job lease only for its owning worker', async (t) => {
+  const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'bastilla-live-chat-'));
+  t.after(() => fs.rmSync(directory, { recursive: true, force: true }));
+  let now = 1_800_000_100_000;
+  const store = new LiveChatStore({ filePath: path.join(directory, 'state.json'), now: () => now });
+  await store.createUserMessage({ channel: 'Alex', text: 'Long task', recipients: ['Alex'] });
+  const job = await store.claimNext('Alex', 'worker-one', 10000);
+
+  await assert.rejects(
+    store.renewLease({ id: job.id, agent: 'Alex', workerId: 'worker-two', leaseMs: 10000 }),
+    (error) => error.code === 'JOB_NOT_OWNED'
+  );
+  await store.renewLease({ id: job.id, agent: 'Alex', workerId: 'worker-one', leaseMs: 10000 });
+  now += 9000;
+  assert.equal(await store.claimNext('Alex', 'worker-two', 10000), null);
+  now += 2000;
+  const reclaimed = await store.claimNext('Alex', 'worker-two', 10000);
+  assert.equal(reclaimed.attempts, 2);
+});

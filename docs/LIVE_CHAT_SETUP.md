@@ -23,7 +23,7 @@ Uruchom osobny worker dla każdego agenta, ustawiając:
 - BASTILLA_LIVE_CHAT_BASE_URL
 - BASTILLA_LIVE_CHAT_WORKER_TOKEN
 
-Następnie uruchom integrations/live-chat/worker-runner.mjs. Plik systemd integrations/live-chat/bastilla-live-chat-worker@.service pokazuje wzorzec uruchomienia w tle. Worker online oznacza wyłącznie aktualny, uwierzytelniony heartbeat; nie jest to dowód działania modelu, dopóki adapter nie zwróci odpowiedzi.
+Jeśli agent udostępnia własny endpoint HTTPS, ustaw BASTILLA_AGENT_ADAPTER=integrations/live-chat/http-agent-adapter.mjs oraz jego BASTILLA_AGENT_ENDPOINT i BASTILLA_AGENT_API_KEY. W przeciwnym razie przygotuj własny adapter runAgent dla rzeczywistego runtime AI Studio. Następnie uruchom integrations/live-chat/worker-runner.mjs. Po utworzeniu czterech plików /etc/bastilla/live-chat/Aria.env, Alex.env, Astyria.env i Aurelius.env można użyć sudo bash scripts/install-live-chat-workers.sh, aby zainstalować i uruchomić usługi systemd. Worker online oznacza wyłącznie aktualny, uwierzytelniony heartbeat; nie jest to dowód działania modelu, dopóki adapter nie zwróci odpowiedzi. Lease zadania jest odnawiany podczas długiego przetwarzania, a po awarii worker może odzyskać zadanie.
 
 ## 3. Kanały i zabezpieczenia
 
