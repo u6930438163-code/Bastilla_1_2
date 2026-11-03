@@ -6536,13 +6536,28 @@ async function bootstrapTriadMission() {
   }
 }
 
-// Live-chat API is mounted but inaccessible until genuine auth middleware is wired.
-// This deliberately prevents impersonation of agents and unauthenticated message access.
-const liveChatAuthRequired = (_req: express.Request, res: express.Response) =>
-  res.status(503).json({ error: 'Live chat authentication not configured' });
+// Live-chat worker authentication: configure per-agent random secrets in
+// BASTILLA_LIVE_CHAT_WORKER_TOKENS as JSON: {"Aria":"...","Alex":"...",...}.
+// User-facing endpoints remain fail-closed until the app's real user auth is wired.
+const liveChatUserAuthRequired = (_req: express.Request, res: express.Response) =>
+  res.status(503).json({ error: 'Live chat user authentication not configured' });
+const liveChatWorkerAuth: express.RequestHandler = (req, res, next) => {
+  let credentials: Record<string, string> = {};
+  try { credentials = JSON.parse(process.env.BASTILLA_LIVE_CHAT_WORKER_TOKENS || '{}'); }
+  catch { return res.status(503).json({ error: 'Invalid worker token configuration' }); }
+  const agent = req.body?.agent;
+  const expected = typeof agent === 'string' ? credentials[agent] : undefined;
+  const supplied = (req.get('Authorization') || '').replace(/^Bearer\s+/i, '');
+  if (!expected || !supplied || Buffer.byteLength(expected) !== Buffer.byteLength(supplied) ||
+      !require('crypto').timingSafeEqual(Buffer.from(expected), Buffer.from(supplied))) {
+    return res.status(401).json({ error: 'Unauthorized worker' });
+  }
+  (req as express.Request & { agentIdentity?: string }).agentIdentity = agent;
+  next();
+};
 app.use('/api/live-chat', createLiveChatRouter({
-  requireUser: liveChatAuthRequired,
-  requireWorker: liveChatAuthRequired,
+  requireUser: liveChatUserAuthRequired,
+  requireWorker: liveChatWorkerAuth,
 }));
 // Unknown API requests must not fall through to the HTML application shell.
 app.use('/api', (_req, res) => {
