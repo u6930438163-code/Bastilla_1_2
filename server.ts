@@ -1,5 +1,7 @@
 import express from 'express';
 import { createLiveChatRouter } from './integrations/live-chat/router.mjs';
+import { createLiveChatSessionAuth, createLiveChatWorkerAuth } from './integrations/live-chat/auth.mjs';
+import { LiveChatStore } from './integrations/live-chat/store.mjs';
 import { registerGptActions } from './src/lib/gptActions.mjs';
 import { sendChatError } from './src/lib/chatTransport.mjs';
 import { GoogleGenAI } from '@google/genai';
@@ -10,7 +12,7 @@ import { execFile } from 'child_process';
 import { promisify } from 'util';
 import fs from 'fs';
 import os from 'os';
-import { randomUUID, createHash, timingSafeEqual } from 'crypto';
+import { randomUUID, createHash } from 'crypto';
 import { INITIAL_DATA_STORE } from './src/kernel/svlKernel';
 import type { ChatSystemChange } from './src/kernel/chatChanges';
 import { withoutNlpEngine } from './src/lib/withoutNlpEngine';
@@ -167,6 +169,19 @@ const uploadLimitMB = Number.isFinite(requestedUploadLimit)
   : 32;
 app.use(express.json({ limit: `${uploadLimitMB}mb` }));
 app.use(express.urlencoded({ limit: `${uploadLimitMB}mb`, extended: true }));
+
+const liveChatAuth = createLiveChatSessionAuth({
+  password: process.env.BASTILLA_LIVE_CHAT_USER_PASSWORD || '',
+  secret: process.env.BASTILLA_LIVE_CHAT_SESSION_SECRET || '',
+  allowedOrigin: process.env.BASTILLA_LIVE_CHAT_ALLOWED_ORIGIN || '',
+  cookieSecure: (process.env.BASTILLA_LIVE_CHAT_COOKIE_SECURE || 'true').trim().toLowerCase() !== 'false',
+});
+const liveChatWorkerAuth = createLiveChatWorkerAuth({
+  tokensJson: process.env.BASTILLA_LIVE_CHAT_WORKER_TOKENS || '',
+});
+const liveChatStore = new LiveChatStore({
+  filePath: process.env.BASTILLA_LIVE_CHAT_STORE_PATH || 'data/live-chat-state.json',
+});
 
 app.use((err: any, _req: express.Request, res: express.Response, next: express.NextFunction) => {
   if (err?.type === 'entity.too.large' || err?.status === 413) {
@@ -5603,7 +5618,6 @@ function buildWithoutNlpAgentReply(
  */
 type AgentInboxEntry = { id: string; agent: ChatAgentName; text: string; at: string; read: boolean; provider: string };
 const agentInboxPath = path.resolve(process.env.BASTILLA_AGENT_INBOX_PATH || 'data/agent-inbox.json');
-const agentInboxToken = (process.env.BASTILLA_AGENT_INBOX_TOKEN || '').trim();
 function loadAgentInbox(): AgentInboxEntry[] {
   try {
     const value = JSON.parse(fs.readFileSync(agentInboxPath, 'utf8'));
@@ -5617,19 +5631,17 @@ function saveAgentInbox(): void {
   fs.writeFileSync(tmp, JSON.stringify(agentInbox), { mode: 0o600 });
   fs.renameSync(tmp, agentInboxPath);
 }
-app.get('/api/agents/inbox', (_req, res) => {
+app.get('/api/agents/inbox', liveChatAuth.requireUser, (_req, res) => {
   res.setHeader('Cache-Control', 'no-store');
   res.json({ enabled: true, mode: 'agent-initiated', messages: agentInbox,
     unread: agentInbox.filter(m => !m.read).length,
     note: 'Agenci wysyłają wiadomości samodzielnie przez uwierzytelniony endpoint; nie ma harmonogramu ani generowania fikcyjnych wiadomości.' });
 });
-app.post('/api/agents/inbox/send', (req, res) => {
-  // Fail closed unless a private shared token is configured.
-  if (!agentInboxToken || req.get('Authorization') !== 'Bearer ' + agentInboxToken) {
-    return res.status(401).json({ error: 'Unauthorized agent runtime' });
-  }
-  const { agent, text: message } = req.body || {};
-  if (!CHAT_AGENT_NAMES.includes(agent) || typeof message !== 'string' || !message.trim() || message.length > 4000) {
+app.post('/api/agents/inbox/send', liveChatWorkerAuth, (req, res) => {
+  const externalAgent = (req as express.Request & { agentIdentity?: string }).agentIdentity;
+  const agent: ChatAgentName = externalAgent === 'Aria' ? 'si_1' : externalAgent as ChatAgentName;
+  const { text: message } = req.body || {};
+  if (!agent || !CHAT_AGENT_NAMES.includes(agent) || typeof message !== 'string' || !message.trim() || message.length > 4000) {
     return res.status(400).json({ error: 'Expected known agent and nonempty text up to 4000 characters' });
   }
   const item: AgentInboxEntry = { id: randomUUID(), agent, text: message.trim(),
@@ -5643,7 +5655,7 @@ app.post('/api/agents/inbox/send', (req, res) => {
   }
   res.status(201).json({ success: true, id: item.id });
 });
-app.post('/api/agents/inbox/read', (req, res) => {
+app.post('/api/agents/inbox/read', liveChatAuth.requireUser, (req, res) => {
   const id = req.body?.id;
   if (typeof id !== 'string' || id.length > 100) return res.status(400).json({ error: 'Invalid message id' });
   const item = agentInbox.find(m => m.id === id);
@@ -6536,28 +6548,12 @@ async function bootstrapTriadMission() {
   }
 }
 
-// Live-chat worker authentication: configure per-agent random secrets in
-// BASTILLA_LIVE_CHAT_WORKER_TOKENS as JSON: {"Aria":"...","Alex":"...",...}.
-// User-facing endpoints remain fail-closed until the app's real user auth is wired.
-const liveChatUserAuthRequired = (_req: express.Request, res: express.Response) =>
-  res.status(503).json({ error: 'Live chat user authentication not configured' });
-const liveChatWorkerAuth: express.RequestHandler = (req, res, next) => {
-  let credentials: Record<string, string> = {};
-  try { credentials = JSON.parse(process.env.BASTILLA_LIVE_CHAT_WORKER_TOKENS || '{}'); }
-  catch { return res.status(503).json({ error: 'Invalid worker token configuration' }); }
-  const agent = req.body?.agent;
-  const expected = typeof agent === 'string' ? credentials[agent] : undefined;
-  const supplied = (req.get('Authorization') || '').replace(/^Bearer\s+/i, '');
-  if (!expected || !supplied || Buffer.byteLength(expected) !== Buffer.byteLength(supplied) ||
-      !timingSafeEqual(Buffer.from(expected), Buffer.from(supplied))) {
-    return res.status(401).json({ error: 'Unauthorized worker' });
-  }
-  (req as express.Request & { agentIdentity?: string }).agentIdentity = agent;
-  next();
-};
+// Authenticated durable live-chat transport. Original agent runtimes connect through their own worker adapters.
 app.use('/api/live-chat', createLiveChatRouter({
-  requireUser: liveChatUserAuthRequired,
+  store: liveChatStore,
+  requireUser: liveChatAuth.requireUser,
   requireWorker: liveChatWorkerAuth,
+  session: liveChatAuth,
 }));
 // Unknown API requests must not fall through to the HTML application shell.
 app.use('/api', (_req, res) => {

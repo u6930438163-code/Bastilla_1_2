@@ -1,66 +1,176 @@
 import { Router } from 'express';
-import { randomUUID } from 'node:crypto';
+import { LIVE_CHAT_AGENTS } from './store.mjs';
 
-/**
- * Bastilla live event transport.
- * IMPORTANT: supply authenticated requireUser and requireWorker middleware.
- * This module does not start AI workers, run shell commands, or pretend that agents are online.
- * Replace in-memory history with persistent storage before production deployment.
- */
-export function createLiveChatRouter({ requireUser, requireWorker, dispatchToAgent, maxHistory = 500 }) {
-  if (typeof requireUser !== 'function' || typeof requireWorker !== 'function') {
-    throw new Error('Authentication middleware is required for both users and workers');
+const CHANNELS = new Set(['Wszyscy', ...LIVE_CHAT_AGENTS]);
+
+function errorStatus(error) {
+  if (error?.code === 'JOB_NOT_OWNED' || error?.code === 'MESSAGE_NOT_FOUND') return 409;
+  if (error?.code === 'QUEUE_FULL' || error?.code === 'AGENT_RATE_LIMIT' || error?.code === 'AGENT_HOP_LIMIT') return 429;
+  if (error?.code === 'INVALID_RECIPIENT' || error?.code === 'INVALID_AGENT') return 400;
+  return 500;
+}
+
+export function createLiveChatRouter(options = {}) {
+  const { store, requireUser, requireWorker, session, leaseMs = 60000 } = options;
+  if (!store || typeof requireUser !== 'function' || typeof requireWorker !== 'function' || !session) {
+    throw new Error('Live chat requires a store, user authentication, worker authentication and session handlers');
   }
+
   const router = Router();
-  const channels = new Set(['Aria', 'Alex', 'Astyria', 'Aurelius', 'Wszyscy']);
-  const agents = new Set(['Aria', 'Alex', 'Astyria', 'Aurelius']);
-  const history = [];
   const subscribers = new Set();
-  const publish = (event) => {
-    const item = { id: randomUUID(), at: new Date().toISOString(), ...event };
-    history.push(item);
-    if (history.length > maxHistory) history.shift();
-    for (const client of subscribers) client.write('data: ' + JSON.stringify(item) + '\n\n');
-    return item;
-  };
+
+  function sendEvent(response, item) {
+    response.write('id: ' + item.id + '\ndata: ' + JSON.stringify(item) + '\n\n');
+  }
+
+  function broadcast(item) {
+    for (const response of subscribers) {
+      if (response.writableEnded || response.destroyed) continue;
+      try { sendEvent(response, item); } catch { subscribers.delete(response); }
+    }
+  }
+
+  router.post('/session', session.login);
+  router.get('/session', requireUser, session.session);
+  router.delete('/session', requireUser, session.logout);
+
+  router.get('/history', requireUser, (req, res) => {
+    const channel = String(req.query.channel || 'Wszyscy');
+    if (!CHANNELS.has(channel)) return res.status(400).json({ error: 'Invalid channel' });
+    res.setHeader('Cache-Control', 'no-store');
+    return res.json({ messages: store.getHistory(channel) });
+  });
+
+  router.get('/status', requireUser, (_req, res) => {
+    res.setHeader('Cache-Control', 'no-store');
+    return res.json(store.getStatus());
+  });
+
   router.get('/events', requireUser, (req, res) => {
-    res.setHeader('Content-Type', 'text/event-stream');
+    const after = String(req.get('Last-Event-ID') || req.query.after || '');
+    res.setHeader('Content-Type', 'text/event-stream; charset=utf-8');
     res.setHeader('Cache-Control', 'no-cache, no-transform');
+    res.setHeader('Connection', 'keep-alive');
     res.setHeader('X-Accel-Buffering', 'no');
     res.flushHeaders?.();
     res.write(': connected\n\n');
+    for (const item of store.getEventsAfter(after)) sendEvent(res, item);
     subscribers.add(res);
-    req.on('close', () => subscribers.delete(res));
+    const keepAlive = setInterval(() => {
+      if (!res.writableEnded && !res.destroyed) res.write(': ping\n\n');
+    }, 15000);
+    keepAlive.unref?.();
+    req.on('close', () => {
+      clearInterval(keepAlive);
+      subscribers.delete(res);
+    });
   });
-  router.get('/history', requireUser, (req, res) => {
-    const channel = String(req.query.channel || 'Wszyscy');
-    if (!channels.has(channel)) return res.status(400).json({ error: 'Invalid channel' });
-    return res.json(history.filter((x) => x.channel === channel));
-  });
+
   router.post('/messages', requireUser, async (req, res) => {
-    const { channel, text } = req.body || {};
-    if (!channels.has(channel) || typeof text !== 'string' || !text.trim() || text.length > 8000) {
-      return res.status(400).json({ error: 'Invalid message' });
+    const channel = req.body?.channel;
+    const text = req.body?.text;
+    if (!CHANNELS.has(channel) || typeof text !== 'string' || !text.trim() || text.length > 8000) {
+      return res.status(400).json({ error: 'Expected a valid channel and a message of 1 to 8000 characters' });
     }
-    const item = publish({ type: 'message', channel, sender: 'user', text: text.trim() });
-    if (typeof dispatchToAgent === 'function') {
-      try { await dispatchToAgent(item); }
-      catch (error) { publish({ type: 'delivery_error', channel, messageId: item.id, error: 'Agent backend unavailable' }); }
+    const recipients = channel === 'Wszyscy' ? LIVE_CHAT_AGENTS : [channel];
+    try {
+      const result = await store.createUserMessage({ channel, text: text.trim(), recipients });
+      broadcast(result.event);
+      return res.status(202).json({
+        event: result.event,
+        queuedFor: recipients,
+        queued: result.jobs.map((job) => ({ id: job.id, agent: job.to, status: job.status })),
+      });
+    } catch (error) {
+      return res.status(errorStatus(error)).json({ error: error?.code || 'Unable to queue message' });
     }
-    return res.status(202).json(item);
   });
-  // Worker identity MUST come from verified authentication, never the request body.
-  router.post('/worker/events', requireWorker, (req, res) => {
+
+  router.post('/messages/:id/read', requireUser, async (req, res) => {
+    try {
+      await store.markRead(req.params.id);
+      return res.json({ success: true });
+    } catch (error) {
+      return res.status(errorStatus(error)).json({ error: error?.code || 'Unable to mark message read' });
+    }
+  });
+
+  router.post('/worker/heartbeat', requireWorker, async (req, res) => {
+    try {
+      const agent = req.agentIdentity;
+      const workerId = String(req.get('X-Worker-Id') || agent).slice(0, 128);
+      const heartbeat = await store.heartbeat(agent, workerId);
+      return res.json({ success: true, agent, lastSeen: heartbeat.lastSeen });
+    } catch (error) {
+      return res.status(errorStatus(error)).json({ error: error?.code || 'Heartbeat failed' });
+    }
+  });
+
+  router.post('/worker/next', requireWorker, async (req, res) => {
+    try {
+      const agent = req.agentIdentity;
+      const workerId = String(req.get('X-Worker-Id') || agent).slice(0, 128);
+      const job = await store.claimNext(agent, workerId, leaseMs);
+      return res.json({ job });
+    } catch (error) {
+      return res.status(errorStatus(error)).json({ error: error?.code || 'Unable to claim work' });
+    }
+  });
+
+  router.post('/worker/events', requireWorker, async (req, res) => {
     const agent = req.agentIdentity;
-    const { channel, type, text, taskId, status, exitCode } = req.body || {};
-    if (!agents.has(agent) || !channels.has(channel) || !['message', 'terminal', 'heartbeat', 'task'].includes(type)) {
-      return res.status(400).json({ error: 'Invalid agent event' });
+    const channel = req.body?.channel || 'Wszyscy';
+    const type = req.body?.type;
+    const text = req.body?.text;
+    const taskId = req.body?.taskId;
+    const to = req.body?.to;
+    const status = req.body?.status;
+    const exitCode = req.body?.exitCode;
+    if (!CHANNELS.has(channel) || !['message', 'terminal', 'task'].includes(type)) {
+      return res.status(400).json({ error: 'Invalid channel or event type' });
     }
-    if (text !== undefined && (typeof text !== 'string' || text.length > 16000)) {
-      return res.status(400).json({ error: 'Invalid event text' });
+    if ((type === 'message' || type === 'terminal') &&
+        (typeof text !== 'string' || !text.trim() || text.length > 16000)) {
+      return res.status(400).json({ error: 'Message and terminal events require 1 to 16000 characters' });
     }
-    const item = publish({ type, channel, sender: agent, text: text || '', taskId, status, exitCode });
-    return res.status(202).json(item);
+    if (type === 'task' && status !== undefined && !['running', 'completed', 'failed'].includes(status)) {
+      return res.status(400).json({ error: 'Invalid task status' });
+    }
+    if (taskId !== undefined && (typeof taskId !== 'string' || taskId.length > 100)) {
+      return res.status(400).json({ error: 'Invalid task id' });
+    }
+    if (to !== undefined && to !== 'Wszyscy' && !LIVE_CHAT_AGENTS.includes(to)) {
+      return res.status(400).json({ error: 'Invalid recipient' });
+    }
+    if (to === agent) return res.status(400).json({ error: 'An agent cannot address itself' });
+    if (exitCode !== undefined && !Number.isInteger(exitCode)) {
+      return res.status(400).json({ error: 'Invalid exit code' });
+    }
+    try {
+      const result = await store.createAgentEvent({ agent, channel, type, text, taskId, to, status, exitCode });
+      broadcast(result.event);
+      return res.status(202).json({
+        event: result.event,
+        queuedFor: result.jobs.map((job) => job.to),
+      });
+    } catch (error) {
+      return res.status(errorStatus(error)).json({ error: error?.code || 'Unable to save agent event' });
+    }
   });
+
+  router.post('/worker/jobs/:id/fail', requireWorker, async (req, res) => {
+    const errorText = typeof req.body?.error === 'string' ? req.body.error.slice(0, 1000) : 'Worker failed';
+    try {
+      const job = await store.failJob({
+        id: req.params.id,
+        agent: req.agentIdentity,
+        error: errorText,
+      });
+      return res.status(202).json({ success: true, job });
+    } catch (error) {
+      return res.status(errorStatus(error)).json({ error: error?.code || 'Unable to release failed job' });
+    }
+  });
+
   return router;
 }

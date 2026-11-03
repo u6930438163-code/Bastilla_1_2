@@ -1,0 +1,22 @@
+[Unit]
+Description=Bastilla live-chat worker for %i
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=bastilla
+Group=bastilla
+WorkingDirectory=/opt/bastilla
+EnvironmentFile=/etc/bastilla/live-chat/%i.env
+ExecStart=/usr/bin/node /opt/bastilla/integrations/live-chat/worker-runner.mjs
+Restart=always
+RestartSec=5
+TimeoutStopSec=10
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+
+[Install]
+WantedBy=multi-user.target

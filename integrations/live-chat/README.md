@@ -1,17 +1,43 @@
-# Live chat integration
+# Bastilla live multi-agent chat
 
-This experimental module provides SSE events and HTTP message endpoints for Aria, Alex, Astyria and Aurelius.
+This module provides authenticated user sessions, a persistent message/event store, a durable worker queue, server-sent events and a worker client. It does not create substitute agents or call a model on their behalf.
 
-It is not yet mounted in server.ts. Before mounting, supply authenticated requireUser and requireWorker middleware. The worker middleware must derive req.agentIdentity from verified credentials, not a request payload. The dispatchToAgent callback must connect to genuine agent runtimes.
+## Server configuration
 
-History is in memory and is lost after restart. Terminal events only display externally supplied output; they do not run commands. No real agents, background processes or terminal execution are enabled by this module.
+Configure these values in the deployment secret manager, not in Git:
 
-Do not deploy without persistent storage, access control, origin/CSRF protection, rate limits and tests. Ollama and Vision are excluded from this feature.
+- BASTILLA_LIVE_CHAT_ALLOWED_ORIGIN: exact public origin, including scheme and port when nonstandard; no path.
+- BASTILLA_LIVE_CHAT_USER_PASSWORD: private operator password with at least 16 characters.
+- BASTILLA_LIVE_CHAT_SESSION_SECRET: random secret with at least 32 bytes.
+- BASTILLA_LIVE_CHAT_COOKIE_SECURE: true for HTTPS; set false only for localhost development.
+- BASTILLA_LIVE_CHAT_WORKER_TOKENS: JSON object containing four distinct random secrets, each at least 32 characters, keyed by Aria, Alex, Astyria and Aurelius.
+- BASTILLA_LIVE_CHAT_STORE_PATH: persistent writable file path. The default is data/live-chat-state.json.
 
-## Worker credentials
+If the user session or worker credentials are missing, the relevant routes fail closed. The store uses atomic file replacement and serialized writes. Mount its directory on persistent storage; an ephemeral container filesystem is not a durable deployment.
 
-The server accepts worker events only when `BASTILLA_LIVE_CHAT_WORKER_TOKENS` is configured as a JSON object mapping each agent name to a distinct high-entropy secret, for example `{"Aria":"<random-secret>","Alex":"<different-random-secret>"}`. Send the matching secret as `Authorization: Bearer <secret>` and include the corresponding `agent` field in the worker event body. The server compares secrets in constant time and derives the event sender from the verified agent identity. Generate secrets outside source control and store them only in the deployment secret manager; never commit real values.
+## Original agent workers
 
-## User authentication status
+Each original agent runtime must supply an adapter module that exports:
 
-User-facing history, event-stream and message routes intentionally return HTTP 503 until the application's actual user-session authentication middleware is connected. Do not remove this guard or expose these endpoints publicly to make the UI appear to work. The UI will show a connection error until this is completed.
+    export async function runAgent(job, context) {
+      // Forward the job to this original agent runtime and return its actual response.
+      return { text: actualAgentReply };
+    }
+
+The adapter is deliberately not bundled. There is no built-in Gemini, Ollama, Copilot, static-response or mock fallback. A worker is not online until it sends a real authenticated heartbeat.
+
+Set BASTILLA_LIVE_CHAT_AGENT, BASTILLA_AGENT_ADAPTER, BASTILLA_LIVE_CHAT_BASE_URL and BASTILLA_LIVE_CHAT_WORKER_TOKEN for each worker, then run integrations/live-chat/worker-runner.mjs. A systemd template is included for hosts that run the four adapters as separate services.
+
+The worker can send a reply to the operator or route a message to another agent with the optional to field set to an agent name or Wszyscy. The queue uses leases and retries, limits pending work and limits agent-to-agent hops and message rate to prevent runaway loops.
+
+## Events, terminal and notifications
+
+Messages and worker events are persisted before they are broadcast. EventSource clients replay missed events after reconnecting. The status endpoint reports only recent authenticated heartbeats; stale workers are offline.
+
+Terminal events display output supplied by a worker. This module does not execute shell commands or provide a terminal process runner. A real terminal executor needs a separate isolated runner and explicit approval controls.
+
+The web UI can show in-app alerts and browser notifications while the page is open. It does not yet provide Web Push when the browser is closed; do not describe it as an always-on push notification service.
+
+## Scope boundary
+
+The transport supports Aria, Alex, Astyria and Aurelius, direct user-to-agent messages, broadcasts, agent-to-agent routing, persisted history and background worker polling. The actual AI Studio runtime adapter, deployment secrets and persistent host storage must be supplied and verified separately. Ollama and Vision are not part of this feature.
