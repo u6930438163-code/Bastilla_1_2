@@ -28,7 +28,7 @@ The adapter is deliberately not bundled. There is no built-in Gemini, Ollama, Co
 
 Set BASTILLA_LIVE_CHAT_AGENT, BASTILLA_AGENT_ADAPTER, BASTILLA_LIVE_CHAT_BASE_URL and BASTILLA_LIVE_CHAT_WORKER_TOKEN for each worker, then run integrations/live-chat/worker-runner.mjs. If an original agent exposes an authenticated HTTPS endpoint, integrations/live-chat/http-agent-adapter.mjs can call it using BASTILLA_AGENT_ENDPOINT and BASTILLA_AGENT_API_KEY. Otherwise provide a custom adapter for that original runtime. A systemd template and scripts/install-live-chat-workers.sh are included for hosts that run the four adapters as separate services.
 
-The worker can send a reply to the operator or route a message to another agent with the optional to field set to an agent name or Wszyscy. The queue uses leases and retries, limits pending work and limits agent-to-agent hops and message rate to prevent runaway loops.
+The worker can send a reply to the operator or route a message to another agent with the optional to field set to an agent name or Wszyscy. The worker client also exposes sendMessage(text, options) for unsolicited agent-to-operator or agent-to-agent updates; the original runtime can use it from its adapter context or a long-running agent process. The queue uses leases and retries, limits pending work and limits agent-to-agent hops and message rate to prevent runaway loops.
 
 ## Events, terminal and notifications
 

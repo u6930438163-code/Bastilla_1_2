@@ -23,11 +23,11 @@ Uruchom osobny worker dla każdego agenta, ustawiając:
 - BASTILLA_LIVE_CHAT_BASE_URL
 - BASTILLA_LIVE_CHAT_WORKER_TOKEN
 
-Jeśli agent udostępnia własny endpoint HTTPS, ustaw BASTILLA_AGENT_ADAPTER=integrations/live-chat/http-agent-adapter.mjs oraz jego BASTILLA_AGENT_ENDPOINT i BASTILLA_AGENT_API_KEY. W przeciwnym razie przygotuj własny adapter runAgent dla rzeczywistego runtime AI Studio. Następnie uruchom integrations/live-chat/worker-runner.mjs. Po utworzeniu czterech plików /etc/bastilla/live-chat/Aria.env, Alex.env, Astyria.env i Aurelius.env można użyć sudo bash scripts/install-live-chat-workers.sh, aby zainstalować i uruchomić usługi systemd. Worker online oznacza wyłącznie aktualny, uwierzytelniony heartbeat; nie jest to dowód działania modelu, dopóki adapter nie zwróci odpowiedzi. Lease zadania jest odnawiany podczas długiego przetwarzania, a po awarii worker może odzyskać zadanie.
+Jeśli agent udostępnia własny endpoint HTTPS, ustaw BASTILLA_AGENT_ADAPTER=integrations/live-chat/http-agent-adapter.mjs oraz jego BASTILLA_AGENT_ENDPOINT i BASTILLA_AGENT_API_KEY. W przeciwnym razie przygotuj własny adapter runAgent dla rzeczywistego runtime AI Studio. Następnie uruchom integrations/live-chat/worker-runner.mjs. Repozytorium musi znajdować się w /opt/bastilla. Po utworzeniu czterech plików /etc/bastilla/live-chat/Aria.env, Alex.env, Astyria.env i Aurelius.env można użyć sudo bash scripts/install-live-chat-workers.sh, aby utworzyć nieuprzywilejowanego użytkownika bastilla, zainstalować i uruchomić usługi systemd. Worker online oznacza wyłącznie aktualny, uwierzytelniony heartbeat; nie jest to dowód działania modelu, dopóki adapter nie zwróci odpowiedzi. Lease zadania jest odnawiany podczas długiego przetwarzania, a po awarii worker może odzyskać zadanie.
 
 ## 3. Kanały i zabezpieczenia
 
-Kanał Wszyscy kolejkuje zadanie dla czterech agentów. Kanał indywidualny kieruje zadanie do jednego agenta. Agent może skierować wiadomość do innego agenta przez pole to. Limit łańcucha, limity kolejki i limity wiadomości chronią przed pętlami AI↔AI.
+Kanał Wszyscy kolejkuje zadanie dla czterech agentów. Kanał indywidualny kieruje zadanie do jednego agenta. Agent może skierować wiadomość do innego agenta przez pole to albo wysłać samodzielny komunikat przez worker.sendMessage(text, options), bez oczekiwania na nowe zadanie. Limit łańcucha, limity kolejki i limity wiadomości chronią przed pętlami AI↔AI.
 
 Historia i kolejka są zapisywane atomowo przed publikacją SSE. Dla trwałości po restarcie wymagany jest trwały wolumen, a nie efemeryczny dysk kontenera. Użytkownik loguje się hasłem operatora; sesja jest podpisana HMAC, HttpOnly, SameSite=Strict i ograniczona do API. Workerzy mają osobne tokeny.
 

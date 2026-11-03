@@ -11,6 +11,14 @@ if ! command -v systemctl >/dev/null 2>&1; then
 fi
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+if [[ "$ROOT" != "/opt/bastilla" ]]; then
+  echo "Install the repository at /opt/bastilla or adjust the systemd unit template first." >&2
+  exit 1
+fi
+if ! id -u bastilla >/dev/null 2>&1; then
+  useradd --system --user-group --home-dir /var/lib/bastilla-live-chat --create-home --shell /usr/sbin/nologin bastilla
+fi
+install -d -o bastilla -g bastilla -m 0750 /var/lib/bastilla-live-chat
 ENV_DIR="/etc/bastilla/live-chat"
 UNIT_SOURCE="$ROOT/integrations/live-chat/bastilla-live-chat-worker@.service"
 UNIT_TARGET="/etc/systemd/system/bastilla-live-chat-worker@.service"

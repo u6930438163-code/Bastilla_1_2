@@ -59,10 +59,32 @@ export function createAgentWorker(options = {}) {
     return raw ? JSON.parse(raw) : {};
   }
 
-  async function pollOnce(options = {}) {
-    const signal = options.signal || internalController.signal;
+  async function verifyIdentity(signal) {
     const heartbeatResult = await request('worker/heartbeat', { method: 'POST', body: {}, signal });
     if (heartbeatResult?.agent !== agent) throw new Error('Worker token identity does not match configured agent ' + agent);
+    return heartbeatResult;
+  }
+
+  async function sendMessage(text, options = {}) {
+    const signal = options.signal || internalController.signal;
+    const channel = options.channel || 'Wszyscy';
+    const to = options.to;
+    if (!['Wszyscy', ...AGENTS].includes(channel)) throw new Error('Invalid live-chat channel');
+    if (typeof text !== 'string' || !text.trim() || text.length > 16000) throw new Error('Message must contain 1 to 16000 characters');
+    if (to !== undefined && to !== 'Wszyscy' && !AGENTS.includes(to)) throw new Error('Invalid agent recipient');
+    if (to === agent) throw new Error('An agent cannot address itself');
+    await verifyIdentity(signal);
+    const result = await request('worker/events', {
+      method: 'POST',
+      body: { channel, type: 'message', text: text.trim(), ...(to ? { to } : {}) },
+      signal,
+    });
+    return result.event;
+  }
+
+  async function pollOnce(options = {}) {
+    const signal = options.signal || internalController.signal;
+    await verifyIdentity(signal);
     const claimed = await request('worker/next', { method: 'POST', body: {}, signal });
     if (claimed?.agent !== agent) throw new Error('Server worker identity mismatch for ' + agent);
     if (!claimed?.job) return false;
@@ -76,7 +98,7 @@ export function createAgentWorker(options = {}) {
     }, heartbeatIntervalMs);
 
     try {
-      let output = await runAgent(job, { signal, agent, workerId });
+      let output = await runAgent(job, { signal, agent, workerId, sendMessage });
       if (typeof output === 'string') output = { text: output };
       if (!output || typeof output.text !== 'string' || !output.text.trim()) {
         throw new Error('Original agent adapter returned no message');
@@ -127,5 +149,5 @@ export function createAgentWorker(options = {}) {
     internalController.abort();
   }
 
-  return { start, stop, pollOnce, workerId, agent };
+  return { start, stop, pollOnce, sendMessage, workerId, agent };
 }
