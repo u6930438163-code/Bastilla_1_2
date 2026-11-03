@@ -17,6 +17,7 @@ const worker = createAgentWorker({
   agent,
   token: process.env.BASTILLA_LIVE_CHAT_WORKER_TOKEN || '',
   runAgent: adapter.runAgent,
+  onIdle: typeof adapter.onIdle === 'function' ? adapter.onIdle : undefined,
   onError: (error) => console.error('[LIVE CHAT WORKER]', agent, error?.message || error),
 });
 

@@ -43,13 +43,17 @@ test('worker client delegates to the supplied original-agent adapter and routes 
       receivedJob = job;
       return { text: 'Wynik z adaptera agenta Alex', to: 'Aria' };
     },
+    onIdle: async ({ sendMessage }) => {
+      await sendMessage('Autonomiczny komunikat Alexa');
+    },
   });
 
   assert.equal(await worker.pollOnce(), true);
   assert.equal(receivedJob.to, 'Alex');
   const responseEvent = await worker.sendMessage('Samodzielny status Alexa', { channel: 'Wszyscy', to: 'Aurelius' });
   assert.equal(responseEvent.sender, 'Alex');
-  assert.equal(store.getHistory('Wszyscy').length, 3);
+  assert.equal(await worker.runIdleOnce(), true);
+  assert.equal(store.getHistory('Wszyscy').length, 4);
   const ariaJob = await store.claimNext('Aria', 'aria-worker');
   assert.equal(ariaJob.from, 'Alex');
   assert.equal(ariaJob.text, 'Wynik z adaptera agenta Alex');

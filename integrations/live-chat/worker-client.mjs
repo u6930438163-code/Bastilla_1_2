@@ -27,6 +27,9 @@ export function createAgentWorker(options = {}) {
   const heartbeatIntervalMs = Math.max(5000, Number(options.heartbeatIntervalMs) || 15000);
   const workerId = String(options.workerId || randomUUID());
   const onError = typeof options.onError === 'function' ? options.onError : () => {};
+  const onIdle = typeof options.onIdle === 'function' ? options.onIdle : null;
+  const idleCallbackIntervalMs = Math.max(5000, Number(options.idleCallbackIntervalMs) || 30000);
+  let lastIdleAt = 0;
 
   if (!baseUrl || !AGENTS.includes(agent) || token.length < 32 || typeof runAgent !== 'function' || typeof fetchImpl !== 'function') {
     throw new Error('Worker requires baseUrl, a named agent, a 32+ character token and a real runAgent adapter');
@@ -127,6 +130,14 @@ export function createAgentWorker(options = {}) {
     return true;
   }
 
+  async function runIdleOnce(options = {}) {
+    if (!onIdle) return false;
+    const signal = options.signal || internalController.signal;
+    await verifyIdentity(signal);
+    await onIdle({ agent, workerId, sendMessage, signal });
+    return true;
+  }
+
   async function start(options = {}) {
     if (options.signal) {
       if (options.signal.aborted) internalController.abort();
@@ -136,7 +147,13 @@ export function createAgentWorker(options = {}) {
     while (!stopped && !signal?.aborted) {
       try {
         const handled = await pollOnce({ signal });
-        if (!handled) await sleep(pollIntervalMs, signal);
+        if (!handled) {
+          if (onIdle && Date.now() - lastIdleAt >= idleCallbackIntervalMs) {
+            lastIdleAt = Date.now();
+            try { await runIdleOnce({ signal }); } catch (error) { onError(error); }
+          }
+          await sleep(pollIntervalMs, signal);
+        }
       } catch (error) {
         onError(error);
         await sleep(Math.min(30000, pollIntervalMs * 2), signal);
@@ -149,5 +166,5 @@ export function createAgentWorker(options = {}) {
     internalController.abort();
   }
 
-  return { start, stop, pollOnce, sendMessage, workerId, agent };
+  return { start, stop, pollOnce, runIdleOnce, sendMessage, workerId, agent };
 }
