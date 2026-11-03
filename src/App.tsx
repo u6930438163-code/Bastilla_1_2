@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
+import LiveAgentChat from './components/LiveAgentChat';
 import {
   DataStore,
   INITIAL_DATA_STORE,
@@ -50,6 +51,7 @@ import type { ChatSystemChange } from './kernel/chatChanges';
 const LOCAL_STORAGE_KEY = 'svl_kernel_datastore_v8_6_0_without_nlp';
 
 export default function App() {
+  const [showLiveAgentChat, setShowLiveAgentChat] = useState(false);
   const [rawDataStore, setRawDataStore] = useState<DataStore>(() => {
     try {
       localStorage.removeItem('svl_kernel_datastore_v8_5_1_desktop_ready');
@@ -676,6 +678,12 @@ export default function App() {
           dataStore={dataStore}
         />
 
+        <button type="button" aria-expanded={showLiveAgentChat} aria-controls="bastilla-live-agent-chat" onClick={() => setShowLiveAgentChat(value => !value)} style={{position:'fixed',right:16,bottom:68,zIndex:60,padding:'12px 16px',background:'#1d4ed8',color:'#fff',borderRadius:12,border:'1px solid #60a5fa',boxShadow:'0 6px 24px #0008'}}>
+          {showLiveAgentChat ? 'Zamknij czat AI' : 'Czat AI · LIVE'}
+        </button>
+        {showLiveAgentChat && <div id="bastilla-live-agent-chat" role="dialog" aria-label="Czat agentów Bastilla" style={{position:'fixed',inset:'12px 12px 125px',zIndex:59,maxWidth:1000,margin:'auto',background:'#0f172a',borderRadius:12,boxShadow:'0 12px 40px #000a',overflow:'auto'}}>
+          <LiveAgentChat />
+        </div>}
         <SystemHealthDock />
       </div>
     </ErrorBoundary>
