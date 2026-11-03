@@ -37,6 +37,7 @@ export function createAgentWorker(options = {}) {
 
   const apiRoot = new URL('/api/live-chat/', baseUrl);
   const internalController = new AbortController();
+  let lastHeartbeatAt = 0;
   let stopped = false;
 
   async function request(path, requestOptions = {}) {
@@ -62,10 +63,16 @@ export function createAgentWorker(options = {}) {
     return raw ? JSON.parse(raw) : {};
   }
 
-  async function verifyIdentity(signal) {
+  async function sendHeartbeat(signal) {
     const heartbeatResult = await request('worker/heartbeat', { method: 'POST', body: {}, signal });
     if (heartbeatResult?.agent !== agent) throw new Error('Worker token identity does not match configured agent ' + agent);
+    lastHeartbeatAt = Date.now();
     return heartbeatResult;
+  }
+
+  async function verifyIdentity(signal) {
+    if (Date.now() - lastHeartbeatAt >= heartbeatIntervalMs) return sendHeartbeat(signal);
+    return { agent };
   }
 
   async function sendMessage(text, options = {}) {
@@ -95,7 +102,7 @@ export function createAgentWorker(options = {}) {
     const job = claimed.job;
     const heartbeat = setInterval(() => {
       Promise.all([
-        request('worker/heartbeat', { method: 'POST', body: {}, signal }),
+        sendHeartbeat(signal),
         request('worker/jobs/' + encodeURIComponent(job.id) + '/heartbeat', { method: 'POST', body: {}, signal }),
       ]).catch(onError);
     }, heartbeatIntervalMs);

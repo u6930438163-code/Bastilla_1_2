@@ -246,7 +246,7 @@ export default function LiveAgentChat() {
 
   return <section aria-label="Czat agentów" style={{ display: 'flex', flexDirection: 'column', height: '80dvh', minHeight: 380, background: '#0f172a', color: '#f8fafc', borderRadius: 12, overflow: 'hidden' }}>
     <header style={{ padding: 12, display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8, borderBottom: '1px solid #334155' }}>
-      <div><strong>Bastilla · AI Chat</strong><div role="status" style={{ fontSize: 11, color: '#94a3b8' }}>{connection}</div></div>
+      <div><strong>Bastilla · AI Chat</strong><div role="status" style={{ fontSize: 11, color: '#94a3b8' }}>{connection} · Nieprzeczytane: {status?.unread ?? 0}</div></div>
       <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
         {typeof Notification !== 'undefined' && <button type="button" onClick={enableNotifications} disabled={notificationPermission === 'granted'} style={{ padding: 8, borderRadius: 8, background: '#334155', color: 'white' }}>
           {notificationPermission === 'granted' ? 'Powiadomienia włączone' : 'Włącz powiadomienia'}
@@ -258,10 +258,11 @@ export default function LiveAgentChat() {
       {AGENTS.map((name) => {
         const health = status?.agents?.[name];
         return <span key={name} style={{ flex: '0 0 auto', fontSize: 11, padding: 6, borderRadius: 7, background: health?.status === 'online' ? '#064e3b' : '#334155', color: '#e2e8f0' }}>
-          {name}: {health?.status === 'online' ? 'ONLINE' : 'OFFLINE'} · kolejka {health?.queued ?? 0}
+          {name}: {health?.status === 'online' ? 'WORKER ONLINE' : 'WORKER OFFLINE'} · kolejka {health?.queued ?? 0}
         </span>;
       })}
     </div>
+    <p style={{ padding: '0 10px', margin: 0, color: '#94a3b8', fontSize: 10 }}>ONLINE oznacza świeży heartbeat workera, nie potwierdza jeszcze odpowiedzi modelu agenta.</p>
     <nav aria-label="Kanały" style={{ display: 'flex', gap: 6, overflowX: 'auto', padding: 8 }}>
       {CHANNELS.map((name) => <button key={name} type="button" aria-pressed={channel === name} onClick={() => setChannel(name)}
         style={{ padding: 9, background: channel === name ? '#2563eb' : '#334155', color: 'white', border: 0, borderRadius: 7, flex: '0 0 auto' }}>{name}</button>)}
