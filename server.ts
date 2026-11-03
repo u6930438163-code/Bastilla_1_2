@@ -10,7 +10,7 @@ import { execFile } from 'child_process';
 import { promisify } from 'util';
 import fs from 'fs';
 import os from 'os';
-import { randomUUID, createHash } from 'crypto';
+import { randomUUID, createHash, timingSafeEqual } from 'crypto';
 import { INITIAL_DATA_STORE } from './src/kernel/svlKernel';
 import type { ChatSystemChange } from './src/kernel/chatChanges';
 import { withoutNlpEngine } from './src/lib/withoutNlpEngine';
@@ -6549,7 +6549,7 @@ const liveChatWorkerAuth: express.RequestHandler = (req, res, next) => {
   const expected = typeof agent === 'string' ? credentials[agent] : undefined;
   const supplied = (req.get('Authorization') || '').replace(/^Bearer\s+/i, '');
   if (!expected || !supplied || Buffer.byteLength(expected) !== Buffer.byteLength(supplied) ||
-      !require('crypto').timingSafeEqual(Buffer.from(expected), Buffer.from(supplied))) {
+      !timingSafeEqual(Buffer.from(expected), Buffer.from(supplied))) {
     return res.status(401).json({ error: 'Unauthorized worker' });
   }
   (req as express.Request & { agentIdentity?: string }).agentIdentity = agent;
