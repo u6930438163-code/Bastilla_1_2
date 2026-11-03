@@ -4,7 +4,8 @@ import { LIVE_CHAT_AGENTS } from './store.mjs';
 const CHANNELS = new Set(['Wszyscy', ...LIVE_CHAT_AGENTS]);
 
 function errorStatus(error) {
-  if (error?.code === 'JOB_NOT_OWNED' || error?.code === 'MESSAGE_NOT_FOUND') return 409;
+  if (error?.code === 'JOB_NOT_OWNED') return 409;
+  if (error?.code === 'MESSAGE_NOT_FOUND') return 404;
   if (error?.code === 'QUEUE_FULL' || error?.code === 'AGENT_RATE_LIMIT' || error?.code === 'AGENT_HOP_LIMIT') return 429;
   if (error?.code === 'INVALID_RECIPIENT' || error?.code === 'INVALID_AGENT') return 400;
   return 500;
@@ -60,7 +61,7 @@ export function createLiveChatRouter(options = {}) {
       if (!res.writableEnded && !res.destroyed) res.write(': ping\n\n');
     }, 15000);
     keepAlive.unref?.();
-    req.on('close', () => {
+    res.on('close', () => {
       clearInterval(keepAlive);
       subscribers.delete(res);
     });
@@ -111,7 +112,7 @@ export function createLiveChatRouter(options = {}) {
       const agent = req.agentIdentity;
       const workerId = String(req.get('X-Worker-Id') || agent).slice(0, 128);
       const job = await store.claimNext(agent, workerId, leaseMs);
-      return res.json({ job });
+      return res.json({ agent, job });
     } catch (error) {
       return res.status(errorStatus(error)).json({ error: error?.code || 'Unable to claim work' });
     }

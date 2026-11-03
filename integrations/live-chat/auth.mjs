@@ -15,7 +15,9 @@ function readCookie(req, name) {
   for (const part of header.split(';')) {
     const separator = part.indexOf('=');
     if (separator < 0) continue;
-    if (part.slice(0, separator).trim() === name) return decodeURIComponent(part.slice(separator + 1).trim());
+    if (part.slice(0, separator).trim() === name) {
+      try { return decodeURIComponent(part.slice(separator + 1).trim()); } catch { return ''; }
+    }
   }
   return '';
 }
@@ -25,18 +27,21 @@ export function createLiveChatSessionAuth(options = {}) {
   const secret = String(options.secret || '');
   const allowedOriginInput = String(options.allowedOrigin || '');
   const ttlSeconds = Math.max(900, Math.min(604800, Number(options.ttlSeconds) || 43200));
-  const cookieSecure = options.cookieSecure !== false;
+  let localHttpOrigin = false;
   let allowedOrigin = '';
 
   try {
     const parsed = new URL(allowedOriginInput);
-    const localHttp = parsed.protocol === 'http:' && ['localhost', '127.0.0.1', '[::1]'].includes(parsed.hostname);
-    if (parsed.protocol === 'https:' || localHttp) allowedOrigin = parsed.origin;
+    localHttpOrigin = parsed.protocol === 'http:' && ['localhost', '127.0.0.1', '[::1]'].includes(parsed.hostname);
+    const cleanOrigin = parsed.pathname === '/' && !parsed.search && !parsed.hash;
+    if (cleanOrigin && (parsed.protocol === 'https:' || localHttpOrigin)) allowedOrigin = parsed.origin;
   } catch {
     allowedOrigin = '';
   }
 
+  const cookieSecure = !localHttpOrigin || options.cookieSecure !== false;
   const configured = password.length >= 16 && Buffer.byteLength(secret) >= 32 && Boolean(allowedOrigin);
+  const loginAttempts = new Map();
   const sign = (payload) => createHmac('sha256', secret).update(payload).digest('base64url');
   const originAllowed = (req) => Boolean(allowedOrigin) && req.get('Origin') === allowedOrigin;
   const setCookie = (res, value, maxAge) => {
@@ -68,10 +73,19 @@ export function createLiveChatSessionAuth(options = {}) {
   function login(req, res) {
     if (!configured) return res.status(503).json({ error: 'Set the live chat origin, user password and session secret on the server' });
     if (!originAllowed(req)) return res.status(403).json({ error: 'Origin is not allowed' });
+    const now = Date.now();
+    for (const [key, value] of loginAttempts) if (value.resetAt <= now) loginAttempts.delete(key);
+    const address = String(req.ip || req.socket?.remoteAddress || 'unknown');
+    const attempt = loginAttempts.get(address) || { count: 0, resetAt: now + 900000 };
+    if (attempt.resetAt <= now) { attempt.count = 0; attempt.resetAt = now + 900000; }
+    if (attempt.count >= 10) return res.status(429).json({ error: 'Too many login attempts; try again later' });
     const supplied = typeof req.body?.password === 'string' ? req.body.password : '';
     if (supplied.length > 512 || !safeEqual(supplied, password)) {
+      attempt.count += 1;
+      loginAttempts.set(address, attempt);
       return res.status(401).json({ error: 'Invalid password' });
     }
+    loginAttempts.delete(address);
     const expiresAt = Math.floor(Date.now() / 1000) + ttlSeconds;
     const payload = expiresAt + '.' + randomBytes(18).toString('base64url');
     const token = payload + '.' + sign(payload);

@@ -18,6 +18,7 @@ export class LiveChatStore {
     this.maxAgentHops = options.maxAgentHops || 8;
     this.maxAgentMessagesPerMinute = options.maxAgentMessagesPerMinute || 30;
     this.maxPendingPerAgent = options.maxPendingPerAgent || 100;
+    this.maxJobAttempts = options.maxJobAttempts || 3;
     this.onlineTtlMs = options.onlineTtlMs || 45000;
     this.now = options.now || (() => Date.now());
     this.writeQueue = Promise.resolve();
@@ -233,12 +234,25 @@ export class LiveChatStore {
     if (!available) return null;
 
     return this.mutate((state) => {
-      const job = state.jobs
+      const candidates = state.jobs
         .filter((candidate) => candidate.to === agent && (
           (candidate.status === 'queued' && candidate.availableAt <= now) ||
           (candidate.status === 'running' && Number(candidate.leaseUntil) <= now)
         ))
-        .sort((a, b) => Date.parse(a.createdAt) - Date.parse(b.createdAt))[0];
+        .sort((a, b) => Date.parse(a.createdAt) - Date.parse(b.createdAt));
+      let job = null;
+      for (const candidate of candidates) {
+        if (candidate.status === 'running' && Number(candidate.leaseUntil) <= now && candidate.attempts >= this.maxJobAttempts) {
+          candidate.status = 'failed';
+          candidate.error = 'Worker lease expired after maximum attempts';
+          candidate.completedAt = new Date(now).toISOString();
+          delete candidate.leaseUntil;
+          delete candidate.workerId;
+          continue;
+        }
+        job = candidate;
+        break;
+      }
       if (!job) return null;
       job.status = 'running';
       job.attempts += 1;
@@ -249,7 +263,7 @@ export class LiveChatStore {
     });
   }
 
-  async failJob({ id, agent, error, retryDelayMs = 3000, maxAttempts = 3 }) {
+  async failJob({ id, agent, error, retryDelayMs = 3000, maxAttempts = this.maxJobAttempts }) {
     return this.mutate((state) => {
       const job = state.jobs.find((candidate) => candidate.id === id && candidate.to === agent);
       if (!job || job.status !== 'running') throw makeError('JOB_NOT_OWNED');

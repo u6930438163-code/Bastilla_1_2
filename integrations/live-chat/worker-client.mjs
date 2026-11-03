@@ -33,6 +33,7 @@ export function createAgentWorker(options = {}) {
   }
 
   const apiRoot = new URL('/api/live-chat/', baseUrl);
+  const internalController = new AbortController();
   let stopped = false;
 
   async function request(path, requestOptions = {}) {
@@ -59,9 +60,11 @@ export function createAgentWorker(options = {}) {
   }
 
   async function pollOnce(options = {}) {
-    const signal = options.signal;
-    await request('worker/heartbeat', { method: 'POST', body: {}, signal });
+    const signal = options.signal || internalController.signal;
+    const heartbeatResult = await request('worker/heartbeat', { method: 'POST', body: {}, signal });
+    if (heartbeatResult?.agent !== agent) throw new Error('Worker token identity does not match configured agent ' + agent);
     const claimed = await request('worker/next', { method: 'POST', body: {}, signal });
+    if (claimed?.agent !== agent) throw new Error('Server worker identity mismatch for ' + agent);
     if (!claimed?.job) return false;
 
     const job = claimed.job;
@@ -100,7 +103,11 @@ export function createAgentWorker(options = {}) {
   }
 
   async function start(options = {}) {
-    const signal = options.signal;
+    if (options.signal) {
+      if (options.signal.aborted) internalController.abort();
+      else options.signal.addEventListener('abort', () => internalController.abort(), { once: true });
+    }
+    const signal = internalController.signal;
     while (!stopped && !signal?.aborted) {
       try {
         const handled = await pollOnce({ signal });
@@ -114,6 +121,7 @@ export function createAgentWorker(options = {}) {
 
   function stop() {
     stopped = true;
+    internalController.abort();
   }
 
   return { start, stop, pollOnce, workerId, agent };

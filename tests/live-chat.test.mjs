@@ -119,7 +119,11 @@ test('requires an authenticated user and unique worker identity for live chat', 
     const alexClaim = await fetch(origin + '/api/live-chat/worker/next', {
       method: 'POST', headers: alexHeaders, body: '{}',
     });
-    assert.equal((await alexClaim.json()).job.from, 'Aria');
+    assert.equal((await alexClaim.json()).job.from, 'user');
+    const alexAgentClaim = await fetch(origin + '/api/live-chat/worker/next', {
+      method: 'POST', headers: alexHeaders, body: '{}',
+    });
+    assert.equal((await alexAgentClaim.json()).job.from, 'Aria');
 
     const history = await fetch(origin + '/api/live-chat/history?channel=Wszyscy', {
       headers: { Cookie: cookie },

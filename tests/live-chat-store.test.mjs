@@ -34,6 +34,8 @@ test('persists the conversation and routes work between original agent identitie
   assert.equal(ariaReply.jobs.length, 1);
   assert.equal(ariaReply.jobs[0].to, 'Alex');
 
+  const alexBroadcastJob = await restarted.claimNext('Alex', 'alex-worker');
+  assert.equal(alexBroadcastJob.from, 'user');
   const alexJob = await restarted.claimNext('Alex', 'alex-worker');
   assert.equal(alexJob.from, 'Aria');
   const alexReply = await restarted.createAgentEvent({
