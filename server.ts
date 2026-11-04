@@ -2643,7 +2643,7 @@ try {
 } catch {}
 
 // 3. VM_Ten_System 5-Minute Automatic Snapshot & Memory Guard Loop
-setInterval(() => {
+if (!INTERNAL_READ_ONLY_API) setInterval(() => {
   createVmSnapshotNow('Cykliczny 5-minutowy zapis snapshotu VM_Ten_System');
   optimizeVmMemoryNow('Cykliczna kontrola limitu pamięci 4 GiB (<70% Idle)');
   if (continuousMissionEnabled) {
