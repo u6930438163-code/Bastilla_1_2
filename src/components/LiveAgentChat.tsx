@@ -258,8 +258,8 @@ export default function LiveAgentChat() {
     </section>;
   }
 
-  return <section aria-label="Czat agentów" style={{ display: 'flex', flexDirection: 'column', height: '80dvh', minHeight: 380, background: '#0f172a', color: '#f8fafc', borderRadius: 12, overflow: 'hidden' }}>
-    <header style={{ padding: 12, display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8, borderBottom: '1px solid #334155' }}>
+  return <section className="bastilla-live-workspace" aria-label="Czat agentów" style={{ display: 'flex', flexDirection: 'column', height: '100%', minHeight: 0, background: '#0f172a', color: '#f8fafc', borderRadius: 12, overflow: 'hidden' }}>
+    <header className="bastilla-live-header" style={{ padding: 12, display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8, borderBottom: '1px solid #334155' }}>
       <div><strong>Bastilla · AI Chat</strong><div role="status" style={{ fontSize: 11, color: '#94a3b8' }}>{connection} · Nieprzeczytane: {status?.unread ?? 0}</div></div>
       <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
         {typeof Notification !== 'undefined' && <button type="button" onClick={enableNotifications} disabled={notificationPermission === 'granted'} style={{ padding: 8, borderRadius: 8, background: '#334155', color: 'white' }}>
@@ -277,7 +277,7 @@ export default function LiveAgentChat() {
       })}
     </div>
     <p style={{ padding: '0 10px', margin: 0, color: '#94a3b8', fontSize: 10 }}>ONLINE oznacza świeży heartbeat workera, nie potwierdza jeszcze odpowiedzi modelu agenta.</p>
-    <section aria-label="Aktywność agentów na żywo" style={{ borderBottom: '1px solid #334155', padding: 10 }}>
+    <section className="bastilla-live-activity" aria-label="Aktywność agentów na żywo" style={{ borderBottom: '1px solid #334155', padding: 10 }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
         <strong>Aktywność SI · terminal i zadania LIVE</strong>
         <button type="button" aria-expanded={activityOpen} onClick={() => setActivityOpen((value) => !value)}
@@ -304,13 +304,13 @@ export default function LiveAgentChat() {
         <small style={{ color: '#94a3b8' }}>Widoczne są wyłącznie zdarzenia odebrane z backendu. To nie jest dostęp do powłoki ani dowód działania modelu bez weryfikacji agenta.</small>
       </>}
     </section>
-    <nav aria-label="Kanały" style={{ display: 'flex', gap: 6, overflowX: 'auto', padding: 8 }}>
+    <nav className="bastilla-live-channels" aria-label="Kanały" style={{ display: 'flex', gap: 6, overflowX: 'auto', padding: 8 }}>
       {CHANNELS.map((name) => <button key={name} type="button" aria-pressed={channel === name} onClick={() => setChannel(name)}
         style={{ padding: 9, background: channel === name ? '#2563eb' : '#334155', color: 'white', border: 0, borderRadius: 7, flex: '0 0 auto' }}>{name}</button>)}
     </nav>
-    <div role="log" aria-live="polite" style={{ flex: 1, overflowY: 'auto', padding: 12 }}>
+    <div className="bastilla-live-messages" role="log" aria-live="polite" style={{ flex: 1, overflowY: 'auto', padding: 12 }}>
       {visibleMessages.length === 0 && <p style={{ color: '#94a3b8' }}>Brak wiadomości w tym kanale. Agenci są offline, dopóki ich oryginalne workery nie wyślą heartbeatów.</p>}
-      {visibleMessages.map((item) => <article key={item.id} style={{ background: '#1e293b', padding: 12, marginBottom: 8, borderRadius: 8, border: '1px solid #334155' }}>
+      {visibleMessages.map((item) => <article className={item.sender === 'user' ? 'bastilla-chat-bubble bastilla-chat-bubble-user' : 'bastilla-chat-bubble'} key={item.id} style={{ background: '#1e293b', padding: 12, marginBottom: 8, borderRadius: 8, border: '1px solid #334155' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8 }}>
           <strong>{item.sender === 'user' ? 'Ty' : item.sender}</strong>
           <small style={{ color: '#94a3b8' }}>{new Date(item.at).toLocaleTimeString('pl-PL')}</small>
@@ -329,8 +329,8 @@ export default function LiveAgentChat() {
       {toast} <button type="button" onClick={() => setToast('')} style={{ marginLeft: 8, textDecoration: 'underline' }}>Zamknij</button>
     </div>}
     {error && <p role="alert" style={{ padding: 8, color: '#fca5a5' }}>{error}</p>}
-    <form onSubmit={send} style={{ display: 'flex', padding: 12, gap: 8, borderTop: '1px solid #334155' }}>
-      <input aria-label="Wiadomość" value={draft} maxLength={8000} onChange={(event) => setDraft(event.target.value)}
+    <form className="bastilla-live-composer" onSubmit={send} style={{ display: 'flex', padding: 12, gap: 8, borderTop: '1px solid #334155' }}>
+      <textarea aria-label="Wiadomość" rows={2} value={draft} maxLength={8000} onChange={(event) => setDraft(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter' && !event.shiftKey && !event.nativeEvent.isComposing) { event.preventDefault(); event.currentTarget.form?.requestSubmit(); } }}
         placeholder={'Napisz do ' + channel} style={{ flex: 1, minWidth: 0, padding: 12, background: '#334155', color: 'white', border: 0, borderRadius: 8 }} />
       <button disabled={sending || !draft.trim()} style={{ background: '#2563eb', color: 'white', padding: 12, border: 0, borderRadius: 8 }}>Wyślij</button>
     </form>
