@@ -32,6 +32,8 @@ export default function LiveAgentChat() {
   const [error, setError] = useState('');
   const [toast, setToast] = useState('');
   const [sending, setSending] = useState(false);
+  const [activityOpen, setActivityOpen] = useState(true);
+  const [activityAgent, setActivityAgent] = useState('Wszyscy');
   const [notificationPermission, setNotificationPermission] = useState<string>('default');
 
   useEffect(() => {
@@ -129,6 +131,11 @@ export default function LiveAgentChat() {
       if (statusTimer) window.clearInterval(statusTimer);
     };
   }, [auth]);
+
+  const activityEvents = useMemo(() => messages.filter((item) =>
+    item.type === 'terminal' || item.type === 'progress' || item.type === 'status' ||
+    item.type === 'task' || item.type === 'error'
+  ).filter((item) => activityAgent === 'Wszyscy' || item.sender === activityAgent).slice(-80).reverse(), [messages, activityAgent]);
 
   const visibleMessages = useMemo(() => channel === 'Wszyscy'
     ? messages
@@ -263,6 +270,33 @@ export default function LiveAgentChat() {
       })}
     </div>
     <p style={{ padding: '0 10px', margin: 0, color: '#94a3b8', fontSize: 10 }}>ONLINE oznacza świeży heartbeat workera, nie potwierdza jeszcze odpowiedzi modelu agenta.</p>
+    <section aria-label="Aktywność agentów na żywo" style={{ borderBottom: '1px solid #334155', padding: 10 }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
+        <strong>Aktywność SI · terminal i zadania LIVE</strong>
+        <button type="button" aria-expanded={activityOpen} onClick={() => setActivityOpen((value) => !value)}
+          style={{ background: '#334155', color: 'white', border: 0, borderRadius: 7, padding: 8 }}>
+          {activityOpen ? 'Zwiń' : 'Rozwiń'}
+        </button>
+      </div>
+      {activityOpen && <>
+        <div style={{ display: 'flex', gap: 6, overflowX: 'auto', padding: '8px 0' }}>
+          {CHANNELS.map((name) => <button key={name} type="button" aria-pressed={activityAgent === name}
+            onClick={() => setActivityAgent(name)} style={{ padding: 6, background: activityAgent === name ? '#2563eb' : '#334155', color: 'white', border: 0, borderRadius: 6 }}>{name}</button>)}
+        </div>
+        <div role="status" style={{ fontSize: 12, color: '#cbd5e1' }}>
+          Zadania w kolejce: {status?.queue?.queued ?? '—'} · wykonywane: {status?.queue?.running ?? '—'} · nieudane: {status?.queue?.failed ?? '—'}
+        </div>
+        <div role="log" aria-live="polite" aria-label="Zdarzenia z rzeczywistych workerów" style={{ maxHeight: 210, overflowY: 'auto', background: '#020617', padding: 10, marginTop: 8, borderRadius: 8, fontFamily: 'monospace', fontSize: 12 }}>
+          {activityEvents.length === 0
+            ? <span style={{ color: '#94a3b8' }}>Brak potwierdzonych zdarzeń pracy. Panel nie symuluje aktywności.</span>
+            : activityEvents.map((item) => <div key={item.id} style={{ marginBottom: 8, overflowWrap: 'anywhere', whiteSpace: 'pre-wrap' }}>
+              <span style={{ color: '#93c5fd' }}>[{new Date(item.at).toLocaleTimeString('pl-PL')}] {item.sender} · {item.type}{item.taskId ? ' · ' + item.taskId : ''}{item.status ? ' · ' + item.status : ''}</span>
+              <div>{item.text || '(zdarzenie bez treści)'}</div>
+            </div>)}
+        </div>
+        <small style={{ color: '#94a3b8' }}>Widoczne są wyłącznie zdarzenia odebrane z backendu. To nie jest dostęp do powłoki ani dowód działania modelu bez weryfikacji agenta.</small>
+      </>}
+    </section>
     <nav aria-label="Kanały" style={{ display: 'flex', gap: 6, overflowX: 'auto', padding: 8 }}>
       {CHANNELS.map((name) => <button key={name} type="button" aria-pressed={channel === name} onClick={() => setChannel(name)}
         style={{ padding: 9, background: channel === name ? '#2563eb' : '#334155', color: 'white', border: 0, borderRadius: 7, flex: '0 0 auto' }}>{name}</button>)}
