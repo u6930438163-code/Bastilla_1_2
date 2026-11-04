@@ -4889,7 +4889,7 @@ app.post('/api/chat/approvals/:id', async (req, res) => {
 const CHAT_EXEC_KERNEL_COMMANDS = ['report', 'status', 'state', 'sync'];
 
 interface ChatExecResult {
-  kind: 'blocked' | 'kernel';
+  kind: 'blocked' | 'error' | 'kernel';
   output: string;
 }
 
@@ -5068,15 +5068,18 @@ async function tryExecuteChatCommand(message: string): Promise<ChatExecResult | 
         body: JSON.stringify({ command: trimmed }),
         signal: AbortSignal.timeout(15000),
       });
-      if (kernelRes.ok) {
-        const kernelData: any = await kernelRes.json();
-        if (typeof kernelData?.output === 'string') {
-          pushSystemLog('info', 'KERNEL', `[CHAT EXEC] Komenda jądra '${firstWord}' wykonana z czatu.`);
-          return { kind: 'kernel', output: kernelData.output.slice(0, 4000) };
-        }
+      if (!kernelRes.ok) {
+        return { kind: 'error', output: `Polecenie ${firstWord} nie powiodło się (HTTP ${kernelRes.status}).` };
       }
+      const kernelData: any = await kernelRes.json();
+      if (typeof kernelData?.output !== 'string') {
+        return { kind: 'error', output: `Jądro nie zwróciło potwierdzenia dla polecenia ${firstWord}.` };
+      }
+      pushSystemLog('info', 'KERNEL', `[CHAT EXEC] Komenda jądra '${firstWord}' wykonana z czatu.`);
+      return { kind: 'kernel', output: kernelData.output.slice(0, 4000) };
     } catch (err: any) {
       pushSystemLog('warn', 'KERNEL', `[CHAT EXEC] Komenda jądra '${firstWord}' nie powiodła się: ${err?.message || err}`);
+      return { kind: 'error', output: `Nie udało się potwierdzić wykonania polecenia ${firstWord}.` };
     }
   }
   return null;
@@ -6036,14 +6039,17 @@ app.post('/api/triad/message', async (req, res) => {
       const execAgents: ChatAgentName[] = target === 'triad' ? [...CHAT_AGENT_NAMES] : [target];
       const leadAgent = execAgents[0];
       const blocked = execResult.kind === 'blocked';
+      const failed = execResult.kind === 'error';
       const execReplies = Object.fromEntries(execAgents.map((agent) => [
         agent,
         agent === leadAgent
           ? blocked
             ? `[POLECENIE ODRZUCONE]\n${execResult.output}`
+            : failed
+              ? `[BŁĄD SYNCHRONIZACJI]\n${execResult.output}`
             : `[JĄDRO · ${execResult.kind}] Polecenie obsłużone:\n\`\`\`\n${execResult.output}\n\`\`\``
-          : blocked
-            ? 'Polecenie powłoki nie zostało wykonane.'
+          : blocked || failed
+            ? 'Polecenie nie zostało potwierdzone jako wykonane.'
             : `Polecenie odczytowe obsłużył ${leadAgent}.`,
       ])) as Partial<Record<ChatAgentName, string>>;
       const execState = await persistChatCommandReplies(persistedMessage, target, execReplies);
@@ -6054,8 +6060,9 @@ app.post('/api/triad/message', async (req, res) => {
           ? execAgents.map((agent) => `${agent}:\n${execReplies[agent]}`).join('\n\n')
           : execReplies[target],
         replies: execReplies,
-        executed: !blocked,
+        executed: execResult.kind === 'kernel',
         ...(blocked ? { blocked: true } : {}),
+        ...(failed ? { commandError: true } : {}),
         state: execState,
       });
     }
