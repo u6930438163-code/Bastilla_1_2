@@ -10,7 +10,7 @@ import {
   HeartbeatWaveChart,
   TriadCoreOrbitsChart
 } from './InteractiveChartRenderer';
-import { TechnicalBlueprintSVG } from './TechnicalBlueprintSVG';
+import { TechnicalBlueprintSVG, hashSeed } from './TechnicalBlueprintSVG';
 
 /**
  * Normalizes SVG data URIs (including utf8 percent-encoded SVGs with parentheses)
@@ -90,16 +90,18 @@ const VideoEmbed: React.FC<{ src: string; title?: string }> = ({ src, title }) =
 const ImageWithFallback: React.FC<{ src: string; alt?: string; className?: string }> = ({ src, alt, className = '' }) => {
   const normalizedSrc = normalizeImageSrc(src);
   const isDataUri = normalizedSrc.startsWith('data:');
+  const isProceduralBlueprint =
+    normalizedSrc.startsWith('/api/pollinations/image') || normalizedSrc.includes('pollinations.ai');
   const [error, setError] = useState(false);
-  const [loading, setLoading] = useState(!isDataUri);
+  const [loading, setLoading] = useState(!isDataUri && !isProceduralBlueprint);
 
   useEffect(() => {
     setError(false);
-    setLoading(!normalizedSrc.startsWith('data:'));
-  }, [normalizedSrc]);
+    setLoading(!normalizedSrc.startsWith('data:') && !isProceduralBlueprint);
+  }, [normalizedSrc, isProceduralBlueprint]);
 
   if (error) {
-    return <TechnicalBlueprintSVG style={alt || 'Sovereign Neural Core Matrix'} />;
+    return <TechnicalBlueprintSVG style={alt || 'Sovereign Neural Core Matrix'} prompt={normalizedSrc} />;
   }
 
   return (
@@ -257,6 +259,7 @@ function renderInlineContent(text: string): React.ReactNode[] {
         const html = katex.renderToString(mathContent.trim(), {
           displayMode: false,
           throwOnError: false,
+          output: 'html',
         });
         elements.push(
           <span
@@ -551,6 +554,7 @@ const BlockMath: React.FC<{ math: string }> = ({ math }) => {
     renderedHtml = katex.renderToString(cleanMath, {
       displayMode: true,
       throwOnError: false,
+      output: 'html',
     });
   } catch {
     hasError = true;
@@ -762,10 +766,10 @@ export const FormattedMessage: React.FC<FormattedMessageProps> = ({ content, cla
                         </div>
                       </div>
                       {isAssetTrigger ? (
-                        <TechnicalBlueprintSVG style={json.style || json.description || json.target} />
+                        <TechnicalBlueprintSVG style={json.style || json.description || json.target} prompt={prompt} />
                       ) : (
                         <ImageWithFallback
-                          src={`/api/pollinations/image?prompt=${encodeURIComponent(prompt)}&width=1024&height=640&seed=42`}
+                          src={`/api/pollinations/image?prompt=${encodeURIComponent(prompt)}&width=1024&height=640&seed=${hashSeed(prompt) % 1000000}`}
                           alt={prompt}
                         />
                       )}
@@ -863,7 +867,7 @@ export const FormattedMessage: React.FC<FormattedMessageProps> = ({ content, cla
                       </div>
                     </div>
                     <ImageWithFallback
-                      src={`/api/pollinations/image?prompt=${encodeURIComponent(prompt)}&width=1024&height=640&seed=108`}
+                      src={`/api/pollinations/image?prompt=${encodeURIComponent(prompt)}&width=1024&height=640&seed=${(hashSeed(prompt) + 108) % 1000000}`}
                       alt={prompt}
                     />
                   </div>

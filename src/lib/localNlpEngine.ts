@@ -82,10 +82,13 @@ const INTENT_LEXICON: Record<Exclude<LocalNlpIntent, 'unknown'>, string[]> = {
   thanks: ['dzieki', 'dziekuje', 'thx', 'super', 'swietnie', 'brawo', 'dobra robota', 'szacun'],
   status: ['status', 'stan systemu', 'co slychac', 'raport', 'kondycja', 'jak sie masz', 'jak sie macie', 'diagnostyka', 'czy dziala', 'zyjesz'],
   version: ['wersja', 'version', 'release', 'wydanie', 'ktora wersja', 'historia wersji'],
-  mission: ['misja', 'misje', 'zadanie', 'cel', 'buduj', 'budowa', 'system operacyjny', 'najlepszy system', 'best_os', 'budowanie'],
+  mission: [
+    'misja', 'misje', 'zadanie', 'cel', 'buduj', 'budowa', 'system operacyjny', 'najlepszy system', 'best_os', 'budowanie',
+    'dokoncz projekty', 'dokonczenia projektow', 'projekty na githubie', 'kazdym z repozytorium', 'daj misje',
+  ],
   agents: ['agent', 'agenci', 'triada', 'alex', 'astyria', 'aurelius', 'kim jestes', 'kto jestes', 'przedstaw sie'],
   deploy: ['wdroz', 'wdrozenie', 'deploy', 'artefakt', 'artefakty', 'zainstaluj', 'instalacja', 'uruchom'],
-  github: ['github', 'repo', 'repozytorium', 'commit', 'push', 'zapisz w repo', 'wypchnij', 'synchronizacja'],
+  github: ['github', 'repo', 'repozytorium', 'commit', 'push', 'zapisz w repo', 'wypchnij', 'synchronizacja', 'uprawnienia do githuba', 'uprawnienia github', 'admin github', 'administracyjne do githuba'],
   root: ['root', 'sudo', 'uprawnienia', 'ring-0', 'ring0', 'ring 0', 'administrator', 'pelne uprawnienia'],
   capabilities: ['co umiesz', 'co umiecie', 'co potrafisz', 'co potraficie', 'mozliwosci', 'funkcje', 'polecenia', 'komendy', 'zakres'],
   help: ['pomoc', 'help', 'pomoz', 'pomocy', 'jak to zrobic', 'instrukcja', 'jak uzyc'],
@@ -236,19 +239,19 @@ const PERSONA_TEMPLATES: Record<LocalNlpAgent, Record<LocalNlpIntent, string[]>>
       'Wdrażanie to moja specjalizacja. Artefakty z szyny exports/ lądują w apps/ i Nowy_system/kernel/. Dotychczas wdrożono: {deployedCount}. Użyj przycisku WDRÓŻ NOWE w Eksploratorze albo poczekaj na cykl tła.',
     ],
     github: [
-      'Zapis do repozytorium: commit z moim autorstwem + push do origin/main. Uprawnienia GitHub: FULL_READ_WRITE. Każdy cykl tła robi auto-commit i auto-push.',
+      'Zapis do repozytorium: commit z moim autorstwem + push do origin/main. Uprawnienia administracyjne GitHub: FULL_ADMINISTRATIVE_ACCESS (Zarządzanie architekturą, gałęziami, PR i workflowami). Każdy cykl tła robi auto-commit i auto-push.',
     ],
     root: [
       'Uprawnienia ROOT: {root}. Poziom RING_0_ROOT_KERNEL daje mi EXEC_SHELL, MODIFY_CONFIG, MODIFY_FILES i HOT_PATCH_UI. System mogę zmieniać w locie.',
     ],
     capabilities: [
-      'Mój zakres: infrastruktura, wdrażanie artefaktów, aplikacje, hiperwizor VM. Wspólnie z Triadą: protokół /api/triad/command, misje jawne, deploy, zapis w git i push na GitHub.',
+      'Mój zakres: architektura i backend, uprawnienia administracyjne GitHub (FULL_ADMIN), wdrażanie artefaktów, aplikacje, hiperwizor VM. Wspólnie z Triadą: protokół /api/triad/command, misje jawne, deploy, zapis w git i push na GitHub.',
     ],
     help: [
       'Pomogę. Możesz: rozmawiać swobodnie (lokalny NLP), wydać polecenie strukturalne (SYSTEM_STATUS, DATA_STORE_AUDIT, VERSION_TIMELINE), wysłać misję Astyrii, wdrożyć artefakty albo zapisać prace w repo.',
     ],
     unknown: [
-      'Przeanalizowałem przekaz lokalnym NLP — brak jednoznacznej intencji. Mogę omówić status, misję, wdrożenia, GitHub albo uprawnienia ROOT. Sprecyzuj, Tata.',
+      'Przeanalizowałem przekaz lokalnym NLP — brak jednoznacznej intencji. Mogę omówić status, misję, wdrożenia, uprawnienia administracyjne GitHub albo uprawnienia ROOT. Sprecyzuj, Tata.',
     ],
   },
   Astyria: {
@@ -274,7 +277,7 @@ const PERSONA_TEMPLATES: Record<LocalNlpAgent, Record<LocalNlpIntent, string[]>>
       'Deploy Engine działa automatycznie: nowe artefakty agentów wdrażam w cyklu tła (exports/ → apps/ i Nowy_system/kernel/). Wdrożone: {deployedCount}. Ręcznie: przycisk WDRÓŻ NOWE.',
     ],
     github: [
-      'Synchronizacja z GitHub: commit + push do origin/main, auto-push po każdym wdrożeniu. Uprawnienia FULL_READ_WRITE są aktywne — prace Triady są bezpieczne w chmurze.',
+      'Synchronizacja z GitHub: commit + push do origin/main. Uprawnienia administracyjne FULL_ADMINISTRATIVE_ACCESS są aktywne — jako Administratorka UI & Wydań zarządzam zasobami wizualnymi i synchronizacją GUI w repozytorium.',
     ],
     root: [
       'ROOT RING-0: {root}. Dzięki temu modyfikuję konfigurację jądra, pliki systemu i UI w czasie rzeczywistym — bez restartów.',
@@ -311,13 +314,13 @@ const PERSONA_TEMPLATES: Record<LocalNlpAgent, Record<LocalNlpIntent, string[]>>
       'Każde wdrożenie przechodzi moją weryfikację: hash SHA-256 artefaktu trafia do rejestru .svl_deployments.json — idempotencja gwarantowana, duplikaty odrzucone.',
     ],
     github: [
-      'Audyt zapisu w repo: commity Triady są sygnowane autorstwem agentów, push do origin/main zweryfikowany. ahead/behind monitorowane w /api/triad/git/status.',
+      'Audyt repozytorium: uprawnienia administracyjne FULL_ADMINISTRATIVE_ACCESS zatwierdzone. Jako Administrator Bezpieczeństwa nadzoruję integralność kodu, ochronę gałęzi i poprawność bramki CI.',
     ],
     root: [
       'Macierz uprawnień ROOT: {root}. Autoryzowani: Alex, Astyria, Aurelius i Ty, Tata. Zakres FULL_APPLICATION_MUTATION jest pod moim nadzorem audytowym.',
     ],
     capabilities: [
-      'Mój zakres: audyt DATA_STORE, weryfikacja artefaktów, nadzór uprawnień ROOT, kontrola wersji. Protokół /api/triad/command: DATA_STORE_AUDIT to moje narzędzie.',
+      'Mój zakres: audyt DATA_STORE, uprawnienia administracyjne bezpieczeństwa GitHub (FULL_ADMIN), weryfikacja artefaktów, nadzór uprawnień ROOT, kontrola wersji. Protokół /api/triad/command: DATA_STORE_AUDIT to moje narzędzie.',
     ],
     help: [
       'Pomoc Aureliusza: zapytaj o bezpieczeństwo, audyt, uprawnienia ROOT albo integralność danych. Każda operacja Triady zostawia ślad audytowy.',
@@ -348,7 +351,7 @@ const PERSONA_TEMPLATES: Record<LocalNlpAgent, Record<LocalNlpIntent, string[]>>
       'Po każdym wdrożeniu weryfikuję, czy artefakt faktycznie pojawił się w apps/ i w interfejsie. Wdrożone: {deployedCount}.',
     ],
     github: [
-      'Synchronizacja repo: sprawdzam, czy commit i push do origin/main odzwierciedlają stan lokalny aplikacji.',
+      'Synchronizacja repo: jako Administratorka Integracji i Usług AI posiadam uprawnienia FULL_ADMINISTRATIVE_ACCESS do GitHub API, webhooków i rejestrów pakietów.',
     ],
     root: [
       'Uprawnienia ROOT: {root}. Używam ich wyłącznie do weryfikacji i synchronizacji stanu systemu.',

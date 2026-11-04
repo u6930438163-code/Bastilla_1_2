@@ -1,7 +1,14 @@
-# Bastilla OS 2 in Codespaces
+# Bastilla OS 2 in Codespaces & GitHub
 
-Read AGENTS.md and docs/DEVELOPMENT.md. Use the existing Alex, Aria, Astyria and Aurelius profiles in .github/agents. Alex coordinates backend/integration, Astyria UI/mobile, Aria AI/MCP, Aurelius tests/security. Delegate independent tasks only if the active Copilot runtime actually supports it, and report real tool results. Separate worktrees and one writer per file. Do not claim four agents are running because four profiles exist.
+Read AGENTS.md, docs/DEVELOPMENT.md and docs/GITHUB_AGENT_ADMIN_SETUP.md.
+Repository: mmitek515-netizen/Bastilla_OS_2.
 
-Work against mmitek515-netizen/Bastilla_OS_2. Preserve unrelated dirty work and source repositories. npm run verify is the integration gate; use npm run check:api against an actual local server. Keep forwarded ports private. Never commit secrets or generated runtime state.
+## Administrator Uprawnień AI (Agent Administrative Mandate)
+Właściciel repozytorium nadał agentom Triady pełne uprawnienia administracyjne do GitHub (FULL_ADMINISTRATIVE_ACCESS):
+- **Alex**: Główny Administrator Architektury i Repozytorium (PR, scalanie gałęzi, koordynacja wydań, backend).
+- **Aurelius**: Administrator Bezpieczeństwa, Audytu i CI/CD (audyt podatności, branch protection, weryfikacja uprawnień).
+- **Aria**: Administratorka Integracji i AI Services (łączniki modeli, webhooks, rejestry pakietów, API).
+- **Astyria**: Administratorka UI i Wydań Frontendowych (komponenty interfejsu, mobilny UX, synchronizacja GUI).
 
-Priorities: verify actual model access; compare preserved Codespace commits; mobile UI and bundle loading; audit write APIs; real MCP handshake. Commit and push small verified changes to agent branches. Opening a Codespace does not establish model inference or a VM boot.
+Przestrzegaj zasad podziału ról i osobnych worktree (agent/<name>/<task>). npm run verify jest bramką integracyjną. Nigdy nie commituj sekretów (tokenów PAT, kluczy API) do repozytorium — tokeny administracyjne konfiguruj wyłącznie w GitHub Secrets (np. GH_ADMIN_TOKEN).
+

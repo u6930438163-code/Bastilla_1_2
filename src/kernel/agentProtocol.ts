@@ -15,6 +15,7 @@ export const ASTYRIA_MISSION_ACTIONS = [
   'deploy_vm_ten_system',
   'internet_self_update',
   'ollama_optimize',
+  'finish_all_github_projects',
 ] as const;
 
 export type AstyriaMissionAction = (typeof ASTYRIA_MISSION_ACTIONS)[number];
@@ -29,6 +30,7 @@ export const ASTYRIA_MISSION_LABELS: Record<AstyriaMissionAction, string> = {
   deploy_vm_ten_system: 'Wdróż konfigurację VM_Ten_System',
   internet_self_update: 'Aktualizacja z internetu i GitHub',
   ollama_optimize: 'Optymalizacja i konfiguracja Ollamy',
+  finish_all_github_projects: 'Misja: Dokończenie projektów we wszystkich repozytoriach GitHub',
 };
 
 export type AgentProtocolCommand = (typeof AGENT_PROTOCOL_COMMANDS)[number];

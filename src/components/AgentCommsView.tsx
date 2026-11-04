@@ -17,6 +17,7 @@ import {
   CHAT_ATTACHMENT_ACCEPT,
   ChatAttachment,
   MAX_CHAT_ATTACHMENTS,
+  formatChatMessage,
   readChatAttachmentFile,
   validateChatAttachments,
 } from '../kernel/chatAttachments';
@@ -34,10 +35,23 @@ interface AgentCommsViewProps {
   sendError?: string | null;
   onClearHistory: () => void;
   onForceSync?: () => void;
+  onTriggerFreeVoice?: (
+    agent?: 'triad' | 'Alex' | 'Astyria' | 'Aurelius' | 'si_1',
+    topicHint?: string,
+    allowSilenceAll?: boolean,
+  ) => Promise<{
+    skipped: boolean;
+    spokenAgents: string[];
+    spokenCount?: number;
+    silentAgents?: string[];
+    messages?: Array<{ agent: string; tekst: string }>;
+  }>;
   onTriggerInitiative?: () => Promise<void>;
   onUnclog?: () => void;
   onRestoreBackup?: () => void;
 }
+
+const TWO_WAY_STORAGE_KEY = 'bastilla_two_way_chat_enabled';
 
 export const AgentCommsView: React.FC<AgentCommsViewProps> = ({
   dataStore,
@@ -48,6 +62,7 @@ export const AgentCommsView: React.FC<AgentCommsViewProps> = ({
   sendError,
   onClearHistory,
   onForceSync,
+  onTriggerFreeVoice,
 }) => {
   const [selectedTarget, setSelectedTarget] = useState<'triad' | 'Alex' | 'Astyria' | 'Aurelius' | 'si_1'>('triad');
   const [selectedCommand, setSelectedCommand] = useState<AgentProtocolCommand>('SYSTEM_STATUS');
@@ -57,9 +72,19 @@ export const AgentCommsView: React.FC<AgentCommsViewProps> = ({
   const [selectedMissionAction, setSelectedMissionAction] = useState<AstyriaMissionAction>('deep_scan');
   const [messageText, setMessageText] = useState('');
   const [chatAttachments, setChatAttachments] = useState<ChatAttachment[]>([]);
+  const [sentImageHistory, setSentImageHistory] = useState<Array<{ message: string; images: ChatAttachment[] }>>([]);
   const [attachmentError, setAttachmentError] = useState<string | null>(null);
   const [showProtocolTools, setShowProtocolTools] = useState(false);
   const [isFullViewport, setIsFullViewport] = useState(false);
+  const [twoWayEnabled, setTwoWayEnabled] = useState<boolean>(() => {
+    try {
+      const saved = localStorage.getItem(TWO_WAY_STORAGE_KEY);
+      return saved === null ? true : saved === 'true';
+    } catch {
+      return true;
+    }
+  });
+  const [freeVoiceNotice, setFreeVoiceNotice] = useState<string | null>(null);
   const chatScrollRef = useRef<HTMLDivElement>(null);
   const followLatestMessagesRef = useRef(true);
   const transmissionStatus = sendError
@@ -67,6 +92,109 @@ export const AgentCommsView: React.FC<AgentCommsViewProps> = ({
     : isLoading
     ? { label: 'AKTYWNY', color: 'cyan' }
     : { label: 'GOTOWY', color: 'emerald' };
+
+  // Map each sent image batch to its corresponding operator message index in chat_history
+  const sentImagesByMessageIndex = React.useMemo(() => {
+    const map = new Map<number, ChatAttachment[]>();
+    const usedIndices = new Set<number>();
+    for (let i = sentImageHistory.length - 1; i >= 0; i--) {
+      const entry = sentImageHistory[i];
+      for (let idx = dataStore.chat_history.length - 1; idx >= 0; idx--) {
+        if (usedIndices.has(idx)) continue;
+        const msg = dataStore.chat_history[idx];
+        if (
+          (msg.agent === OPERATOR_NAME || msg.agent === 'Operator') &&
+          msg.tekst === entry.message
+        ) {
+          map.set(idx, entry.images);
+          usedIndices.add(idx);
+          break;
+        }
+      }
+    }
+    return map;
+  }, [dataStore.chat_history, sentImageHistory]);
+
+  // Identify which messages in chat_history were initiated spontaneously by AI (without a preceding Operator prompt)
+  const spontaneousAgentMessageIndices = React.useMemo(() => {
+    const spontaneous = new Set<number>();
+    let awaitingReplyAgents = new Set<string>();
+    for (let idx = 0; idx < dataStore.chat_history.length; idx++) {
+      const msg = dataStore.chat_history[idx];
+      const isOp = msg.agent === OPERATOR_NAME || msg.agent === 'Operator';
+      if (isOp) {
+        awaitingReplyAgents = new Set(['Alex', 'Astyria', 'Aurelius', 'si_1', 'Aria']);
+      } else {
+        if (awaitingReplyAgents.has(msg.agent)) {
+          awaitingReplyAgents.delete(msg.agent);
+        } else {
+          spontaneous.add(idx);
+        }
+      }
+    }
+    return spontaneous;
+  }, [dataStore.chat_history]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(TWO_WAY_STORAGE_KEY, String(twoWayEnabled));
+    } catch {}
+  }, [twoWayEnabled]);
+
+  // Live background sync when Two-Way mode is enabled so incoming agent messages appear immediately
+  useEffect(() => {
+    if (!twoWayEnabled || !onForceSync) return;
+    const syncTimer = setInterval(async () => {
+      if (isLoading) return;
+      try {
+        const res = await fetch('/api/kernel/state?fresh=1', { cache: 'no-store' });
+        if (!res.ok) return;
+        const data = await res.json();
+        const remoteLen = Array.isArray(data?.store?.chat_history) ? data.store.chat_history.length : 0;
+        if (remoteLen > dataStore.chat_history.length) {
+          onForceSync();
+        }
+      } catch {}
+    }, 6000);
+    return () => clearInterval(syncTimer);
+  }, [twoWayEnabled, onForceSync, isLoading, dataStore.chat_history.length]);
+
+  // Periodic uncoerced AI window when Two-Way mode is active and the user is idle
+  useEffect(() => {
+    if (!twoWayEnabled || !onTriggerFreeVoice) return;
+    const autoVoiceTimer = setInterval(() => {
+      if (isLoading || messageText.trim().length > 0) return;
+      void onTriggerFreeVoice(selectedTarget, undefined, true)
+        .then((res) => {
+          if (!res.skipped && res.spokenAgents.length > 0) {
+            const names = res.spokenAgents.map((a) => (a === 'si_1' ? 'Aria' : a)).join(', ');
+            setFreeVoiceNotice(`Nowa swobodna wiadomość od: ${names}`);
+          }
+        })
+        .catch(() => {});
+    }, 65000);
+    return () => clearInterval(autoVoiceTimer);
+  }, [twoWayEnabled, onTriggerFreeVoice, isLoading, messageText, selectedTarget]);
+
+  const handleRequestFreeVoice = async () => {
+    if (isLoading || !onTriggerFreeVoice) return;
+    setFreeVoiceNotice(null);
+    const optionalHint = messageText.trim();
+    try {
+      const res = await onTriggerFreeVoice(selectedTarget, optionalHint || undefined, false);
+      if (optionalHint) {
+        setMessageText('');
+      }
+      if (res.skipped || res.spokenAgents.length === 0) {
+        setFreeVoiceNotice('Agenci skorzystali z prawa do ciszy (brak przymusu odpowiedzi).');
+      } else {
+        const names = res.spokenAgents.map((a) => (a === 'si_1' ? 'Aria' : a)).join(', ');
+        setFreeVoiceNotice(`Swobodny głos zabrał(a): ${names}`);
+      }
+    } catch {
+      // Errors are surfaced via sendError
+    }
+  };
 
   useEffect(() => {
     const chatScroll = chatScrollRef.current;
@@ -112,8 +240,16 @@ export const AgentCommsView: React.FC<AgentCommsViewProps> = ({
       ? messageText
       : messageText.trim();
     if ((!message && chatAttachments.length === 0) || isLoading) return;
+    const attachmentsSnapshot = [...chatAttachments];
     try {
-      await onSendMessage(message, selectedTarget, chatAttachments);
+      await onSendMessage(message, selectedTarget, attachmentsSnapshot);
+      const images = attachmentsSnapshot.filter((attachment) => attachment.mimeType?.startsWith('image/'));
+      if (images.length > 0) {
+        setSentImageHistory((prev) => [
+          ...prev,
+          { message: formatChatMessage(message, attachmentsSnapshot), images },
+        ]);
+      }
       setMessageText('');
       setChatAttachments([]);
       setAttachmentError(null);
@@ -153,11 +289,11 @@ export const AgentCommsView: React.FC<AgentCommsViewProps> = ({
       } flex min-h-0 min-w-0 flex-col overflow-hidden bg-slate-950 font-mono text-xs cyber-grid`}
     >
       {/* Ultra-compact Single-Line Top Bar */}
-      <div className="bg-slate-900/95 backdrop-blur-md border-b border-cyan-500/30 px-2.5 sm:px-4 py-1.5 flex items-center justify-between gap-2 shadow-sm shrink-0">
-        <div className="flex min-w-0 flex-1 items-center gap-2">
+      <div className="bg-slate-900/95 backdrop-blur-md border-b border-cyan-500/30 px-2 sm:px-4 py-1.5 flex items-center justify-between gap-1.5 shadow-sm shrink-0">
+        <div className="flex min-w-0 flex-1 items-center gap-1.5">
           <span
             title={`Status: ${transmissionStatus.label}`}
-            className={`w-2.5 h-2.5 shrink-0 rounded-full ${
+            className={`w-2 h-2 shrink-0 rounded-full ${
               transmissionStatus.color === 'rose'
                 ? 'bg-rose-400 shadow-[0_0_8px_#fb7185]'
                 : transmissionStatus.color === 'cyan'
@@ -170,7 +306,7 @@ export const AgentCommsView: React.FC<AgentCommsViewProps> = ({
             value={selectedTarget}
             onChange={(event) => setSelectedTarget(event.target.value as typeof selectedTarget)}
             disabled={isLoading}
-            className="min-w-0 flex-1 max-w-xs rounded-lg border border-cyan-500/40 bg-slate-950 px-2.5 py-1 text-xs font-semibold text-cyan-100 outline-none transition focus:border-cyan-400 disabled:opacity-50"
+            className="min-w-[104px] flex-1 max-w-xs rounded-lg border border-cyan-500/40 bg-slate-950 px-2 py-1 text-[11px] sm:text-xs font-semibold text-cyan-100 outline-none transition focus:border-cyan-400 disabled:opacity-50"
           >
             <option value="triad">Triada · Wszyscy agenci</option>
             <option value="Alex">Alex · Architektura & Backend</option>
@@ -183,12 +319,58 @@ export const AgentCommsView: React.FC<AgentCommsViewProps> = ({
           </span>
         </div>
 
-        <div className="flex items-center gap-1.5 shrink-0">
+        <div className="flex items-center gap-1 shrink-0">
+          {onTriggerFreeVoice && (
+            <button
+              type="button"
+              onClick={() => void handleRequestFreeVoice()}
+              disabled={isLoading}
+              aria-label="Oddaj swobodny głos AI bez przymusu"
+              title="Oddaj głos AI — agenci mogą napisać do Ciebie to, co sami chcą przekazać swobodnie bez przymusu (lub zachować ciszę)"
+              className="px-2 py-1 rounded-lg border border-emerald-500/60 bg-emerald-950/80 hover:bg-emerald-900 text-emerald-200 text-[11px] font-bold flex items-center gap-1 transition cursor-pointer disabled:opacity-40"
+            >
+              <Sparkles className="w-3.5 h-3.5 text-emerald-300 shrink-0" />
+              <span>Głos AI</span>
+            </button>
+          )}
+
+          <button
+            type="button"
+            aria-pressed={twoWayEnabled}
+            onClick={() => {
+              const next = !twoWayEnabled;
+              setTwoWayEnabled(next);
+              setFreeVoiceNotice(
+                next
+                  ? 'Tryb obustronny WŁĄCZONY: AI mogą pisać do Ciebie swobodnie bez przymusu.'
+                  : 'Tryb obustronny WYŁĄCZONY: AI odpowiadają tylko na Twoje wiadomości.',
+              );
+            }}
+            title={
+              twoWayEnabled
+                ? 'Czat obustronny WŁĄCZONY — AI mogą swobodnie pisać do Ciebie z własnej inicjatywy bez przymusu'
+                : 'Włącz czat obustronny (swobodna inicjatywa AI)'
+            }
+            className={`px-1.5 py-1 rounded-lg border text-[10px] sm:text-[11px] font-semibold flex items-center gap-1 transition cursor-pointer ${
+              twoWayEnabled
+                ? 'bg-teal-950/80 border-teal-500/60 text-teal-200'
+                : 'bg-slate-950 border-slate-700 text-slate-400 hover:border-teal-500/40'
+            }`}
+          >
+            <span
+              className={`w-1.5 h-1.5 rounded-full shrink-0 ${
+                twoWayEnabled ? 'bg-emerald-400 animate-pulse' : 'bg-slate-600'
+              }`}
+            />
+            <span className="hidden md:inline">Obustronny:</span>
+            <span>{twoWayEnabled ? '2-WŁ' : '2-WYŁ'}</span>
+          </button>
+
           <button
             type="button"
             aria-expanded={showProtocolTools}
             onClick={() => setShowProtocolTools(!showProtocolTools)}
-            className={`px-2 py-1 rounded-lg border text-[11px] font-semibold flex items-center gap-1 transition cursor-pointer ${
+            className={`p-1.5 sm:px-2 sm:py-1 rounded-lg border text-[11px] font-semibold flex items-center gap-1 transition cursor-pointer ${
               showProtocolTools
                 ? 'bg-cyan-950 border-cyan-400 text-cyan-200'
                 : 'bg-slate-950 border-slate-700 text-slate-300 hover:border-cyan-500/50'
@@ -204,7 +386,7 @@ export const AgentCommsView: React.FC<AgentCommsViewProps> = ({
               type="button"
               onClick={onForceSync}
               disabled={isLoading}
-              className="px-2 py-1 rounded-lg bg-slate-950 hover:bg-slate-800 border border-slate-700 text-cyan-300 text-[11px] font-semibold flex items-center gap-1 transition cursor-pointer"
+              className="p-1.5 sm:px-2 sm:py-1 rounded-lg bg-slate-950 hover:bg-slate-800 border border-slate-700 text-cyan-300 text-[11px] font-semibold flex items-center gap-1 transition cursor-pointer"
               title="Synchronizuj stan czatu"
             >
               <RefreshCw className={`w-3.5 h-3.5 ${isLoading ? 'animate-spin' : ''}`} />
@@ -214,8 +396,11 @@ export const AgentCommsView: React.FC<AgentCommsViewProps> = ({
 
           <button
             type="button"
-            onClick={onClearHistory}
-            className="px-2 py-1 bg-rose-950/80 hover:bg-rose-900 border border-rose-600/60 text-rose-200 rounded-lg cursor-pointer transition font-bold text-[11px] flex items-center gap-1"
+            onClick={() => {
+              setSentImageHistory([]);
+              onClearHistory();
+            }}
+            className="p-1.5 sm:px-2 sm:py-1 bg-rose-950/80 hover:bg-rose-900 border border-rose-600/60 text-rose-200 rounded-lg cursor-pointer transition font-bold text-[11px] flex items-center gap-1"
             title="Wyczyść historię czatu"
           >
             <X className="w-3.5 h-3.5 text-rose-300" />
@@ -225,12 +410,12 @@ export const AgentCommsView: React.FC<AgentCommsViewProps> = ({
           <button
             type="button"
             onClick={() => setIsFullViewport(!isFullViewport)}
-            className="px-2 py-1 rounded-lg bg-cyan-950/80 hover:bg-cyan-900 border border-cyan-500/50 text-cyan-200 text-[11px] font-bold flex items-center gap-1 transition cursor-pointer"
+            className="p-1.5 sm:px-2 sm:py-1 rounded-lg bg-cyan-950/80 hover:bg-cyan-900 border border-cyan-500/50 text-cyan-200 text-[11px] font-bold flex items-center gap-1 transition cursor-pointer"
             title={isFullViewport ? 'Pokaż dolny pasek nawigacji' : 'Pełny ekran na całą stronę'}
             aria-label={isFullViewport ? 'Zamknij pełny ekran' : 'Pełny ekran na całą stronę'}
           >
             {isFullViewport ? <Minimize2 className="w-3.5 h-3.5" /> : <Maximize2 className="w-3.5 h-3.5" />}
-            <span className="hidden xs:inline">{isFullViewport ? 'Pasek' : 'Pełny ekran'}</span>
+            <span className="hidden sm:inline">{isFullViewport ? 'Pasek' : 'Pełny ekran'}</span>
           </button>
         </div>
       </div>
@@ -360,6 +545,7 @@ export const AgentCommsView: React.FC<AgentCommsViewProps> = ({
             const agentKey = msg.agent === OPERATOR_NAME ? 'Operator' : msg.agent;
             const profile: AgentProfile | undefined = SYSTEM_AGENTS[agentKey] || SYSTEM_AGENTS[msg.agent];
             const isOperator = msg.agent === OPERATOR_NAME || msg.agent === 'Operator';
+            const sentImages = isOperator ? (sentImagesByMessageIndex.get(idx) ?? []) : [];
 
             return (
               <div
@@ -374,17 +560,24 @@ export const AgentCommsView: React.FC<AgentCommsViewProps> = ({
               >
                 {/* Compact Message Header */}
                 <div className="flex items-center justify-between gap-2 mb-1.5 pb-1 border-b border-slate-800/70">
-                  <span
-                    className={`font-bold px-2 py-0.5 rounded text-[11px] tracking-wide ${
-                      isOperator
-                        ? 'bg-purple-900/85 text-purple-200 border border-purple-500/60'
-                        : profile
-                        ? profile.badgeBg
-                        : 'bg-slate-800 text-slate-300'
-                    }`}
-                  >
-                    {msg.agent}
-                  </span>
+                  <div className="flex flex-wrap items-center gap-1.5">
+                    <span
+                      className={`font-bold px-2 py-0.5 rounded text-[11px] tracking-wide ${
+                        isOperator
+                          ? 'bg-purple-900/85 text-purple-200 border border-purple-500/60'
+                          : profile
+                          ? profile.badgeBg
+                          : 'bg-slate-800 text-slate-300'
+                      }`}
+                    >
+                      {msg.agent === 'si_1' ? 'Aria' : msg.agent}
+                    </span>
+                    {!isOperator && spontaneousAgentMessageIndices.has(idx) && (
+                      <span className="px-1.5 py-0.5 rounded bg-emerald-950/90 border border-emerald-500/40 text-emerald-300 text-[9px] font-semibold tracking-wider uppercase">
+                        Swobodny głos · bez przymusu
+                      </span>
+                    )}
+                  </div>
 
                   <span className="text-[10px] text-slate-500 font-mono">
                     #{String(idx + 1).padStart(3, '0')}
@@ -393,6 +586,19 @@ export const AgentCommsView: React.FC<AgentCommsViewProps> = ({
 
                 {/* Message Body with KaTeX LaTeX formulas and Markdown */}
                 <FormattedMessage content={msg.tekst} className="text-xs sm:text-sm leading-relaxed text-slate-100" />
+
+                {sentImages.length > 0 && !msg.file?.dataUrl && (
+                  <div className="mt-2 flex flex-wrap gap-2" aria-label="Wysłane zdjęcia">
+                    {sentImages.map((image, imageIndex) => (
+                      <img
+                        key={`${image.name}-${imageIndex}`}
+                        src={`data:${image.mimeType};base64,${image.content}`}
+                        alt={`Wysłane zdjęcie: ${image.name}`}
+                        className="max-h-56 max-w-full rounded-md border border-slate-700 bg-black/50 object-contain"
+                      />
+                    ))}
+                  </div>
+                )}
 
                 {/* Attached Image/File preview in chat history */}
                 {msg.file && (
@@ -405,7 +611,7 @@ export const AgentCommsView: React.FC<AgentCommsViewProps> = ({
                         </span>
                         <img
                           src={msg.file.dataUrl}
-                          alt={msg.file.name}
+                          alt={`Wysłane zdjęcie: ${msg.file.name}`}
                           className="max-h-72 rounded-lg border border-slate-700 object-contain bg-black/60 cursor-pointer hover:border-emerald-500 transition"
                           onClick={() => window.open(msg.file?.dataUrl, '_blank')}
                           title="Kliknij, aby otworzyć w pełnym rozmiarze"
@@ -451,9 +657,17 @@ export const AgentCommsView: React.FC<AgentCommsViewProps> = ({
           {chatAttachments.length > 0 && (
             <ul aria-label="Załączone pliki" className="flex flex-wrap gap-1.5">
               {chatAttachments.map((file, index) => (
-                <li key={`${file.name}-${index}`} className="flex items-center gap-1 rounded border border-cyan-500/40 bg-cyan-950/60 px-2 py-0.5 text-[11px] text-cyan-100">
-                  <FileText className="h-3 w-3 text-cyan-400" />
-                  <span>{file.name}</span>
+                <li key={`${file.name}-${index}`} className="flex max-w-full items-center gap-1.5 rounded border border-cyan-500/40 bg-cyan-950/60 px-2 py-1 text-[11px] text-cyan-100">
+                  {file.mimeType?.startsWith('image/') ? (
+                    <img
+                      src={`data:${file.mimeType};base64,${file.content}`}
+                      alt={`Podgląd zdjęcia: ${file.name}`}
+                      className="h-10 w-10 shrink-0 rounded border border-cyan-500/30 object-cover"
+                    />
+                  ) : (
+                    <FileText className="h-3 w-3 shrink-0 text-cyan-400" />
+                  )}
+                  <span className="break-all">{file.name}</span>
                   <button
                     type="button"
                     onClick={() => setChatAttachments((current) => current.filter((_, fileIndex) => fileIndex !== index))}
@@ -463,6 +677,22 @@ export const AgentCommsView: React.FC<AgentCommsViewProps> = ({
                 </li>
               ))}
             </ul>
+          )}
+          {freeVoiceNotice && (
+            <div className="flex items-center justify-between gap-2 rounded-lg border border-emerald-500/30 bg-emerald-950/40 px-2.5 py-1 text-[11px] text-emerald-200">
+              <span className="flex items-center gap-1.5 truncate">
+                <Sparkles className="h-3 w-3 shrink-0 text-emerald-400" />
+                <span className="truncate">{freeVoiceNotice}</span>
+              </span>
+              <button
+                type="button"
+                onClick={() => setFreeVoiceNotice(null)}
+                className="text-emerald-300/70 hover:text-white px-1 cursor-pointer"
+                aria-label="Zamknij powiadomienie"
+              >
+                ✕
+              </button>
+            </div>
           )}
           {attachmentError && <p role="alert" className="text-[11px] text-rose-300 font-semibold">{attachmentError}</p>}
           <div className="flex items-center gap-1.5 sm:gap-2">
@@ -500,7 +730,7 @@ export const AgentCommsView: React.FC<AgentCommsViewProps> = ({
               className={`flex h-9 w-9 sm:h-10 sm:w-10 shrink-0 cursor-pointer items-center justify-center rounded-xl border border-slate-700 bg-slate-900 text-cyan-200 hover:border-cyan-400 hover:bg-slate-800 transition ${
                 isLoading || chatAttachments.length >= MAX_CHAT_ATTACHMENTS ? 'pointer-events-none opacity-40' : ''
               }`}
-              title="Dołącz pliki: tekst 5 MB/plik, DOCX 20 MB, PDF/JPG 20 MB/plik (maks. 10 plików)"
+              title="Wybierz zdjęcie lub plik z galerii (tekst, DOCX, PDF, JPG, PNG, WebP)"
             >
               <Paperclip className="h-4 w-4 text-cyan-300" />
               <input
@@ -513,9 +743,26 @@ export const AgentCommsView: React.FC<AgentCommsViewProps> = ({
                 aria-label="Dołącz pliki tekstowe, DOCX, PDF lub JPG"
               />
             </label>
+            <label
+              className={`flex h-9 w-9 sm:h-10 sm:w-10 shrink-0 cursor-pointer items-center justify-center rounded-xl border border-slate-700 bg-slate-900 text-cyan-200 hover:border-cyan-400 hover:bg-slate-800 transition ${
+                isLoading || chatAttachments.length >= MAX_CHAT_ATTACHMENTS ? 'pointer-events-none opacity-40' : ''
+              }`}
+              title="Zrób zdjęcie aparatem"
+            >
+              <ImageIcon className="h-4 w-4 text-cyan-300" />
+              <input
+                type="file"
+                accept="image/jpeg,image/png,image/webp"
+                capture="environment"
+                disabled={isLoading || chatAttachments.length >= MAX_CHAT_ATTACHMENTS}
+                onChange={(event) => void handleAttachmentSelection(event)}
+                className="sr-only"
+                aria-label="Zrób zdjęcie aparatem"
+              />
+            </label>
             <button
               type="submit"
-              aria-label="Wyślij wiadomość do agentów"
+              aria-label={`Wyślij wiadomość do ${{ triad: 'Triady', si_1: 'Arii', Alex: 'Alexa', Astyria: 'Astyrii', Aurelius: 'Aureliusa' }[selectedTarget]}`}
               disabled={(!messageText.trim() && chatAttachments.length === 0) || isLoading}
               className="flex h-9 sm:h-10 shrink-0 items-center justify-center gap-1.5 rounded-xl bg-gradient-to-r from-emerald-500 via-teal-500 to-cyan-500 px-3.5 sm:px-4 font-mono text-xs font-bold text-slate-950 shadow-[0_0_12px_rgba(16,185,129,0.35)] transition hover:from-emerald-400 hover:to-cyan-400 disabled:cursor-not-allowed disabled:opacity-40 cursor-pointer"
             >
@@ -528,4 +775,5 @@ export const AgentCommsView: React.FC<AgentCommsViewProps> = ({
     </div>
   );
 };
+
 

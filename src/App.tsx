@@ -47,12 +47,13 @@ import { ChatAttachment, formatChatMessage } from './kernel/chatAttachments';
 import { isChatSystemChange } from './kernel/chatChanges';
 import type { ChatSystemChange } from './kernel/chatChanges';
 
-const LOCAL_STORAGE_KEY = 'svl_kernel_datastore_v8_6_0_without_nlp';
+const LOCAL_STORAGE_KEY = 'svl_kernel_datastore_v9_0_0_chat_sync';
 
 export default function App() {
   const [rawDataStore, setRawDataStore] = useState<DataStore>(() => {
     try {
       localStorage.removeItem('svl_kernel_datastore_v8_5_1_desktop_ready');
+      localStorage.removeItem('svl_kernel_datastore_v8_6_0_without_nlp');
       const stored = localStorage.getItem(LOCAL_STORAGE_KEY);
       if (stored) {
         const parsed = JSON.parse(stored);
@@ -430,6 +431,64 @@ export default function App() {
     }
   };
 
+  const handleTriggerFreeVoice = async (
+    chatAgent: AgentProtocolRequest['agent'] = 'triad',
+    topicHint?: string,
+    allowSilenceAll = false,
+  ): Promise<{
+    skipped: boolean;
+    spokenAgents: string[];
+    spokenCount: number;
+    silentAgents: string[];
+    messages: Array<{ agent: string; tekst: string }>;
+  }> => {
+    setIsAgentLoading(true);
+    setAgentError(null);
+    try {
+      const response = await fetch('/api/triad/free-voice', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ agent: chatAgent, topicHint, allowSilenceAll }),
+      });
+      const result = await response.json();
+      if (!response.ok || result.success !== true) {
+        throw new Error(result.error || `Nie udało się wywołać swobodnego głosu AI (HTTP ${response.status}).`);
+      }
+      if (result.state?.store) {
+        const normalized = normalizeDataStore(result.state.store);
+        setDataStore(normalized);
+        try {
+          localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(normalized));
+        } catch {}
+      }
+
+      const spokenAgents: string[] = Array.isArray(result.spokenAgents) ? result.spokenAgents : [];
+      const messages: Array<{ agent: string; tekst: string }> =
+        result.replies && typeof result.replies === 'object'
+          ? Object.entries(result.replies as Record<string, unknown>)
+              .filter(([, text]) => typeof text === 'string')
+              .map(([agent, text]) => ({ agent, tekst: text as string }))
+          : spokenAgents.map((agent) => ({ agent, tekst: '' }));
+
+      const allCandidates = chatAgent === 'triad' ? ['Alex', 'Astyria', 'si_1', 'Aurelius'] : [chatAgent];
+      const silentAgents = allCandidates.filter((agent) => !spokenAgents.includes(agent));
+
+      return {
+        skipped: Boolean(result.skipped) || spokenAgents.length === 0,
+        spokenAgents,
+        spokenCount: spokenAgents.length,
+        silentAgents,
+        messages,
+      };
+    } catch (error) {
+      const messageText = error instanceof Error ? error.message : 'Nie udało się otworzyć swobodnego głosu AI.';
+      setAgentError(messageText);
+      throw error;
+    } finally {
+      setIsAgentLoading(false);
+    }
+  };
+
   const handleProvisionGeminiVm = async (): Promise<{ status: string; sshCommand: string }> => {
     const response = await fetch('/api/vm-gemini-4/provision', {
       method: 'POST',
@@ -534,6 +593,7 @@ export default function App() {
               dataStore={dataStore}
               onNavigate={setActiveTab}
               onSendMessage={handleSendMessage}
+              onTriggerFreeVoice={handleTriggerFreeVoice}
               onExecutePythonCommand={handleExecutePythonCommand}
             />
           )}
@@ -548,6 +608,7 @@ export default function App() {
               sendError={agentError}
               onClearHistory={handleClearHistory}
               onForceSync={handleForceSync}
+              onTriggerFreeVoice={handleTriggerFreeVoice}
             />
           )}
 

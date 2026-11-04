@@ -170,7 +170,8 @@ export const AstyriaMissionView: React.FC<AstyriaMissionViewProps> = ({
 
   const vmInfo = liveStatus?.vmTenSystem;
   const ramRss = vmInfo?.memoryTelemetry?.rssMB ?? 142.4;
-  const ramPct = vmInfo?.memoryTelemetry?.utilizationPercent ?? 3.5;
+  const ramAlloc = vmInfo?.memoryTelemetry?.allocatedMB ?? 12288;
+  const ramPct = vmInfo?.memoryTelemetry?.utilizationPercent ?? 1.2;
 
   return (
     <div className="flex flex-1 min-h-0 min-w-0 flex-col bg-slate-950 font-mono text-xs overflow-y-auto p-3 sm:p-4 md:p-6 space-y-4 md:space-y-5 cyber-grid">
@@ -247,7 +248,7 @@ export const AstyriaMissionView: React.FC<AstyriaMissionViewProps> = ({
                   Maszyna Wirtualna: VM_Ten_System (Hypervisor Ring-0)
                 </h3>
                 <span className="px-2 py-0.5 rounded bg-emerald-950 text-emerald-300 border border-emerald-700/60 text-[10px] font-bold">
-                  ACTIVE • ext4 10 GiB • 4 GiB RAM • 2 vCPU
+                  ACTIVE • ext4 10 GiB • 12 GiB RAM (High-Perf) • 2 vCPU
                 </span>
               </div>
               <p className="text-[11px] text-slate-400">
@@ -302,14 +303,14 @@ export const AstyriaMissionView: React.FC<AstyriaMissionViewProps> = ({
             <div className="flex items-center justify-between">
               <span className="text-[10px] font-bold text-purple-400 uppercase flex items-center gap-1.5 tracking-wider">
                 <HardDrive className="w-3.5 h-3.5" />
-                2. Pamięć RAM 4 GiB
+                2. Pamięć RAM 12 GiB
               </span>
               <span className="px-2 py-0.5 rounded-full bg-emerald-950 text-emerald-400 border border-emerald-500/30 text-[9px] font-bold">
                 {ramPct}% (&lt;70% IDLE)
               </span>
             </div>
             <div className="text-xs font-bold text-slate-100 font-mono">
-              Użycie: {ramRss} MB / 4096 MB
+              Użycie: {ramRss} MB / {ramAlloc} MB
             </div>
             <div className="w-full bg-slate-800/80 h-1.5 rounded-full overflow-hidden">
               <div
@@ -588,6 +589,7 @@ export const AstyriaMissionView: React.FC<AstyriaMissionViewProps> = ({
               disabled={isExecuting}
             >
               <option value="repair_all">Pełna naprawa i autodiagnoza</option>
+              <option value="finish_all_github_projects">Misja: Dokończenie projektów we wszystkich repozytoriach GitHub</option>
               <option value="repair_ollama_and_llm">Napraw Ollama &amp; Silniki LLM (Ollama + Gemini)</option>
               <option value="deep_scan">Odczytowy skan logów i telemetrii</option>
               <option value="vm_firewall_audit">Raport stanu zapory VM</option>

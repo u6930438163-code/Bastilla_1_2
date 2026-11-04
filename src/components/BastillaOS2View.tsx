@@ -59,6 +59,17 @@ interface BastillaOS2ViewProps {
     agent?: AgentProtocolRequest['agent'],
     attachments?: ChatAttachment[],
   ) => Promise<void>;
+  onTriggerFreeVoice?: (
+    agent?: AgentProtocolRequest['agent'],
+    topicHint?: string,
+    allowSilenceAll?: boolean,
+  ) => Promise<{
+    skipped: boolean;
+    spokenAgents: string[];
+    spokenCount: number;
+    silentAgents: string[];
+    messages: Array<{ agent: string; tekst: string }>;
+  }>;
   onExecutePythonCommand?: (command: string) => Promise<any>;
 }
 
@@ -91,6 +102,7 @@ export const BastillaOS2View: React.FC<BastillaOS2ViewProps> = ({
   dataStore,
   onNavigate,
   onSendMessage,
+  onTriggerFreeVoice,
   onExecutePythonCommand,
 }) => {
   const [tasks, setTasks] = useState<AgentTask[]>([]);
@@ -244,6 +256,25 @@ export const BastillaOS2View: React.FC<BastillaOS2ViewProps> = ({
       setChatFeedback('Odpowiedź agentów zapisana w rejestrze Bastilla OS 2.');
     } catch (err) {
       setChatFeedback(err instanceof Error ? err.message : 'Nie udało się wysłać wiadomości.');
+    } finally {
+      setChatBusy(false);
+    }
+  };
+
+  const handleQuickFreeVoice = async () => {
+    if (!onTriggerFreeVoice || chatBusy) return;
+    setChatBusy(true);
+    setChatFeedback(null);
+    try {
+      const res = await onTriggerFreeVoice(chatAgent);
+      if (res.spokenCount > 0) {
+        const names = res.messages.map((m) => (m.agent === 'si_1' ? 'Aria' : m.agent)).join(', ');
+        setChatFeedback(`Swobodny głos zabrał(a): ${names}`);
+      } else {
+        setChatFeedback('Agenci skorzystali z prawa do ciszy (brak przymusu odpowiedzi).');
+      }
+    } catch (err) {
+      setChatFeedback(err instanceof Error ? err.message : 'Błąd wywołania swobodnego głosu AI.');
     } finally {
       setChatBusy(false);
     }
@@ -541,16 +572,30 @@ export const BastillaOS2View: React.FC<BastillaOS2ViewProps> = ({
         <section className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           {/* Direct Bastilla OS 2 Agent Chat */}
           <div className="bg-white rounded-xl border border-[#E6DCB8] shadow-xs flex flex-col overflow-hidden">
-            <div className="p-4 border-b border-[#E6DCB8] bg-[#FAF7F0] flex items-center justify-between gap-2">
+            <div className="p-4 border-b border-[#E6DCB8] bg-[#FAF7F0] flex flex-wrap items-center justify-between gap-2">
               <div className="flex items-center gap-2">
                 <MessagesSquare className="w-4 h-4 text-[#C5A059]" />
                 <h2 className="text-xs font-bold uppercase tracking-wider text-[#1A1612]">
                   Czat Operacyjny Bastilla OS 2 (Triada + Aria)
                 </h2>
               </div>
-              <span className="text-[11px] font-mono text-[#736758]">
-                {dataStore?.chat_history?.length ?? 0} wpisów
-              </span>
+              <div className="flex items-center gap-2">
+                {onTriggerFreeVoice && (
+                  <button
+                    type="button"
+                    onClick={() => void handleQuickFreeVoice()}
+                    disabled={chatBusy}
+                    className="px-2.5 py-1 rounded-lg bg-emerald-50 hover:bg-emerald-100 border border-emerald-300 text-emerald-900 text-[11px] font-semibold flex items-center gap-1 transition cursor-pointer disabled:opacity-50"
+                    title="Daj agentom swobodny głos bez przymusu"
+                  >
+                    <Sparkles className="w-3 h-3 text-emerald-700" />
+                    <span>Głos AI (bez przymusu)</span>
+                  </button>
+                )}
+                <span className="text-[11px] font-mono text-[#736758]">
+                  {dataStore?.chat_history?.length ?? 0} wpisów
+                </span>
+              </div>
             </div>
 
             <div className="p-4 space-y-2.5 max-h-72 overflow-y-auto flex-1 bg-[#FAF7F0]/40">

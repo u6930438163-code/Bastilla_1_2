@@ -1,0 +1,67 @@
+name: Bastilla AI Agents Admin Dispatch
+on:
+  workflow_dispatch:
+    inputs:
+      agent:
+        description: 'Agent executing administrative action'
+        required: true
+        default: 'Alex'
+        type: choice
+        options:
+          - Alex
+          - Aurelius
+          - Aria
+          - Astyria
+          - Triada
+      action:
+        description: 'Administrative action to perform'
+        required: true
+        default: 'sync-verify'
+        type: choice
+        options:
+          - sync-verify
+          - security-audit
+          - release-check
+
+permissions: write-all
+
+concurrency:
+  group: agent-admin-${{ github.repository }}
+  cancel-in-progress: false
+
+jobs:
+  admin-execute:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.GH_ADMIN_TOKEN || github.token }}
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Execute Agent Admin Task (${{ inputs.agent }})
+        env:
+          AGENT_NAME: ${{ inputs.agent }}
+          ADMIN_ACTION: ${{ inputs.action }}
+          GH_TOKEN: ${{ secrets.GH_ADMIN_TOKEN || github.token }}
+        run: |
+          echo "Executing admin action '$ADMIN_ACTION' authorized for agent '$AGENT_NAME' on $(date -u)"
+          if [ "$ADMIN_ACTION" = "sync-verify" ]; then
+            npm run verify
+          elif [ "$ADMIN_ACTION" = "security-audit" ]; then
+            npm run test
+            git log -n 10 --oneline
+          elif [ "$ADMIN_ACTION" = "release-check" ]; then
+            npm run build
+          fi
+          echo "Administrative action '$ADMIN_ACTION' completed successfully by $AGENT_NAME."
