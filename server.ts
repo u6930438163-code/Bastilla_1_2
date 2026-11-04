@@ -73,7 +73,6 @@ import {
 import {
   buildFreeVoiceSystemPrompt,
   cleanFreeVoiceText,
-  generateLocalFreeVoiceThought,
   isAgentPassResponse,
 } from './src/kernel/freeVoiceChat';
 
@@ -5775,7 +5774,7 @@ app.post('/api/triad/free-voice', async (req, res) => {
   const target = requestedTarget as ChatTarget;
   const llmProviders = configuredProviders(LLM_CHAIN_CONFIG);
 
-  if (llmProviders.length === 0 && !CHAT_LOCAL_FALLBACK) {
+  if (llmProviders.length === 0) {
     return sendChatError(req, res, 503, 'Brak skonfigurowanego modelu czatu dla swobodnej wypowiedzi AI.');
   }
 
@@ -5803,44 +5802,36 @@ app.post('/api/triad/free-voice', async (req, res) => {
       : `[OTWARTY KANAŁ OBUSTRONNY — BEZ PRZYMUSU] Masz teraz wolny głos w oknie czatu. Jeśli chcesz napisać do Operatora (Taty) cokolwiek od siebie (własną myśl, pytanie, refleksję lub pomysł), napisz to zupełnie swobodnie. Jeśli nie masz teraz nic do dodania, odpowiedz wyłącznie [PASS].`;
 
     const evaluations = await Promise.all(
-      candidateAgents.map(async (agent, idx) => {
-        if (llmProviders.length > 0) {
-          try {
-            const result = await generateWithChain(
-              LLM_CHAIN_CONFIG,
-              {
-                system: `${buildFreeVoiceSystemPrompt(agent, CHAT_AGENT_MISSIONS[agent], topicHint)} ${CHAT_AGENT_CONVERSATION_STYLE} ${CHAT_AGENT_SAFETY_BOUNDARIES}`,
-                history: buildLlmHistory(chatHistory, agent, 6, 900),
-                message: freeVoicePromptMessage,
-              },
-              deadline,
-            );
-            const cleaned = cleanFreeVoiceText(result.text);
-            if (isAgentPassResponse(cleaned)) {
-              return { agent, skipped: true, text: '', engine: `${result.provider}:${result.model}` };
-            }
-            return { agent, skipped: false, text: cleaned, engine: `${result.provider}:${result.model}` };
-          } catch (error: any) {
-            const failures = error instanceof LlmChainError ? error.failures.join(' | ') : String(error?.message || error);
-            pushSystemLog('warn', 'KERNEL', `[SWOBODNY GŁOS] ${agent}: modele niedostępne (${failures}).`);
-            if (!CHAT_LOCAL_FALLBACK) {
-              return { agent, skipped: true, text: '', engine: 'error', error: `${agent}: ${failures}` };
-            }
+      candidateAgents.map(async (agent) => {
+        try {
+          const result = await generateWithChain(
+            LLM_CHAIN_CONFIG,
+            {
+              system: `${buildFreeVoiceSystemPrompt(agent, CHAT_AGENT_MISSIONS[agent], topicHint)} ${CHAT_AGENT_CONVERSATION_STYLE} ${CHAT_AGENT_SAFETY_BOUNDARIES}`,
+              history: buildLlmHistory(chatHistory, agent, 6, 900),
+              message: freeVoicePromptMessage + (allowSilenceAll ? ' Cały zespół może w tej turze pozostać w ciszy.' : ''),
+            },
+            deadline,
+          );
+          const cleaned = cleanFreeVoiceText(result.text);
+          if (isAgentPassResponse(cleaned)) {
+            return { agent, skipped: true, text: '', engine: `${result.provider}:${result.model}` };
           }
+          return { agent, skipped: false, text: cleaned, engine: `${result.provider}:${result.model}` };
+        } catch (error: any) {
+          const failures = error instanceof LlmChainError ? error.failures.join(' | ') : String(error?.message || error);
+          pushSystemLog('warn', 'KERNEL', `[SWOBODNY GŁOS] ${agent}: modele niedostępne (${failures}).`);
+          return { agent, skipped: true, text: '', engine: 'error', error: `${agent}: ${failures}` };
         }
-        const allowPass = target === 'triad' && (idx > 0 || allowSilenceAll);
-        const localThought = generateLocalFreeVoiceThought(agent, turnSeed + idx, allowPass);
-        return {
-          agent,
-          skipped: localThought.skipped,
-          text: localThought.skipped ? '' : localThought.text,
-          engine: 'local_free_voice',
-        };
       }),
     );
 
     const spoken = evaluations.filter((item) => !item.skipped && item.text.trim().length > 0);
     if (spoken.length === 0) {
+      const failures = evaluations.filter((item) => item.error).map((item) => item.error);
+      if (failures.length > 0) {
+        return sendChatError(req, res, 502, `Model AI nie odpowiedział na swobodny czat. ${failures.join(' | ')}`.slice(0, 900));
+      }
       return res.json({
         success: true,
         skipped: true,
