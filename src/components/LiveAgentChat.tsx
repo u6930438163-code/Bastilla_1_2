@@ -32,6 +32,7 @@ export default function LiveAgentChat() {
   const [error, setError] = useState('');
   const [toast, setToast] = useState('');
   const [sending, setSending] = useState(false);
+  const [lastQueued, setLastQueued] = useState<Array<{id:string;agent:string;status:string}>>([]);
   const [activityOpen, setActivityOpen] = useState(true);
   const [activityAgent, setActivityAgent] = useState('Wszyscy');
   const [notificationPermission, setNotificationPermission] = useState<string>('default');
@@ -137,9 +138,14 @@ export default function LiveAgentChat() {
     item.type === 'task' || item.type === 'error'
   ).filter((item) => activityAgent === 'Wszyscy' || item.sender === activityAgent).slice(-80).reverse(), [messages, activityAgent]);
 
+  // "Wszyscy" is the global feed; agent tabs also show direct agent replies and
+  // messages addressed to that agent from the global conversation.
   const visibleMessages = useMemo(() => channel === 'Wszyscy'
     ? messages
-    : messages.filter((message) => message.channel === channel), [channel, messages]);
+    : messages.filter((message) =>
+        message.channel === channel ||
+        (message.channel === 'Wszyscy' && (message.sender === channel || message.to === channel))
+      ), [channel, messages]);
 
   async function login(event: React.FormEvent) {
     event.preventDefault();
@@ -191,6 +197,7 @@ export default function LiveAgentChat() {
           : [...previous, data.event].slice(-2000));
       }
       setDraft('');
+      setLastQueued(Array.isArray(data.queued) ? data.queued : []);
       setToast('Wiadomość dodana do trwałej kolejki: ' + (data.queuedFor || []).join(', '));
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : 'Nie udało się wysłać wiadomości.');
@@ -314,6 +321,10 @@ export default function LiveAgentChat() {
         {item.sender !== 'user' && !item.read && <button type="button" onClick={() => void markRead(item.id)} style={{ padding: 6, borderRadius: 6, background: '#334155', color: 'white', fontSize: 11 }}>Oznacz jako przeczytane</button>}
       </article>)}
     </div>
+    {lastQueued.length > 0 && <div role="status" style={{ padding: '6px 12px', fontSize: 12, color: '#cbd5e1' }}>
+      Ostatnio przyjęte zadania: {lastQueued.map((job) => job.agent + ' (' + job.status + ')').join(' · ')}.
+      Status „queued” oznacza przyjęcie do kolejki, nie wykonanie przez SI.
+    </div>}
     {toast && <div role="status" style={{ padding: 8, background: '#1d4ed8', color: 'white' }}>
       {toast} <button type="button" onClick={() => setToast('')} style={{ marginLeft: 8, textDecoration: 'underline' }}>Zamknij</button>
     </div>}
