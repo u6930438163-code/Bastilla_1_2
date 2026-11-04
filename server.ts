@@ -1,3 +1,6 @@
+import { createLiveChatRouter } from './integrations/live-chat/router.mjs';
+import { createLiveChatSessionAuth, createLiveChatWorkerAuth } from './integrations/live-chat/auth.mjs';
+import { LiveChatStore } from './integrations/live-chat/store.mjs';
 import express from 'express';
 import { registerGptActions } from './src/lib/gptActions.mjs';
 import { sendChatError } from './src/lib/chatTransport.mjs';
@@ -156,6 +159,19 @@ const POLLINATIONS_API_KEY = rawEnvPollKey.startsWith('sk_')
   ? rawEnvPollKey
   : '';
 const app = express();
+const liveChatAuth = createLiveChatSessionAuth({
+  password: process.env.BASTILLA_LIVE_CHAT_USER_PASSWORD || '',
+  secret: process.env.BASTILLA_LIVE_CHAT_SESSION_SECRET || '',
+  allowedOrigin: process.env.BASTILLA_LIVE_CHAT_ALLOWED_ORIGIN || '',
+  cookieSecure: (process.env.BASTILLA_LIVE_CHAT_COOKIE_SECURE || 'true').trim().toLowerCase() !== 'false',
+});
+const liveChatWorkerAuth = createLiveChatWorkerAuth({
+  tokensJson: process.env.BASTILLA_LIVE_CHAT_WORKER_TOKENS || '',
+});
+const liveChatStore = new LiveChatStore({
+  filePath: process.env.BASTILLA_LIVE_CHAT_STORE_PATH || 'data/live-chat-state.json',
+});
+
 const portArgIndex = process.argv.indexOf('--port');
 const DEFAULT_PORT = Number(portArgIndex >= 0 ? process.argv[portArgIndex + 1] : process.env.PORT || 3000);
 const PORT = Number.isFinite(DEFAULT_PORT) && DEFAULT_PORT > 0 ? DEFAULT_PORT : 3000;
@@ -6798,6 +6814,12 @@ async function bootstrapTriadMission() {
 }
 
 // Unknown API requests must not fall through to the HTML application shell.
+app.use('/api/live-chat', createLiveChatRouter({
+  store: liveChatStore,
+  requireUser: liveChatAuth.requireUser,
+  requireWorker: liveChatWorkerAuth,
+  session: liveChatAuth,
+}));
 app.use('/api', (_req, res) => {
   res.status(404).json({ success: false, error: 'Nieznany endpoint API. Sprawdź adres i wersję wdrożonego serwera.' });
 });
