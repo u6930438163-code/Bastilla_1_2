@@ -5815,9 +5815,9 @@ app.post('/api/triad/free-voice', async (req, res) => {
           );
           const cleaned = cleanFreeVoiceText(result.text);
           if (isAgentPassResponse(cleaned)) {
-            return { agent, skipped: true, text: '', engine: `${result.provider}:${result.model}` };
+            return { agent, skipped: true, text: '', engine: `${result.provider}:${result.model}`, error: undefined };
           }
-          return { agent, skipped: false, text: cleaned, engine: `${result.provider}:${result.model}` };
+          return { agent, skipped: false, text: cleaned, engine: `${result.provider}:${result.model}`, error: undefined };
         } catch (error: any) {
           const failures = error instanceof LlmChainError ? error.failures.join(' | ') : String(error?.message || error);
           pushSystemLog('warn', 'KERNEL', `[SWOBODNY GŁOS] ${agent}: modele niedostępne (${failures}).`);
@@ -5826,12 +5826,13 @@ app.post('/api/triad/free-voice', async (req, res) => {
       }),
     );
 
+    const failures = evaluations.filter((item) => item.error).map((item) => item.error);
+    if (failures.length > 0) {
+      return sendChatError(req, res, 502, `Model AI nie odpowiedział na swobodny czat. ${failures.join(' | ')}`.slice(0, 900));
+    }
+
     const spoken = evaluations.filter((item) => !item.skipped && item.text.trim().length > 0);
     if (spoken.length === 0) {
-      const failures = evaluations.filter((item) => item.error).map((item) => item.error);
-      if (failures.length > 0) {
-        return sendChatError(req, res, 502, `Model AI nie odpowiedział na swobodny czat. ${failures.join(' | ')}`.slice(0, 900));
-      }
       return res.json({
         success: true,
         skipped: true,
