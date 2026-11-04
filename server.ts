@@ -4885,7 +4885,7 @@ app.post('/api/chat/approvals/:id', async (req, res) => {
   }
 });
 
-// --- CHAT EXEC (ROOT UNLIMITED): natychmiastowe wykonywanie poleceń Operatora z czatu ---
+// --- Restricted chat command handling ---
 const CHAT_EXEC_KERNEL_COMMANDS = ['report', 'status', 'state', 'sync'];
 
 interface ChatExecResult {
@@ -5104,9 +5104,6 @@ async function persistChatCommandReplies(
   target: ChatTarget,
   replies: Partial<Record<ChatAgentName, string>>,
 ) {
-  const currentState = await getPythonKernelState(true);
-  const store = currentState?.store && typeof currentState.store === 'object' ? currentState.store : {};
-  const previousChatHistoryLength = Array.isArray(store.chat_history) ? store.chat_history.length : 0;
   const agents: ChatAgentName[] = target === 'triad' ? [...CHAT_AGENT_NAMES] : [target];
   const transcript = [
     { agent: 'Mateusz Mitek', tekst: message },
@@ -6108,7 +6105,6 @@ app.post('/api/triad/message', async (req, res) => {
     const store = currentState?.store && typeof currentState.store === 'object'
       ? currentState.store
       : {};
-    const previousChatHistoryLength = Array.isArray(store.chat_history) ? store.chat_history.length : 0;
     const chatHistory: Array<{ agent: string; tekst: string }> = Array.isArray(store.chat_history) ? store.chat_history : [];
     const analysis = withoutNlpEngine.analyzeSignal(cleanMessage);
     const targetAgents: ChatAgentName[] = target === 'triad' ? [...CHAT_AGENT_NAMES] : [target];
