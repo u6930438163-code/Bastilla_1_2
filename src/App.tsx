@@ -33,6 +33,7 @@ import { WithoutNlpView } from './components/WithoutNlpView';
 import { GitHubExportView } from './components/GitHubExportView';
 import { CloudLibraryView } from './components/CloudLibraryView';
 import { IntegrationsView } from './components/IntegrationsView';
+import { LibreChatView } from './components/LibreChatView';
 import { BastillaDashboard } from './components/BastillaDashboard';
 import { BastillaOS2View } from './components/BastillaOS2View';
 import {
@@ -714,7 +715,8 @@ export default function App() {
             <WithoutNlpView onSendProtocol={handleSendProtocol} />
           )}
 
-          {activeTab === 'integrations' && <IntegrationsView onOpenLibrary={() => setActiveTab('cloud_library')} />}
+          {activeTab === 'integrations' && <IntegrationsView onOpenLibrary={() => setActiveTab('cloud_library')} onOpenLibreChat={() => setActiveTab('librechat')} />}
+          {activeTab === 'librechat' && <LibreChatView />}
 
           {activeTab === 'cloud_library' && <CloudLibraryView />}
           {activeTab === 'project_progress' && (
