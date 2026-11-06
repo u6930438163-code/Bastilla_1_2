@@ -24,10 +24,8 @@ export default function LiveAgentChat() {
   const [auth, setAuth] = useState<'checking' | 'authenticated' | 'login' | 'disabled'>('checking');
   const [password, setPassword] = useState('');
   const [loginError, setLoginError] = useState('');
-  const [loggingIn, setLoggingIn] = useState(false);
   const [channel, setChannel] = useState('Wszyscy');
   const [messages, setMessages] = useState<Message[]>([]);
-  const [loadingMessages, setLoadingMessages] = useState(false);
   const [draft, setDraft] = useState('');
   const [connection, setConnection] = useState('Sprawdzanie sesji');
   const [status, setStatus] = useState<LiveStatus | null>(null);
@@ -35,7 +33,7 @@ export default function LiveAgentChat() {
   const [toast, setToast] = useState('');
   const [sending, setSending] = useState(false);
   const [lastQueued, setLastQueued] = useState<Array<{id:string;agent:string;status:string}>>([]);
-  const [activityOpen, setActivityOpen] = useState(false);
+  const [activityOpen, setActivityOpen] = useState(true);
   const [activityAgent, setActivityAgent] = useState('Wszyscy');
   const [notificationPermission, setNotificationPermission] = useState<string>('default');
 
@@ -73,28 +71,25 @@ export default function LiveAgentChat() {
     };
 
     const start = async () => {
-      setLoadingMessages(true);
-      setConnection('Ładowanie rozmowy');
       try {
         const [historyResponse, statusResponse] = await Promise.all([
           fetch(API + '/history?channel=Wszyscy', { credentials: 'same-origin', cache: 'no-store' }),
           fetch(API + '/status', { credentials: 'same-origin', cache: 'no-store' }),
         ]);
         if (!active) return;
-        if (historyResponse.status === 401 || statusResponse.status === 401) { setLoadingMessages(false); setAuth('login'); return; }
-        if (historyResponse.status === 503 || statusResponse.status === 503) { setLoadingMessages(false); setAuth('disabled'); return; }
+        if (historyResponse.status === 401 || statusResponse.status === 401) { setAuth('login'); return; }
+        if (historyResponse.status === 503 || statusResponse.status === 503) { setAuth('disabled'); return; }
         if (!historyResponse.ok || !statusResponse.ok) throw new Error('Nie udało się pobrać historii czatu.');
         const history = await historyResponse.json() as { messages: Message[] };
         const statusData = await statusResponse.json() as LiveStatus;
         if (!active) return;
         setMessages(Array.isArray(history.messages) ? history.messages : []);
         setStatus(statusData);
-        setLoadingMessages(false);
         const lastId = history.messages?.length ? history.messages[history.messages.length - 1].id : '';
         const suffix = lastId ? '?after=' + encodeURIComponent(lastId) : '';
         stream = new EventSource(API + '/events' + suffix, { withCredentials: true });
         stream.onopen = () => { if (active) { setConnection('Połączono na żywo'); setError(''); } };
-        stream.onerror = () => { if (active) setConnection('Połączenie przerwane — ponawianie'); };
+        stream.onerror = () => { if (active) setConnection('Ponawianie połączenia'); };
         stream.onmessage = (event) => {
           try {
             const item = JSON.parse(event.data) as Message;
@@ -124,7 +119,6 @@ export default function LiveAgentChat() {
         setConnection('Oczekiwanie na wiadomości');
       } catch (cause) {
         if (active) {
-          setLoadingMessages(false);
           setConnection('Błąd połączenia');
           setError(cause instanceof Error ? cause.message : 'Nie udało się połączyć z czatem.');
         }
@@ -156,7 +150,6 @@ export default function LiveAgentChat() {
   async function login(event: React.FormEvent) {
     event.preventDefault();
     setLoginError('');
-    setLoggingIn(true);
     try {
       const response = await fetch(API + '/session', {
         method: 'POST',
@@ -171,8 +164,6 @@ export default function LiveAgentChat() {
       window.dispatchEvent(new Event('bastilla:live-chat-auth'));
     } catch (cause) {
       setLoginError(cause instanceof Error ? cause.message : 'Logowanie nie powiodło się.');
-    } finally {
-      setLoggingIn(false);
     }
   }
 
@@ -246,7 +237,7 @@ export default function LiveAgentChat() {
   }
 
   if (auth === 'checking') {
-    return <section aria-label="Czat agentów" role="status" aria-live="polite" style={{ padding: 20, color: '#e2e8f0' }}>Sprawdzanie sesji operatora…</section>;
+    return <section aria-label="Czat agentów" style={{ padding: 20, color: '#e2e8f0' }}>Sprawdzanie sesji operatora…</section>;
   }
 
   if (auth === 'disabled') {
@@ -263,29 +254,15 @@ export default function LiveAgentChat() {
       <form onSubmit={login} style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
         <input aria-label="Hasło operatora" type="password" autoComplete="current-password" value={password}
           onChange={(event) => setPassword(event.target.value)} style={{ flex: 1, minWidth: 180, padding: 12, borderRadius: 8, background: '#1e293b', color: 'white', border: '1px solid #475569' }} />
-        <button type="submit" disabled={!password || loggingIn} style={{ padding: 12, borderRadius: 8, background: '#2563eb', color: 'white' }}>{loggingIn ? 'Logowanie…' : 'Zaloguj'}</button>
+        <button type="submit" disabled={!password} style={{ padding: 12, borderRadius: 8, background: '#2563eb', color: 'white' }}>Zaloguj</button>
       </form>
       {loginError && <p role="alert" style={{ color: '#fca5a5' }}>{loginError}</p>}
     </section>;
   }
 
-  const connectionTone = connection === 'Połączono na żywo'
-    ? 'is-connected'
-    : connection.includes('ponawianie') || connection === 'Ładowanie rozmowy'
-      ? 'is-pending'
-      : connection === 'Błąd połączenia'
-        ? 'is-error'
-        : '';
-
-  return <section className="bastilla-live-workspace" aria-label="Czat agentów" style={{ display: 'flex', flexDirection: 'column', height: '100%', minHeight: 0, background: '#0f172a', color: '#f8fafc', borderRadius: 12, overflow: 'hidden' }}>
-    <header className="bastilla-live-header" style={{ padding: 12, display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8, borderBottom: '1px solid #334155' }}>
-      <div className="bastilla-live-heading">
-        <strong>Bastilla · AI Chat</strong>
-        <div className={`bastilla-live-connection ${connectionTone}`} role="status" aria-live="polite" aria-atomic="true">
-          <span className="bastilla-live-connection-label">{connection}</span>
-          <span className="bastilla-live-unread">Nieprzeczytane: {status?.unread ?? 0}</span>
-        </div>
-      </div>
+  return <section aria-label="Czat agentów" style={{ display: 'flex', flexDirection: 'column', height: '80dvh', minHeight: 380, background: '#0f172a', color: '#f8fafc', borderRadius: 12, overflow: 'hidden' }}>
+    <header style={{ padding: 12, display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8, borderBottom: '1px solid #334155' }}>
+      <div><strong>Bastilla · AI Chat</strong><div role="status" style={{ fontSize: 11, color: '#94a3b8' }}>{connection} · Nieprzeczytane: {status?.unread ?? 0}</div></div>
       <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
         {typeof Notification !== 'undefined' && <button type="button" onClick={enableNotifications} disabled={notificationPermission === 'granted'} style={{ padding: 8, borderRadius: 8, background: '#334155', color: 'white' }}>
           {notificationPermission === 'granted' ? 'Powiadomienia włączone' : 'Włącz powiadomienia'}
@@ -302,7 +279,7 @@ export default function LiveAgentChat() {
       })}
     </div>
     <p style={{ padding: '0 10px', margin: 0, color: '#94a3b8', fontSize: 10 }}>ONLINE oznacza świeży heartbeat workera, nie potwierdza jeszcze odpowiedzi modelu agenta.</p>
-    <section className="bastilla-live-activity" aria-label="Aktywność agentów na żywo" style={{ borderBottom: '1px solid #334155', padding: 10 }}>
+    <section aria-label="Aktywność agentów na żywo" style={{ borderBottom: '1px solid #334155', padding: 10 }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
         <strong>Aktywność SI · terminal i zadania LIVE</strong>
         <button type="button" aria-expanded={activityOpen} onClick={() => setActivityOpen((value) => !value)}
@@ -329,17 +306,16 @@ export default function LiveAgentChat() {
         <small style={{ color: '#94a3b8' }}>Widoczne są wyłącznie zdarzenia odebrane z backendu. To nie jest dostęp do powłoki ani dowód działania modelu bez weryfikacji agenta.</small>
       </>}
     </section>
-    <nav className="bastilla-live-channels" aria-label="Kanały rozmowy" style={{ display: 'flex', gap: 6, overflowX: 'auto', padding: 8 }}>
+    <nav aria-label="Kanały" style={{ display: 'flex', gap: 6, overflowX: 'auto', padding: 8 }}>
       {CHANNELS.map((name) => <button key={name} type="button" aria-pressed={channel === name} onClick={() => setChannel(name)}
         style={{ padding: 9, background: channel === name ? '#2563eb' : '#334155', color: 'white', border: 0, borderRadius: 7, flex: '0 0 auto' }}>{name}</button>)}
     </nav>
-    <div className="bastilla-live-messages" role="log" aria-label={`Wiadomości · ${channel}`} aria-live="polite" aria-relevant="additions text" aria-atomic="false" style={{ flex: 1, overflowY: 'auto', padding: 12 }}>
-      {loadingMessages && <p className="bastilla-live-placeholder" role="status" aria-live="polite">Ładowanie historii rozmowy…</p>}
-      {!loadingMessages && visibleMessages.length === 0 && <p className="bastilla-live-placeholder">Nie ma jeszcze wiadomości w kanale „{channel}”. Napisz poniżej, aby rozpocząć rozmowę.</p>}
-      {visibleMessages.map((item) => <article className={item.sender === 'user' ? 'bastilla-chat-bubble bastilla-chat-bubble-user' : 'bastilla-chat-bubble'} key={item.id} style={{ background: '#1e293b', padding: 12, marginBottom: 8, borderRadius: 8, border: '1px solid #334155' }}>
+    <div role="log" aria-live="polite" style={{ flex: 1, overflowY: 'auto', padding: 12 }}>
+      {visibleMessages.length === 0 && <p style={{ color: '#94a3b8' }}>Brak wiadomości w tym kanale. Agenci są offline, dopóki ich oryginalne workery nie wyślą heartbeatów.</p>}
+      {visibleMessages.map((item) => <article key={item.id} style={{ background: '#1e293b', padding: 12, marginBottom: 8, borderRadius: 8, border: '1px solid #334155' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8 }}>
           <strong>{item.sender === 'user' ? 'Ty' : item.sender}</strong>
-          <time dateTime={item.at} style={{ color: '#94a3b8' }}>{new Date(item.at).toLocaleTimeString('pl-PL')}</time>
+          <small style={{ color: '#94a3b8' }}>{new Date(item.at).toLocaleTimeString('pl-PL')}</small>
         </div>
         {item.type === 'terminal'
           ? <div><small>Terminal {item.taskId || ''} · {item.status || 'zdarzenie'}</small><pre style={{ whiteSpace: 'pre-wrap', overflowWrap: 'anywhere' }}>{item.text}</pre></div>
@@ -355,14 +331,10 @@ export default function LiveAgentChat() {
       {toast} <button type="button" onClick={() => setToast('')} style={{ marginLeft: 8, textDecoration: 'underline' }}>Zamknij</button>
     </div>}
     {error && <p role="alert" style={{ padding: 8, color: '#fca5a5' }}>{error}</p>}
-    <form className="bastilla-live-composer" onSubmit={send} style={{ display: 'flex', padding: 12, gap: 8, borderTop: '1px solid #334155' }}>
-      <label className="bastilla-sr-only" htmlFor="bastilla-live-message">Wiadomość do {channel}</label>
-      <div className="bastilla-live-composer-fields">
-        <textarea id="bastilla-live-message" aria-describedby="bastilla-live-composer-help" rows={2} value={draft} maxLength={8000} onChange={(event) => setDraft(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter' && !event.shiftKey && !event.nativeEvent.isComposing) { event.preventDefault(); event.currentTarget.form?.requestSubmit(); } }}
-          placeholder={'Napisz do ' + channel} style={{ flex: 1, minWidth: 0, padding: 12, background: '#334155', color: 'white', border: 0, borderRadius: 8 }} />
-        <button type="submit" disabled={sending || !draft.trim()} aria-busy={sending} style={{ background: '#2563eb', color: 'white', padding: 12, border: 0, borderRadius: 8 }}>{sending ? 'Wysyłanie…' : 'Wyślij'}</button>
-      </div>
-      <small id="bastilla-live-composer-help" className="bastilla-live-composer-help">Enter wysyła · Shift+Enter dodaje nowy wiersz</small>
+    <form onSubmit={send} style={{ display: 'flex', padding: 12, gap: 8, borderTop: '1px solid #334155' }}>
+      <input aria-label="Wiadomość" value={draft} maxLength={8000} onChange={(event) => setDraft(event.target.value)}
+        placeholder={'Napisz do ' + channel} style={{ flex: 1, minWidth: 0, padding: 12, background: '#334155', color: 'white', border: 0, borderRadius: 8 }} />
+      <button disabled={sending || !draft.trim()} style={{ background: '#2563eb', color: 'white', padding: 12, border: 0, borderRadius: 8 }}>Wyślij</button>
     </form>
   </section>;
 }

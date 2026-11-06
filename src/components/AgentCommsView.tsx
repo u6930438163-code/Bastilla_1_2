@@ -79,9 +79,9 @@ export const AgentCommsView: React.FC<AgentCommsViewProps> = ({
   const [twoWayEnabled, setTwoWayEnabled] = useState<boolean>(() => {
     try {
       const saved = localStorage.getItem(TWO_WAY_STORAGE_KEY);
-      return saved === null ? true : saved === 'true';
+      return saved === 'true';
     } catch {
-      return true;
+      return false;
     }
   });
   const [freeVoiceNotice, setFreeVoiceNotice] = useState<string | null>(null);
