@@ -527,8 +527,6 @@ export const AgentCommsView: React.FC<AgentCommsViewProps> = ({
         <div className="flex items-center gap-1 shrink-0">
           <button
             type="button"
-            aria-pressed={twoWayEnabled}          <button
-            type="button"
             aria-pressed={twoWayEnabled}
             onClick={() => { void toggleTwoWay(); }}
             title={
