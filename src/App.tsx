@@ -643,6 +643,13 @@ export default function App() {
           />
         )}
 
+        {activeTab !== 'terminal' && <div className="bastilla-workspace-sync-strip" role="status" aria-live="polite">
+          <span className={workspaceLive ? 'bastilla-workspace-sync-dot is-live' : 'bastilla-workspace-sync-dot'} />
+          <span className="font-semibold">{workspaceLive ? 'WORKSPACE LIVE' : 'WORKSPACE · ODSWIEZANIE 4s'}</span>
+          <span className="bastilla-workspace-sync-detail">{workspaceLive ? 'Czat · terminal · jądro: zmiany na żywo' : 'Zaloguj się w Czat AI · LIVE, aby włączyć synchronizację SSE'}</span>
+          <button type="button" onClick={() => setActiveTab('terminal')}>Otwórz terminal</button>
+        </div>}
+
         {(isAgentLoading || terminalBusy) && activeTab !== 'comms' && (
           <div className="px-3 py-2 shrink-0">
             <LiveProgressBar active label={terminalBusy ? 'Terminal — wykonywanie polecenia' : 'AI — przetwarzanie zapytania'} detail="Trwa rzeczywiste żądanie do serwera; procent nie jest dostępny." />
