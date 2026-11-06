@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
+import { WorkChatMessage, WorkChatDemo } from './WorkChatMessage';
 
 type Message = {
   id: string;
@@ -34,6 +35,7 @@ export default function LiveAgentChat() {
   const [sending, setSending] = useState(false);
   const [lastQueued, setLastQueued] = useState<Array<{id:string;agent:string;status:string}>>([]);
   const [activityOpen, setActivityOpen] = useState(true);
+  const [workMode, setWorkMode] = useState(false);
   const [activityAgent, setActivityAgent] = useState('Wszyscy');
   const [notificationPermission, setNotificationPermission] = useState<string>('default');
 
@@ -260,13 +262,17 @@ export default function LiveAgentChat() {
     </section>;
   }
 
-  return <section aria-label="Czat agentów" style={{ display: 'flex', flexDirection: 'column', height: '80dvh', minHeight: 380, background: '#0f172a', color: '#f8fafc', borderRadius: 12, overflow: 'hidden' }}>
+  return <section aria-label="Czat agentów" style={{ display: 'flex', flexDirection: 'column', height: '88dvh', minHeight: 380, background: '#0f172a', color: '#f8fafc', borderRadius: 12, overflow: 'hidden' }}>
     <header style={{ padding: 12, display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8, borderBottom: '1px solid #334155' }}>
       <div><strong>Bastilla · AI Chat</strong><div role="status" style={{ fontSize: 11, color: '#94a3b8' }}>{connection} · Nieprzeczytane: {status?.unread ?? 0}</div></div>
       <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
         {typeof Notification !== 'undefined' && <button type="button" onClick={enableNotifications} disabled={notificationPermission === 'granted'} style={{ padding: 8, borderRadius: 8, background: '#334155', color: 'white' }}>
           {notificationPermission === 'granted' ? 'Powiadomienia włączone' : 'Włącz powiadomienia'}
         </button>}
+        <button type="button" aria-pressed={workMode} onClick={() => setWorkMode((value) => !value)}
+          style={{ padding: 8, borderRadius: 8, background: workMode ? '#0e7490' : '#334155', color: 'white', fontWeight: 700 }}>
+          {workMode ? 'Work · aktywny' : 'Tryb Work'}
+        </button>
         <button type="button" onClick={logout} style={{ padding: 8, borderRadius: 8, background: '#334155', color: 'white' }}>Wyloguj</button>
       </div>
     </header>
@@ -310,7 +316,8 @@ export default function LiveAgentChat() {
       {CHANNELS.map((name) => <button key={name} type="button" aria-pressed={channel === name} onClick={() => setChannel(name)}
         style={{ padding: 9, background: channel === name ? '#2563eb' : '#334155', color: 'white', border: 0, borderRadius: 7, flex: '0 0 auto' }}>{name}</button>)}
     </nav>
-    <div role="log" aria-live="polite" style={{ flex: 1, overflowY: 'auto', padding: 12 }}>
+    <div role="log" aria-live="polite" style={{ flex: 1, minHeight: 0, overflowY: 'auto', padding: 12 }}>
+      {workMode && <WorkChatDemo onPrompt={(prompt) => { setDraft(prompt); setToast('Polecenie przygotowane. Sprawdź je i kliknij Wyślij.'); }}/>}
       {visibleMessages.length === 0 && <p style={{ color: '#94a3b8' }}>Brak wiadomości w tym kanale. Agenci są offline, dopóki ich oryginalne workery nie wyślą heartbeatów.</p>}
       {visibleMessages.map((item) => <article key={item.id} style={{ background: '#1e293b', padding: 12, marginBottom: 8, borderRadius: 8, border: '1px solid #334155' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8 }}>
@@ -319,7 +326,12 @@ export default function LiveAgentChat() {
         </div>
         {item.type === 'terminal'
           ? <div><small>Terminal {item.taskId || ''} · {item.status || 'zdarzenie'}</small><pre style={{ whiteSpace: 'pre-wrap', overflowWrap: 'anywhere' }}>{item.text}</pre></div>
-          : <p style={{ whiteSpace: 'pre-wrap', overflowWrap: 'anywhere' }}>{item.text || item.type}</p>}
+          : <WorkChatMessage content={item.text || item.type} onPrompt={(prompt) => { setDraft(prompt); setToast('Polecenie przygotowane. Sprawdź je i kliknij Wyślij.'); }}/>}
+        <button type="button" onClick={() => {
+          if (navigator.clipboard?.writeText) {
+            void navigator.clipboard.writeText(item.text || item.type).then(() => setToast('Skopiowano treść wiadomości.')).catch(() => setError('Nie udało się skopiować wiadomości.'));
+          } else setError('Kopiowanie nie jest obsługiwane przez tę przeglądarkę.');
+        }} style={{ padding: 6, marginRight: 8, borderRadius: 6, background: '#334155', color: 'white', fontSize: 11 }}>Kopiuj</button>
         {item.sender !== 'user' && !item.read && <button type="button" onClick={() => void markRead(item.id)} style={{ padding: 6, borderRadius: 6, background: '#334155', color: 'white', fontSize: 11 }}>Oznacz jako przeczytane</button>}
       </article>)}
     </div>
@@ -331,10 +343,23 @@ export default function LiveAgentChat() {
       {toast} <button type="button" onClick={() => setToast('')} style={{ marginLeft: 8, textDecoration: 'underline' }}>Zamknij</button>
     </div>}
     {error && <p role="alert" style={{ padding: 8, color: '#fca5a5' }}>{error}</p>}
+    {workMode && <div aria-label="Szybkie akcje AI" style={{ display: 'flex', gap: 6, overflowX: 'auto', padding: '8px 12px', borderTop: '1px solid #334155', background: '#091b2c' }}>
+      {[
+        { name: '📊 Wykres', prompt: 'Przedstaw rzeczywiste dane CPU/RAM jako interaktywny wykres. Jeśli są dostępne pomiary, użyj bloku JSON bastilla-ui z blocks type chart, labels, values i unit. Nie wymyślaj pomiarów.' },
+        { name: '🖼 Grafika', prompt: 'Przygotuj grafikę i podaj jej dostępny adres HTTPS lub ścieżkę lokalną. Możesz użyć bloku bastilla-ui z type image, src, alt i caption. Nie wymyślaj URL.' },
+        { name: '🎬 Wideo', prompt: 'Pokaż istniejące wideo demonstracyjne lub zarejestrowany proces przez prawdziwy URL MP4, WebM lub YouTube; zwróć bastilla-ui type video, src i title. Nie symuluj nagrania.' },
+        { name: '🧰 Raport', prompt: 'Przygotuj raport wykonanych zadań i faktycznych błędów z podziałem na sukcesy, błędy i wymagające interwencji, wraz z potwierdzonymi logami.' },
+      ].map((action) => <button key={action.name} type="button" onClick={() => setDraft(action.prompt)}
+        style={{ flex: '0 0 auto', border: '1px solid #155e75', background: '#123044', color: '#cffafe', padding: '8px 12px', borderRadius: 10, fontSize: 12 }}>
+        {action.name}
+      </button>)}
+    </div>}
     <form onSubmit={send} style={{ display: 'flex', padding: 12, gap: 8, borderTop: '1px solid #334155' }}>
-      <input aria-label="Wiadomość" value={draft} maxLength={8000} onChange={(event) => setDraft(event.target.value)}
-        placeholder={'Napisz do ' + channel} style={{ flex: 1, minWidth: 0, padding: 12, background: '#334155', color: 'white', border: 0, borderRadius: 8 }} />
-      <button disabled={sending || !draft.trim()} style={{ background: '#2563eb', color: 'white', padding: 12, border: 0, borderRadius: 8 }}>Wyślij</button>
+      <textarea aria-label="Wiadomość" value={draft} maxLength={8000} rows={2} onChange={(event) => setDraft(event.target.value)}
+        onKeyDown={(event) => { if (event.key === 'Enter' && !event.shiftKey && !event.nativeEvent.isComposing) { event.preventDefault(); event.currentTarget.form?.requestSubmit(); } }}
+        placeholder={'Napisz do ' + channel + ' (Enter wyślij, Shift+Enter nowa linia)'}
+        style={{ flex: 1, minWidth: 0, minHeight: 48, maxHeight: 180, resize: 'vertical', padding: 12, background: '#334155', color: 'white', border: 0, borderRadius: 8, fontFamily: 'inherit' }} />
+      <button type="submit" disabled={sending || !draft.trim()} style={{ background: '#2563eb', color: 'white', padding: 12, border: 0, borderRadius: 8 }}>Wyślij</button>
     </form>
   </section>;
 }
