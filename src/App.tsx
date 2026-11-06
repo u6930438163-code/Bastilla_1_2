@@ -658,11 +658,19 @@ export default function App() {
     }));
 
     try {
-      await fetch('/api/kernel/command', {
+      const cleared = await fetch('/api/kernel/command', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ command: 'clear_chat' })
       });
+      if (!cleared.ok) throw new Error('Backend nie potwierdził czyszczenia historii.');
+      const reactionsCleared = await fetch('/api/chat/reactions', {
+        method: 'DELETE',
+        credentials: 'same-origin',
+      });
+      if (!reactionsCleared.ok) {
+        console.warn('Historia czatu wyczyszczona, lecz oceny wymagają ponownego czyszczenia.');
+      }
     } catch (e) {
       console.warn('Backend clear_chat failed:', e);
     }
