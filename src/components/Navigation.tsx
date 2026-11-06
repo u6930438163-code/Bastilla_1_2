@@ -1,5 +1,5 @@
 import React from 'react';
-import { Terminal, MessagesSquare } from 'lucide-react';
+import { Terminal, MessagesSquare, ListTodo, MemoryStick } from 'lucide-react';
 
 export type TabId =
   | 'home'
@@ -11,6 +11,8 @@ export type TabId =
   | 'schema_graph'
   | 'temporal'
   | 'terminal'
+  | 'task_manager'
+  | 'ollama_manager'
   | 'monolith'
   | 'datastore'
   | 'diagnostics'
@@ -28,13 +30,13 @@ export type TabId =
   | 'intimate_chat'
   | 'bastilla_5';
 
-export const TAB_IDS: readonly TabId[] = ['comms', 'terminal'];
+export const TAB_IDS: readonly TabId[] = ['comms', 'terminal', 'task_manager', 'ollama_manager'];
 
 /** Widok startowy — dostępny wyłącznie Czat oraz Terminal. */
 export function initialTabFromLocation(): TabId {
   try {
     const view = new URLSearchParams(window.location.search).get('view');
-    return view === 'terminal' ? 'terminal' : 'comms';
+    return view && TAB_IDS.includes(view as TabId) ? view as TabId : 'comms';
   } catch {
     return 'comms';
   }
@@ -64,6 +66,18 @@ export const Navigation: React.FC<NavigationProps> = ({
       label: 'Terminal',
       icon: Terminal,
       badge: 'CLI',
+    },
+    {
+      id: 'task_manager' as TabId,
+      label: 'Zadania i logi',
+      icon: ListTodo,
+      badge: 'LOG',
+    },
+    {
+      id: 'ollama_manager' as TabId,
+      label: 'Ollama',
+      icon: MemoryStick,
+      badge: 'AI',
     },
   ];
 
