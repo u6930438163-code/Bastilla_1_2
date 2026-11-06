@@ -20,7 +20,11 @@ import {
   X,
   Zap,
   RefreshCw,
-  ArrowLeftRight
+  ArrowLeftRight,
+  Radio,
+  Activity,
+  PanelRightClose,
+  PanelRightOpen,
 } from 'lucide-react';
 
 interface TerminalViewProps {
@@ -28,6 +32,7 @@ interface TerminalViewProps {
   onUpdateDataStore: (updater: (prev: DataStore) => DataStore) => void;
   onSendProtocol: (request: AgentProtocolRequest) => Promise<AgentProtocolReply | undefined>;
   onExecutePythonCommand?: (command: string) => Promise<{ output: string; state?: any }>;
+  workspaceLive?: boolean;
 }
 
 interface LogEntry {
@@ -39,14 +44,14 @@ interface LogEntry {
 
 const LogEntryItem = React.memo(({ entry }: { entry: LogEntry }) => {
   let colorClass = 'text-slate-300';
-  if (entry.type === 'input') colorClass = 'text-emerald-400 font-bold';
+  if (entry.type === 'input') colorClass = 'text-cyan-300 font-semibold';
   else if (entry.type === 'error') colorClass = 'text-rose-400';
   else if (entry.type === 'success') colorClass = 'text-emerald-300';
   else if (entry.type === 'system') colorClass = 'text-cyan-300';
   else if (entry.type === 'banner') colorClass = 'text-slate-200 bg-slate-900/80 p-3 rounded border border-slate-800 leading-relaxed';
 
   return (
-    <div className={`${colorClass} break-words font-mono whitespace-pre-wrap leading-relaxed select-text`}>
+    <div className={`${colorClass} bastilla-terminal-line break-words font-mono whitespace-pre-wrap leading-relaxed select-text`}>
       {entry.type === 'input' && <span className="text-slate-600 mr-2">[{entry.timestamp}]</span>}
       {entry.content}
     </div>
@@ -120,9 +125,10 @@ interface TerminalInputBarProps {
   history: string[];
   antiMirrorActive: boolean;
   onToggleAntiMirror: () => void;
+  busy?: boolean;
 }
 
-const TerminalInputBar = React.memo(({ onExecute, history, antiMirrorActive, onToggleAntiMirror }: TerminalInputBarProps) => {
+const TerminalInputBar = React.memo(({ onExecute, history, antiMirrorActive, onToggleAntiMirror, busy }: TerminalInputBarProps) => {
   const [cmdText, setCmdText] = useState('');
   const inputRef = useRef<HTMLInputElement>(null);
   const histIdxRef = useRef<number>(-1);
@@ -141,7 +147,7 @@ const TerminalInputBar = React.memo(({ onExecute, history, antiMirrorActive, onT
 
   const handleSend = () => {
     const trimmed = cmdText.trim();
-    if (!trimmed) return;
+    if (!trimmed || busy) return;
 
     let finalCmd = trimmed;
     if (antiMirrorActive) {
@@ -213,7 +219,7 @@ const TerminalInputBar = React.memo(({ onExecute, history, antiMirrorActive, onT
   };
 
   return (
-    <div className="bg-slate-900 border-t border-slate-800 flex flex-col shrink-0">
+    <div className="bastilla-terminal-composer flex flex-col shrink-0">
       {/* Live Mirror Detection Banner */}
       {mirrorCheck.isMirrored && (
         <div className="bg-amber-950/80 border-b border-amber-800/60 px-3 py-1.5 flex items-center justify-between gap-2 text-[11px] text-amber-300">
@@ -253,6 +259,7 @@ const TerminalInputBar = React.memo(({ onExecute, history, antiMirrorActive, onT
         <div className="flex-1 min-w-0 relative flex items-center">
           <input
             ref={inputRef}
+            disabled={busy}
             type="text"
             value={cmdText}
             onChange={(e) => setCmdText(e.target.value)}
@@ -323,10 +330,11 @@ const TerminalInputBar = React.memo(({ onExecute, history, antiMirrorActive, onT
         {/* Przycisk Wykonaj przesunięty w prawo, zoptymalizowany dla małych i dużych ekranów */}
         <button
           type="submit"
+          disabled={busy || !cmdText.trim()}
           className="ml-auto h-9 sm:h-10 px-2.5 sm:px-3.5 rounded-lg bg-emerald-500 hover:bg-emerald-400 active:bg-emerald-600 text-slate-950 font-black transition flex items-center justify-center gap-1 cursor-pointer shrink-0 touch-manipulation text-xs shadow-md shadow-emerald-950/40"
           title="Wykonaj polecenie w terminalu"
         >
-          <span className="hidden sm:inline">Wykonaj</span>
+          <span className="hidden sm:inline">{busy ? 'Pracuje…' : 'Wykonaj'}</span>
           <CornerDownLeft className="w-3.5 sm:w-4 h-3.5 sm:h-4 shrink-0" />
         </button>
       </form>
@@ -339,8 +347,17 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
   onUpdateDataStore,
   onSendProtocol,
   onExecutePythonCommand,
+  workspaceLive = false,
 }) => {
   const [history, setHistory] = useState<string[]>([]);
+  const [running, setRunning] = useState(false);
+  const runningRef = useRef(false);
+  const [viewFilter, setViewFilter] = useState<'all' | 'errors' | 'sync'>('all');
+  const [inspectorOpen, setInspectorOpen] = useState(true);
+  const [activity, setActivity] = useState<Array<{ topic: string; at: string }>>([]);
+  const [lastSyncAt, setLastSyncAt] = useState('');
+  const [copyStatus, setCopyStatus] = useState('');
+
   const [antiMirrorActive, setAntiMirrorActive] = useState<boolean>(() => {
     try {
       const stored = localStorage.getItem('svl_antimirror_active');
@@ -433,10 +450,48 @@ Wpisz 'help' lub 'root status', aby zobaczyć listę instrukcji jądra.
     setLogs((prev) => [...prev, { id: Math.random().toString(), type, content, timestamp: timeStr }].slice(-150));
   };
 
+  useEffect(() => {
+    const listener = (raw: Event) => {
+      const detail = (raw as CustomEvent).detail as { topic?: string; at?: string } | undefined;
+      if (!detail || !['chat', 'terminal', 'kernel', 'agents', 'workspace'].includes(String(detail.topic))) return;
+      const topic = String(detail.topic);
+      const at = detail.at && !Number.isNaN(Date.parse(detail.at)) ? detail.at : new Date().toISOString();
+      setActivity((prev) => [{ topic, at }, ...prev].slice(0, 18));
+      setLastSyncAt(at);
+      addLog('[SYNC] Zmiana z ' + ({ chat: 'czatu', terminal: 'terminala', kernel: 'jądra', agents: 'agentów', workspace: 'systemu' } as Record<string, string>)[topic] +
+        ' — dane odświeżone z serwera.', 'system');
+    };
+    window.addEventListener('bastilla:workspace-event', listener);
+    return () => window.removeEventListener('bastilla:workspace-event', listener);
+  }, []);
+
+  const exportLogs = () => {
+    const text = logs.map((entry) => '[' + entry.timestamp + '] ' + entry.content).join('\\n\\n');
+    const url = URL.createObjectURL(new Blob([text], { type: 'text/plain;charset=utf-8' }));
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'bastilla-terminal-session.txt';
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+  const copyLogs = async () => {
+    try {
+      await navigator.clipboard.writeText(logs.map((entry) => '[' + entry.timestamp + '] ' + entry.content).join('\\n\\n'));
+      setCopyStatus('Skopiowano bieżącą sesję');
+    } catch {
+      setCopyStatus('Schowek niedostępny w tej przeglądarce');
+    }
+  };
+  const filteredLogs = logs.filter((entry) => viewFilter === 'all' ||
+    (viewFilter === 'errors' ? entry.type === 'error' : entry.type === 'system'));
+
   const handleExecute = useCallback(async (cmdToRun?: string) => {
     const rawCmd = (cmdToRun || '').trim();
-    if (!rawCmd) return;
+    if (!rawCmd || runningRef.current) return;
+    runningRef.current = true;
+    setRunning(true);
 
+    try {
     // Save history
     setHistory((prev) => [...prev, rawCmd]);
 
@@ -656,6 +711,10 @@ Integralność tagów:  ZGODNA (<<<DATA_STORE_START>>> ... <<<DATA_STORE_END>>>)
         }
         break;
       }
+    }
+    } finally {
+      runningRef.current = false;
+      setRunning(false);
     }
   }, []);
 
