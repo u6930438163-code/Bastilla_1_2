@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { BarChart3, ChevronDown, ChevronUp, Clapperboard, Code2, Copy, Image as ImageIcon, Play, Sparkles } from 'lucide-react';
 import { FormattedMessage } from './FormattedMessage';
 import { TerminalWorkCard, type TerminalCardEntry, type TerminalCardStatus } from './TerminalWorkCard';
+import { ProgressWorkWidget, StepsWorkWidget, FileExplorerWorkWidget, ModelSettingsWorkWidget, ThreeDWorkWidget, PdfWorkWidget } from './AdvancedWorkWidgets';
 
 type WorkBlock = Record<string, unknown>;
 type WorkPayload = { title?: string; blocks?: WorkBlock[] };
@@ -96,6 +97,12 @@ function VideoPlayer({ src, title }: { src: string; title: string }) {
 
 function Widget({ block, onPrompt, onOpenTerminal }: { block: WorkBlock; onPrompt: (prompt: string) => void; onOpenTerminal?: () => void }) {
   const kind = block.type;
+  if (kind === 'progress') return <ProgressWorkWidget block={block}/>;
+  if (kind === 'steps') return <StepsWorkWidget block={block}/>;
+  if (kind === 'files') return <FileExplorerWorkWidget block={block}/>;
+  if (kind === 'model_config') return <ModelSettingsWorkWidget block={block} onPrompt={onPrompt}/>;
+  if (kind === 'diagram3d') return <ThreeDWorkWidget block={block}/>;
+  if (kind === 'pdf') return <PdfWorkWidget block={block}/>;
   if (kind === 'terminal') {
     const types = new Set(['input','output','success','error','system','banner']);
     const entries: TerminalCardEntry[] = Array.isArray(block.entries)
@@ -205,6 +212,16 @@ const examples = {
     title: 'Odtwarzanie wideo',
     blocks: [{ type: 'text', content: 'Agent może zwrócić link do filmu **MP4 / WebM** albo **YouTube**. Dla YouTube odtwarzacz jest ładowany dopiero po kliknięciu. Nie symulujemy nagrań ani transmisji.' }],
   },
+  advanced: {
+    title: 'Zaawansowane komponenty AI · przykłady',
+    blocks: [
+      { type: 'progress', title: 'Raport demonstracyjny', value: 68, description: 'Dane demonstracyjne — bez połączenia z workerem.' },
+      { type: 'steps', title: 'Etapy prezentacji', active: 2, steps: ['Analiza', 'Wykres', 'Karta terminala', 'Weryfikacja'] },
+      { type: 'diagram3d', title: 'Przestrzenny podgląd modułu' },
+      { type: 'files', title: 'Przykładowe pliki w odpowiedzi', files: [{name:'demo.ts',path:'src/demo.ts',content:'export const bastilla = "work";'}] },
+      { type: 'model_config', model: 'Model demo', temperature: 0.7, maxTokens: 4096 },
+    ],
+  },
   terminal: {
     title: 'Terminal osadzony w wiadomości',
     blocks: [{ type: 'terminal', title: 'BASTILLA / TERMINAL', command: 'status',
@@ -240,6 +257,7 @@ export function WorkChatDemo({ onPrompt, onOpenTerminal }: { onPrompt: (prompt: 
           ['video', Clapperboard, 'Wideo'],
           ['action', Code2, 'Przyciski'],
           ['terminal', Code2, 'Terminal'],
+          ['advanced', Sparkles, 'Zaawansowane'],
         ] as const).map(([key, Icon, label]) =>
           <button key={key} type="button" onClick={() => setTab(key)} aria-pressed={tab === key} className={'px-3 py-2 rounded-lg text-xs flex gap-1.5 items-center border ' + (tab === key ? 'bg-cyan-900/70 border-cyan-500 text-white' : 'bg-slate-900 border-slate-700 text-slate-300')}><Icon size={14}/>{label}</button>)}
       </div>
