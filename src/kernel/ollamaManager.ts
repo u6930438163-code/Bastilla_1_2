@@ -119,7 +119,8 @@ export async function syncOllamaExclusiveModel(
 ): Promise<OllamaExclusiveSyncResult> {
   const base = normalizeBaseUrl(options.baseUrl);
   const targetModel = (options.targetModel || DEFAULT_EXCLUSIVE_OLLAMA_MODEL).trim() || DEFAULT_EXCLUSIVE_OLLAMA_MODEL;
-  const pruneOthers = options.pruneOthers !== false;
+  // Never delete installed models unless the operator explicitly opts in.
+  const pruneOthers = options.pruneOthers === true;
   const shouldWarmup = options.warmup !== false;
   const keepAlive = (options.keepAlive || '24h').trim() || '24h';
   const numCtx = options.numCtx && options.numCtx >= 512 ? Math.floor(options.numCtx) : 4096;
