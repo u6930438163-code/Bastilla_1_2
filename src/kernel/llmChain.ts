@@ -608,22 +608,17 @@ export async function warmupOllama(
 }
 
 export function configuredProviders(config: LlmChainConfig): Array<LlmProvider> {
-  // An explicitly empty list means NO providers; do not fall through to
-  // auto-discovery (that could silently cross an operator's API/Ollama choice).
-  if (Array.isArray(config.providers)) {
-    // Jawny wybór: Ollama nie wymaga klucza (model może być wykryty automatycznie).
-    return config.providers.filter((provider, index, list) => list.indexOf(provider) === index
-      && (provider === 'ollama'
-        || (provider === 'gemini' && Boolean((config.geminiApiKey || '').trim()))
-        || (provider === 'xai' && Boolean((config.xaiApiKey || '').trim()))
-        || (provider === 'openai' && Boolean((config.openaiChatApiKey || '').trim()))));
-  }
-  const providers: Array<LlmProvider> = [];
-  if ((config.geminiApiKey || '').trim()) providers.push('gemini');
-  if ((config.xaiApiKey || '').trim()) providers.push('xai');
-  if ((config.openaiChatApiKey || '').trim()) providers.push('openai');
-  if ((config.ollamaModel || '').trim()) providers.push('ollama');
-  return providers;
+  // Bastilla policy: only OpenAI and Ollama may serve chat requests.
+  // Legacy Gemini/xAI credentials or provider entries must never activate them.
+  const allowed: Array<LlmProvider> = ['openai', 'ollama'];
+  const configured = Array.isArray(config.providers)
+    ? config.providers
+    : allowed;
+  return configured.filter((provider, index, list) =>
+    allowed.includes(provider)
+    && list.indexOf(provider) === index
+    && (provider === 'ollama'
+      || Boolean((config.openaiChatApiKey || '').trim())));
 }
 
 /** Gemini → xAI → Ollama. Rzuca LlmChainError, gdy żaden dostawca nie odpowiedział. */
