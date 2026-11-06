@@ -62,7 +62,7 @@ export function DiagnosticsToolsPanel({ agent, onPrepareMainChat }: {
               'Sprawdź możliwość wykorzystania narzędzia ' + tool.name + ' (' + tool.github + ') w diagnostyce Bastilla. Dostępność w PATH: ' +
               (tool.available === true ? 'wykryte' : 'niepotwierdzona') +
               '. Najpierw sprawdź warunki instalacji, uprawnienia i bezpieczeństwo. Nie instaluj, nie skanuj cudzych zasobów i nie zmieniaj konfiguracji bez zgody. Pokaż realne wyniki.', agent)}>
-            <Wrench className="inline h-3 w-3 mr-1" /> Przygotuj dla {agent}
+            <Wrench className="inline h-3 w-3 mr-1" /> Zleć {agent}
           </button>
         </div>
       </div>)}
