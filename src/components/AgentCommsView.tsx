@@ -255,7 +255,7 @@ export const AgentCommsView: React.FC<AgentCommsViewProps> = ({
   // Other actions ask the selected AI directly, never execute untrusted shell commands.
   const runQuickAction = async (rawPrompt: string, target = selectedTarget) => {
     const prompt = rawPrompt.trim().slice(0, 8000);
-    if (!prompt || quickBusy || isLoading || liveBusy) return;
+    if (!prompt || quickBusy) return;
     const normalized = prompt.toLocaleLowerCase('pl');
     const readOnly =
       /(?:sprawdź|pokaż|wyświetl|odczytaj|przejrzyj).{0,65}logi|logi systemowe|rzeczywiste logi|potwierdzone logi/.test(normalized) ? 'logs'
@@ -263,6 +263,7 @@ export const AgentCommsView: React.FC<AgentCommsViewProps> = ({
       : /(?:sprawdź|pokaż|odczytaj).{0,55}(?:stan ollamy|status ollamy|status ollama)/.test(normalized) ? 'ollama'
       : /(?:sprawdź|pokaż|odczytaj).{0,55}(?:status workerów|stan workerów)/.test(normalized) ? 'workers'
       : /(?:sprawdź|pokaż|odczytaj).{0,55}(?:narzędzia diagnostyczne|dostępność narzędzi)/.test(normalized) ? 'tools' : null;
+    if (!readOnly && (isLoading || liveBusy)) { setWorkNotice('Agent jest zajęty. Ponów akcję po zakończeniu odpowiedzi.'); return; }
     const endpoints: Record<string, string> = {
       logs: '/api/operations/logs?filter=all',
       processes: '/api/operations/processes',
@@ -1087,7 +1088,7 @@ export const AgentCommsView: React.FC<AgentCommsViewProps> = ({
                   </span>
                 </div>
                 {entry.status === 'done'
-                  ? <WorkChatMessage content={entry.text} onPrompt={prepareWorkPrompt} onOpenTerminal={onOpenTerminal}/>
+                  ? <WorkChatMessage content={entry.text} onPrompt={prompt => { void runQuickAction(prompt); }} onOpenTerminal={onOpenTerminal}/>
                   : <div className="min-h-[24px] whitespace-pre-wrap break-words font-mono text-sm leading-relaxed text-slate-100">
                     {entry.text || '…'}<span aria-hidden="true" className="ml-1 inline-block h-4 w-1.5 animate-pulse bg-cyan-400 align-middle" />
                   </div>}
