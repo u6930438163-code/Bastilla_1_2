@@ -6,6 +6,8 @@ import { randomUUID, timingSafeEqual } from 'node:crypto';
 const AGENTS = Object.freeze(['Aria', 'Alex', 'Astyria', 'Aurelius']);
 const API_KEY = process.env.BASTILLA_BRIDGE_API_KEY || '';
 const PASSWORD = process.env.BASTILLA_LIVE_CHAT_USER_PASSWORD || '';
+// Allow a single authenticated LibreChat operator to access the shared Bastilla worker queues.
+const OWNER_EMAIL = String(process.env.BASTILLA_LIBRECHAT_OWNER_EMAIL || '').trim().toLowerCase();
 const ORIGIN = process.env.BASTILLA_LIVE_CHAT_ALLOWED_ORIGIN || '';
 const BASE = (process.env.BASTILLA_API_BASE_URL || '').replace(/\/+$/, '');
 const PORT = Number(process.env.PORT || 8085);
@@ -21,6 +23,9 @@ function fail(status, message) {
 }
 
 function validateConfig() {
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(OWNER_EMAIL) || OWNER_EMAIL.length > 254) {
+    throw new Error('Set BASTILLA_LIBRECHAT_OWNER_EMAIL to the exact LibreChat operator account email');
+  }
   if (Buffer.byteLength(API_KEY) < 32 || PASSWORD.length < 16) {
     throw new Error('Bridge key (32+ bytes) and Bastilla operator password (16+ characters) are required');
   }
@@ -228,6 +233,10 @@ const server = http.createServer(async (req, res) => {
       return reply(res, 200, { object: 'list', data: AGENTS.map(id => ({ id, object: 'model', owned_by: 'bastilla' })) });
     }
     if (req.method === 'POST' && pathname === '/v1/chat/completions') {
+      const requesterEmail = String(req.headers['x-bastilla-operator-email'] || '').trim().toLowerCase();
+      if (!secureEqual(requesterEmail, OWNER_EMAIL)) {
+        return reply(res, 403, { error: { message: 'LibreChat account is not authorized for Bastilla', type: 'permission_error' } });
+      }
       const payload = await readJson(req);
       const result = await completion(payload, res);
       if (payload.stream === true) {
