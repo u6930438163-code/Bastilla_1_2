@@ -392,7 +392,7 @@ export function diagnosticInventory(searchPath = process.env.PATH || '') {
 function availableMemoryBytes() {
   if (process.platform === 'linux') {
     try {
-      const match = fs.readFileSync('/proc/meminfo', 'utf8').match(/^MemAvailable:\\s+(\\d+) kB/m);
+      const match = fs.readFileSync('/proc/meminfo', 'utf8').match(/^MemAvailable:\s+(\d+) kB/m);
       if (match) return Number(match[1]) * 1024;
     } catch { /* fall back to OS readings */ }
   }
@@ -457,11 +457,11 @@ export function createBackgroundAgentDiagnostics({
     if (key === lastAlertKey) return false;
     lastAlertKey = key;
     await context.sendMessage(
-      '[AUTOMATYCZNY ALERT DIAGNOSTYCZNY / ' + agent + ']\\n' +
-      alerts.map(item => '- ' + item).join('\\n') +
-      '\\nOdczyt: ' + snapshot.sampledAt +
-      '\\nZakres: ' + snapshot.hostScope +
-      '\\nWymagana weryfikacja przed naprawą. Żadne polecenie naprawcze nie zostało wykonane.',
+      '[AUTOMATYCZNY ALERT DIAGNOSTYCZNY / ' + agent + ']\n' +
+      alerts.map(item => '- ' + item).join('\n') +
+      '\nOdczyt: ' + snapshot.sampledAt +
+      '\nZakres: ' + snapshot.hostScope +
+      '\nWymagana weryfikacja przed naprawą. Żadne polecenie naprawcze nie zostało wykonane.',
       { channel: 'Wszyscy', signal: context.signal },
     );
     return true;
