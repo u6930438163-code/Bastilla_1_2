@@ -410,6 +410,7 @@ export async function generateOllama(
   config: LlmChainConfig,
   request: LlmRequest,
   signal?: AbortSignal,
+  onDelta?: (text: string) => void,
 ): Promise<{ text: string; model: string }> {
   const doFetch = config.fetchImpl ?? fetch;
   const base = trimBase(config.ollamaBaseUrl || DEFAULT_OLLAMA_BASE_URL);
@@ -439,7 +440,7 @@ export async function generateOllama(
         body: JSON.stringify({
           model,
           messages,
-          stream: false,
+          stream: Boolean(onDelta && disableThinking),
           keep_alive: parseKeepAlive(config.ollamaKeepAlive),
           ...(disableThinking ? { think: false } : {}),
           options: ollamaOptions(config, request),
@@ -458,8 +459,37 @@ export async function generateOllama(
       const detailText = details ? ` Szczegóły: ${details}` : '';
       throw new LlmProviderError('ollama', response.status, `${describeStatus('ollama', response.status)} [${model}]${hint}${detailText}`);
     }
-    const data: any = await response.json();
-    const text = stripThinking(typeof data?.message?.content === 'string' ? data.message.content : '');
+    let raw = '';
+    if (onDelta && disableThinking && response.body) {
+      // Ollama emits newline-delimited JSON; send real model deltas without delays.
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = '';
+      const consume = (line: string) => {
+        if (!line.trim()) return;
+        const item = JSON.parse(line) as { message?: { content?: unknown }; error?: string };
+        if (item.error) throw new LlmProviderError('ollama', 502, item.error);
+        const fragment = typeof item.message?.content === 'string' ? item.message.content : '';
+        if (fragment) { raw += fragment; onDelta(fragment); }
+      };
+      try {
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          buffer += decoder.decode(value, { stream: true });
+          const parts = buffer.split('\n');
+          buffer = parts.pop() ?? '';
+          for (const part of parts) consume(part);
+        }
+        buffer += decoder.decode();
+        if (buffer.trim()) consume(buffer);
+      } finally { reader.releaseLock(); }
+    } else {
+      const data: any = await response.json();
+      raw = typeof data?.message?.content === 'string' ? data.message.content : '';
+      if (raw && onDelta) onDelta(stripThinking(raw));
+    }
+    const text = stripThinking(raw);
     if (!text) throw new LlmProviderError('ollama', 502, `Ollama: pusta odpowiedź [${model}]`);
     return text;
   };
@@ -523,16 +553,18 @@ export async function generateWithChain(
   config: LlmChainConfig,
   request: LlmRequest,
   signal?: AbortSignal,
+  onDelta?: (text: string) => void,
 ): Promise<LlmResult> {
   const failures: string[] = [];
-  for (const provider of configuredProviders(config)) {
+  const providers = configuredProviders(config);
+  for (const provider of providers) {
     if (signal?.aborted) break;
     try {
       const { text, model } = provider === 'gemini'
         ? await generateGemini(config, request, signal)
         : provider === 'xai'
         ? await generateXai(config, request, signal)
-        : await generateOllama(config, request, signal);
+        : await generateOllama(config, request, signal, providers.length === 1 ? onDelta : undefined);
       return { text, provider, model, failures };
     } catch (error: any) {
       failures.push(error?.name === 'AbortError'
