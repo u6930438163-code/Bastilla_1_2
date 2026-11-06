@@ -27,6 +27,18 @@ Instalacja wybranego programu:
 
     npm run setup:diagnostics -- --apply --tool Nmap
 
+Instalacja pakietów przypisanych wybranemu agentowi (bez uruchamiania AI):
+
+    npm run setup:diagnostics -- --apply --profile expanded --agent Aria
+    npm run setup:diagnostics -- --apply --profile expanded --agent Alex
+    npm run setup:diagnostics -- --apply --profile expanded --agent Astyria
+    npm run setup:diagnostics -- --apply --profile expanded --agent Aurelius
+
+Filtr --agent wybiera tylko narzędzia przydzielone wskazanemu agentowi.
+Nie tworzy ani nie uruchamia jego workera i nie udziela mu uprawnień root.
+Opcje --agent i --tool odrzucają wybór narzędzia należącego do innej roli.
+
+
 Raport samego planu w formacie JSON:
 
     npm run setup:diagnostics -- --json --report data/diagnostics-plan.json
