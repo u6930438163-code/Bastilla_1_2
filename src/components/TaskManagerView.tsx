@@ -25,7 +25,7 @@ type OllamaReport = {
   note?: string;
   checkedAt?: string;
 };
-type WorkerStatus = { agents?: Record<string, { status?: string; queued?: number }> };
+type WorkerStatus = { agents?: Record<string, { status?: string; queued?: number; running?: number; lastSeen?: string | null }>; queue?: { queued?: number; running?: number; failed?: number } };
 type ManagerProps = { initialSection?: ManagerSection; onOpenLiveChat: () => void };
 
 const AGENTS: AgentName[] = ['Aria', 'Alex', 'Astyria', 'Aurelius'];
@@ -225,6 +225,28 @@ export function TaskManagerView({ initialSection = 'processes', onOpenLiveChat }
             <input type="search" placeholder="Szukaj po nazwie lub PID" aria-label="Filtruj procesy"
               value={query} onChange={event => setQuery(event.target.value)} />
             <span>{processReport?.available ? 'Próbka: ' + fmtTime(processReport.sampledAt) : 'Odczyt niedostępny'}</span>
+          </div>
+          <div className="bastilla-ops-jobs-section" aria-label="Zadania agentów LIVE">
+            <div className="bastilla-ops-subheading"><Bot className="w-4 h-4" /><h3>Kolejki zadań prawdziwych agentów</h3></div>
+            <div className="bastilla-ops-job-metrics">
+              <div><small>OCZEKUJĄCE</small><strong>{workers?.queue?.queued ?? '—'}</strong></div>
+              <div><small>WYKONYWANE</small><strong>{workers?.queue?.running ?? '—'}</strong></div>
+              <div><small>NIEUDANE</small><strong className={workers?.queue?.failed ? 'text-rose-300' : 'text-slate-100'}>{workers?.queue?.failed ?? '—'}</strong></div>
+            </div>
+            <div className="bastilla-ops-worker-list">
+              {AGENTS.map(name => {
+                const worker = workers?.agents?.[name];
+                return <div key={name}>
+                  <span className={worker?.status === 'online' ? 'ops-led' : 'ops-led is-offline'}/>
+                  <strong>{name}</strong>
+                  <span className={worker?.status === 'online' ? 'text-emerald-300' : 'text-amber-300'}>
+                    {worker ? (worker.status === 'online' ? 'ONLINE' : 'OFFLINE') : 'BRAK DANYCH'}
+                  </span>
+                  <small>kolejka {worker?.queued ?? '—'} · wykonuje {worker?.running ?? '—'}</small>
+                </div>;
+              })}
+            </div>
+            <p className="bastilla-ops-footnote">Stany kolejki i heartbeat pochodzą z Bastilla LIVE. ONLINE oznacza działający worker, nie potwierdza ukończenia zadania ani jakości odpowiedzi AI.</p>
           </div>
           {!processReport?.available ? <p className="bastilla-ops-empty">{processReport?.error || 'Brak danych. Sprawdź połączenie z serwerem.'}</p> : (
             <div className="bastilla-ops-table-wrap">
