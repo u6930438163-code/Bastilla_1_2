@@ -63,3 +63,16 @@ test('APT simulation rejects removal, purge and simulation failure', () => {
   assert.equal(isSafeAptSimulation({ ok: true, stdout: 'Purg iptables [1.0]' }), false);
   assert.equal(isSafeAptSimulation({ ok: false, stdout: '' }), false);
 });
+
+test('per-agent installations only select assigned tools', () => {
+  for (const agent of ['Aria', 'Alex', 'Astyria', 'Aurelius']) {
+    const entries = selectDiagnosticTools({ profile: 'expanded', agent });
+    assert.ok(entries.length > 0);
+    assert.ok(entries.every(tool => tool.agent === agent));
+  }
+  const astyria = selectDiagnosticTools({ profile: 'expanded', agent: 'Astyria' });
+  assert.ok(astyria.some(tool => tool.name === 'ClamAV'));
+  assert.ok(!astyria.some(tool => tool.name === 'Nmap'));
+  assert.throws(() => selectDiagnosticTools({ agent: 'unknown' }), /Nieznany agent/);
+  assert.equal(parseOptions(['--agent', 'Alex']).agent, 'Alex');
+});
