@@ -79,7 +79,7 @@ export function LiveWorkspaceSession({ onChange }: { onChange: (authenticated: b
   const healthEntries = Object.entries(health?.agents || {});
   const onlineCount = healthEntries.filter(([, status]) => status.status === 'online').length;
   return (
-    <section className="relative shrink-0 border-b border-slate-800 bg-[#0a1a2b] px-2.5 py-1.5 sm:px-4" aria-label="Sesja czatu z oryginalnymi agentami LIVE">
+    <section className="bastilla-chat-live-session relative shrink-0 border-b border-slate-800 bg-[#0a1a2b] px-2.5 py-1.5 sm:px-4" aria-label="Sesja czatu z oryginalnymi agentami LIVE">
       <div className="flex items-center gap-2">
         <span className={'h-2 w-2 shrink-0 rounded-full ' +
           (sessionState === 'authenticated' ? 'bg-emerald-400' : sessionState === 'loading' ? 'animate-pulse bg-cyan-400' : 'bg-slate-500')} />
