@@ -323,6 +323,13 @@ export const AgentCommsView: React.FC<AgentCommsViewProps> = ({
 
   const prepareWorkPrompt = (text: string) => {
     const prompt = text.slice(0, 20_500);
+    // Diagnosis cards can explicitly name an agent. Select the actual chat channel
+    // as well; merely prefixing a message would still send it to the wrong agent.
+    const route = /^Do agenta (Aria|Alex|Astyria|Aurelius):(?:\\s|$)/.exec(prompt);
+    if (route) {
+      const chosen = route[1] === 'Aria' ? 'si_1' : route[1] as 'Alex' | 'Astyria' | 'Aurelius';
+      setSelectedTarget(chosen);
+    }
     setMessageText(prompt);
     setWorkNotice('Polecenie przygotowane. Możesz je edytować i wysłać do wybranego agenta.');
     window.requestAnimationFrame(() => chatInputRef.current?.focus());
