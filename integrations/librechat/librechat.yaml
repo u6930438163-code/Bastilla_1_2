@@ -1,0 +1,15 @@
+# LibreChat custom endpoint: the SAME four original Bastilla live-chat workers.
+# This bridge does not create replacement agents. A worker must be online to reply.
+version: 1.3.18
+cache: true
+endpoints:
+  custom:
+    - name: "Bastilla Agents"
+      apiKey: "${BASTILLA_BRIDGE_API_KEY}"
+      baseURL: "http://bastilla-agent-bridge:8085/v1"
+      models:
+        default: ["Aria", "Alex", "Astyria", "Aurelius"]
+        fetch: false
+      modelDisplayLabel: "Bastilla Agents"
+      titleConvo: false
+      dropParams: ["stream"]
