@@ -179,9 +179,21 @@ export const AgentCommsView: React.FC<AgentCommsViewProps> = ({
       const topic = (event as CustomEvent<{ topic?: string }>).detail?.topic;
       if (topic === 'chat' || topic === 'workspace') void refresh();
     };
+    // A logged-in SSE session gives immediate updates. Without LIVE auth, an
+    // inexpensive visibility-aware poll still keeps votes in sync across devices.
+    const onVisible = () => { if (!document.hidden) void refresh(); };
     void refresh();
+    const poll = window.setInterval(() => { if (!document.hidden) void refresh(); }, 7000);
     window.addEventListener('bastilla:workspace-event', onSync);
-    return () => { active = false; window.removeEventListener('bastilla:workspace-event', onSync); };
+    window.addEventListener('focus', onVisible);
+    document.addEventListener('visibilitychange', onVisible);
+    return () => {
+      active = false;
+      window.clearInterval(poll);
+      window.removeEventListener('bastilla:workspace-event', onSync);
+      window.removeEventListener('focus', onVisible);
+      document.removeEventListener('visibilitychange', onVisible);
+    };
   }, [dataStore.chat_history.length]);
 
   const submitReaction = async (messageKey: string, value: 'up' | 'down') => {
@@ -943,7 +955,7 @@ export const AgentCommsView: React.FC<AgentCommsViewProps> = ({
               <article key={item.id} className={'rounded-xl border p-3 sm:p-4 ' +
                 (item.sender === 'user' ? 'ml-2 border-purple-500/40 bg-purple-950/25 sm:ml-14' : 'mr-2 border-cyan-800/65 bg-slate-900 sm:mr-14')}>
                 <div className="mb-2 flex flex-wrap items-center justify-between gap-2 border-b border-slate-800 pb-1.5">
-                  <span className="text-[11px] font-bold text-cyan-200">{item.sender === 'user' ? 'Operator · LIVE' : item.sender + ' · LIVE'}</span>
+                  <span className="inline-flex items-center gap-2 text-[11px] font-bold text-cyan-200"><ChatAvatar actor={item.sender === 'user' ? 'Operator' : item.sender} size="sm" />{item.sender === 'user' ? 'Operator · LIVE' : item.sender + ' · LIVE'}</span>
                   <span className="text-[10px] text-slate-400">
                     {item.channel} · {Number.isFinite(Date.parse(item.at)) ? new Date(item.at).toLocaleTimeString('pl-PL') : 'czas nieznany'}
                   </span>
@@ -957,7 +969,7 @@ export const AgentCommsView: React.FC<AgentCommsViewProps> = ({
         {streamingChat && (
           <section className="space-y-3" aria-label="Bieżąca rozmowa z agentami">
             <div className="ml-2 rounded-xl border border-purple-500/50 bg-purple-950/30 p-3 sm:ml-14 sm:p-4">
-              <div className="mb-2 text-xs font-bold text-purple-200">Operator · wysłano</div>
+              <div className="mb-2 flex items-center gap-2 text-xs font-bold text-purple-200"><ChatAvatar actor="Operator" size="sm" /> Operator · wysłano</div>
               <div className="whitespace-pre-wrap break-words text-sm text-slate-200">{streamingChat.prompt}</div>
             </div>
             {streamingChat.agents.length === 0 && <div className="rounded-xl border border-cyan-900 bg-slate-900 p-3 text-xs text-cyan-200">
@@ -967,7 +979,7 @@ export const AgentCommsView: React.FC<AgentCommsViewProps> = ({
               const profile = SYSTEM_AGENTS[entry.agent];
               return <div key={entry.agent} className={'mr-2 rounded-xl border bg-slate-900/95 p-3 shadow-md sm:mr-14 sm:p-4 ' + (profile?.borderColor || 'border-cyan-900')}>
                 <div className="mb-2 flex items-center justify-between border-b border-slate-800 pb-2 text-xs">
-                  <strong className="text-cyan-100">{entry.agent === 'si_1' ? 'Aria' : entry.agent}</strong>
+                  <div className="flex items-center gap-2"><ChatAvatar actor={entry.agent} size="sm" /><strong className="text-cyan-100">{entry.agent === 'si_1' ? 'Aria' : entry.agent}</strong></div>
                   <span className={entry.status === 'done' ? 'text-emerald-300' : entry.status === 'error' ? 'text-rose-300' : 'text-cyan-300'}>
                     {entry.status === 'done' ? 'Odpowiedź gotowa' : entry.status === 'error' ? 'Błąd' : 'Generowanie…'}
                   </span>
