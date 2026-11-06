@@ -30,6 +30,7 @@ export function createAgentWorker(options = {}) {
   const requestedConcurrency = Number(options.maxConcurrency);
   const maxConcurrency = Number.isInteger(requestedConcurrency)
     ? Math.min(4, Math.max(1, requestedConcurrency)) : 2;
+  const policyMode = ['asymmetric', 'uniform', 'custom'].includes(options.policyMode) ? options.policyMode : null;
   const workerId = String(options.workerId || randomUUID());
   const onError = typeof options.onError === 'function' ? options.onError : () => {};
   const onIdle = typeof options.onIdle === 'function' ? options.onIdle : null;
@@ -70,7 +71,7 @@ export function createAgentWorker(options = {}) {
   }
 
   async function sendHeartbeat(signal) {
-    const heartbeatResult = await request('worker/heartbeat', { method: 'POST', body: { concurrency: maxConcurrency }, signal });
+    const heartbeatResult = await request('worker/heartbeat', { method: 'POST', body: { concurrency: maxConcurrency, ...(policyMode ? { mode: policyMode } : {}) }, signal });
     if (heartbeatResult?.agent !== agent) throw new Error('Worker token identity does not match configured agent ' + agent);
     lastHeartbeatAt = Date.now();
     return heartbeatResult;

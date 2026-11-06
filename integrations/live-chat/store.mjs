@@ -290,13 +290,14 @@ export class LiveChatStore {
     });
   }
 
-  async heartbeat(agent, workerId, concurrency = 1) {
+  async heartbeat(agent, workerId, concurrency = 1, mode = null) {
     if (!LIVE_CHAT_AGENTS.includes(agent)) throw makeError('INVALID_AGENT');
     return this.mutate((state) => {
       const heartbeat = {
         agent,
         workerId: String(workerId || agent).slice(0, 128),
         concurrency: Number.isInteger(concurrency) ? Math.max(1, Math.min(4, concurrency)) : 1,
+        mode: ['asymmetric', 'uniform', 'custom'].includes(mode) ? mode : null,
         lastSeen: new Date(this.now()).toISOString(),
       };
       state.heartbeats[agent] = heartbeat;
@@ -336,6 +337,7 @@ export class LiveChatStore {
         status: lastSeenMs && now - lastSeenMs <= this.onlineTtlMs ? 'online' : 'offline',
         lastSeen: heartbeat?.lastSeen || null,
         concurrency: heartbeat?.concurrency || null,
+        mode: heartbeat?.mode || null,
         queued: this.state.jobs.filter((job) => job.to === agent && job.status === 'queued').length,
         running: this.state.jobs.filter((job) => job.to === agent && job.status === 'running').length,
       }];

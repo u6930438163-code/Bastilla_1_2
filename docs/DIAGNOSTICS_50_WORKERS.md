@@ -65,3 +65,28 @@ BASTILLA_AGENT_CONCURRENCY=2
 - `BASTILLA_AGENT_CONCURRENCY=1` przywraca tryb sekwencyjny, przydatny dla adapterów bez obsługi równoczesnych żądań.
 - To współbieżność **zadań I/O**, nie cztery równoległe instancje modelu i nie wielowątkowe obliczenia CPU. Ograniczenia współbieżności samych endpointów AI pozostają po stronie oryginalnych dostawców.
 - Wyłączenie workera anuluje sygnał do zadań w toku. Jeśli zadanie nie zakończy się poprawnie, serwer odzyska je po wygaśnięciu lease (semantyka at-least-once). Adapter powinien obsługiwać idempotencję, aby uniknąć ponownego wywołania nieodwracalnego działania.
+
+
+## Asymetryczne workery — dodatkowo do asynchronicznych
+Domyślny tryb `BASTILLA_WORKER_MODE=asymmetric` nadaje czterem oryginalnym agentom różne limity, rytm pobierania zadań i częstotliwość czynności podczas bezczynności:
+
+| Agent | Specjalizacja | Równolegle | Poll | Idle |
+|---|---|---:|---:|---:|
+| Aria | Monitorowanie systemu | 2 | 2500 ms | 30000 ms |
+| Alex | Diagnostyka/naprawy do akceptacji | 3 | 1000 ms | 45000 ms |
+| Astyria | Bezpieczeństwo | 1 | 3500 ms | 60000 ms |
+| Aurelius | Sieć i API | 2 | 2000 ms | 40000 ms |
+
+Maksymalnie 8 jednoczesnych zadań I/O przy uruchomionych czterech workerach; to nie jest rezerwacja zasobów CPU ani gwarancja dostępności GPU/modelu. Zadania kierowane do danego agenta nadal są wykonywane **wyłącznie przez niego** — profil nie przekazuje tożsamości ani kluczy innym agentom.
+
+W /etc/bastilla/live-chat/<Agent>.env (każdy worker własny plik):
+```ini
+BASTILLA_WORKER_MODE=asymmetric
+# Zostaw poniższe pola puste, aby obowiązywały wartości profilu:
+# BASTILLA_AGENT_CONCURRENCY=3
+# BASTILLA_AGENT_POLL_INTERVAL_MS=1000
+# BASTILLA_AGENT_IDLE_INTERVAL_MS=45000
+```
+Ustaw `BASTILLA_WORKER_MODE=uniform` aby powrócić do równych profili po 2 zadania; ręczne nadpisanie co najmniej jednego parametru pokazuje tryb `custom`. Ustawienie `BASTILLA_AGENT_CONCURRENCY=1` jest właściwe, jeśli dany endpoint agenta nie obsługuje współbieżnych wywołań. Wartości spoza dopuszczalnego zakresu zatrzymują start workera, zamiast uruchamiać go z niekontrolowanymi parametrami.
+
+Panel Operacyjny pokazuje deklarowany tryb i limit **tylko podczas prawidłowo uwierzytelnionego heartbeat online**. Nie jest to dowód, że oryginalny model poprawnie odpowiada. Po wdrożeniu na serwerze zrestartuj usługi agentów, aby przyjęły nową konfigurację. Dane pracy `poll` i `idle` nie są wysyłane do UI ani przechowywane w kolejce.
