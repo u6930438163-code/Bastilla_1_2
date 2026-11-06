@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { Activity, Bot, Pause, Play, RefreshCw, Server } from 'lucide-react';
 import { getLiveStatusPath, getLiveStatusSpec, parseLiveStatus } from '../lib/liveStatusData.mjs';
+import { useLiveCardVisibility } from '../hooks/useLiveCardVisibility';
 
 type Data = Record<string, unknown>;
 type Source = 'ollama_inventory' | 'agent_monitor';
@@ -27,6 +28,7 @@ export function LiveStatusWorkWidget({
   onPrompt: (prompt: string) => void;
 }) {
   const spec = getLiveStatusSpec(block);
+  const { cardRef, cardVisible } = useLiveCardVisibility<HTMLElement>();
   const [selectedSource, setSelectedSource] = useState<Source>((spec?.source || 'ollama_inventory') as Source);
   const [enabled, setEnabled] = useState(true);
   const [result, setResult] = useState<Snapshot | null>(null);
@@ -37,7 +39,7 @@ export function LiveStatusWorkWidget({
   const intervalMs = spec?.intervalMs ?? 15000;
 
   useEffect(() => {
-    if (!spec || !enabled) return;
+    if (!spec || !enabled || !cardVisible) return;
     const endpoint = getLiveStatusPath(selectedSource);
     if (!endpoint) return;
     let disposed = false;
@@ -46,6 +48,8 @@ export function LiveStatusWorkWidget({
       if (disposed || document.hidden || activeController) return;
       const controller = new AbortController();
       activeController = controller;
+      let timedOut = false;
+      const timeout = window.setTimeout(() => { timedOut = true; controller.abort(); }, 8000);
       try {
         const response = await fetch(endpoint, {
           method: 'GET',
@@ -64,11 +68,12 @@ export function LiveStatusWorkWidget({
           setStatus('ready');
         }
       } catch (cause) {
-        if (!disposed && !controller.signal.aborted) {
+        if (!disposed && (!controller.signal.aborted || timedOut)) {
           setStatus('error');
-          setError(cause instanceof Error ? cause.message.slice(0, 160) : 'Brak połączenia');
+          setError(timedOut ? 'Serwer nie odpowiedział w ciągu 8 sekund.' : cause instanceof Error ? cause.message.slice(0, 160) : 'Brak połączenia');
         }
       } finally {
+        window.clearTimeout(timeout);
         if (activeController === controller) activeController = null;
       }
     };
@@ -88,7 +93,7 @@ export function LiveStatusWorkWidget({
       document.removeEventListener('visibilitychange', onVisible);
       window.removeEventListener('bastilla:workspace-event', onWorkspace);
     };
-  }, [selectedSource, enabled, intervalMs, refreshIndex, spec?.source]);
+  }, [selectedSource, enabled, intervalMs, refreshIndex, spec?.source, cardVisible]);
 
   if (!spec) return <p className="text-xs text-amber-300">Nieobsługiwane źródło karty LIVE.</p>;
 
@@ -104,7 +109,7 @@ export function LiveStatusWorkWidget({
     : 'Sprawdź osobno rzeczywiste workery Aria/Alex/Astyria/Aurelius. Monitoring wspólnej Ollamy nie oznacza autonomicznej pracy. Zweryfikuj heartbeat i logi: ' +
       JSON.stringify(agents.map(a => ({ name: a.name, monitoringStatus: a.status, lastCheck: a.lastCheck })));
 
-  return <section aria-label="Karta statusu LIVE" className="min-w-0 space-y-3 rounded-xl border border-cyan-800/60 bg-[#071827] p-3 text-slate-100">
+  return <section ref={cardRef} aria-label="Karta statusu LIVE" className="min-w-0 space-y-3 rounded-xl border border-cyan-800/60 bg-[#071827] p-3 text-slate-100">
     <header className="flex flex-wrap items-center gap-2">
       {selectedSource === 'ollama_inventory' ? <Server size={16} className="text-cyan-300"/> : <Bot size={16} className="text-cyan-300"/>}
       <strong className="flex-1 text-sm">{short(block.title, 100) || 'Status systemu · LIVE'}</strong>
