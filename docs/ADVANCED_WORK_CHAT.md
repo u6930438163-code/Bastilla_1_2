@@ -54,7 +54,7 @@ Oprócz Markdown, terminala, wykresów, obrazów, wideo i tabel, dostępne są:
 
 ## Dynamiczne LIVE — opcja dla metryk, wykresów i pasków
 
-W głównym czacie wybierz **Więcej → Work → Dynamiczne LIVE**. Każda powiązana karta ma przyciski **Włącz LIVE / Wstrzymaj LIVE**, **Odśwież** oraz selektor **CPU / RAM**. Na żywo aktualizuje się też wykres (ostatnie 24 odczyty). Po zatrzymaniu karta pokazuje wyłącznie statyczne wartości z wiadomości, a nie symuluje nowych danych.
+W głównym czacie wybierz **Więcej → Work → Dynamiczne LIVE**. Każda powiązana karta ma przyciski **Włącz LIVE / Wstrzymaj LIVE**, **Odśwież** oraz selektor **CPU / RAM**. Na żywo aktualizuje się też wykres (ostatnie 24 odczyty). Po zatrzymaniu karta **zamraża ostatnie pomiary z backendu**; jeśli nie wykonano jeszcze żadnego odczytu, pokazuje brak danych zamiast przykładowej wartości.
 
 W wiadomości agent może włączyć odczyt tylko dla wspieranych typów `metric`, `chart`, `progress`, `table`, przez jawne pole `live`:
 
@@ -92,6 +92,33 @@ W wiadomości agent może włączyć odczyt tylko dla wspieranych typów `metric
 - Interwał jest ograniczony do 2–30 sekund; nieaktywna karta przeglądarki nie wykonuje cyklicznych odczytów. Przycisk **Odśwież** wymusza nowy odczyt.
 - Stan `LIVE` oznacza udany odczyt serwera. Przy błędzie pojawia się komunikat offline; zachowane ostatnie pomiary są oznaczane jako **nieaktualne**. Brak danych nie jest zastępowany fikcyjnym postępem.
 - Wszystkie elementy pozostają komponentami wyświetlania. Wygenerowane karty **nie uruchamiają komend**, nie wykonują żądań zapisu i nie zmieniają konfiguracji systemu.
+
+## Nowe karty statusu: Ollama, agenci i logi LIVE
+
+W podglądzie **Work** dostępne są osobne zakładki **Ollama / Agenci LIVE** oraz **Logi LIVE**.
+
+- `live_status` — read-only GET do jednego z dwóch ściśle ograniczonych endpointów: `/api/ollama/models` (Ollama, model skonfigurowany i dostępne modele) albo `/api/agents/background/status` (monitoring wspólnej Ollamy). Użytkownik może przełączać źródło, wstrzymać i wznowić aktualizacje, odświeżyć ręcznie i przygotować szkic diagnostyki. Interwał 5–30 s.
+- **Istotne:** `/api/agents/background/status` nie sprawdza samodzielnej aktywności workerów. Odczyt „online” oznacza tylko stan wspólnej Ollamy — **nie potwierdza wykonywania zadań przez Arię, Alexa, Astyrię ani Aureliusa**. Podobnie dostępność `/api/ollama/models` nie potwierdza modelu w RAM.
+- `live_logs` — osobna karta filtrów, wyszukiwania oraz rozwijania szczegółów. Pobiera **GET /api/operations/logs?filter=all**, wyłącznie przy aktywnej sesji operatora. Logi nie są automatycznie pisane na czacie. Kategoria `success` jest deklaracją systemowego wpisu `healed`, a nie potwierdzoną naprawą.
+- Przy logu błędu można wybrać agenta i przygotować **edytowalny szkic** diagnostyczny. Żadna wiadomość nie zostanie wysłana bez świadomej akcji użytkownika; kliknięcie nie uruchamia poleceń.
+- Przy odpowiedzi `401`/`403`/`503` karta logów pokazuje konieczność zalogowania operatora; nie omija uwierzytelnienia, nie pobiera haseł i nie pokazuje fikcyjnych logów.
+- Zapamiętane ostatnie pomiary pozostają widoczne po wstrzymaniu albo błędzie, ale są wyraźnie oznaczone jako nieaktualne.
+- Frontend nie odświeża ukrytej karty w tle. Ciągłe śledzenie zdarzeń jest zależne od działającego serwera.
+
+Przykład wiadomości od agenta:
+
+```bastilla-ui
+{
+  "title": "Kokpit diagnostyczny",
+  "blocks": [
+    { "type": "live_status", "title": "Ollama i agenci",
+      "live": { "source": "ollama_inventory", "intervalMs": 15000 } },
+    { "type": "live_logs" }
+  ]
+}
+```
+
+Test adaptera: `node --test tests/liveStatusData.test.mjs`. Kompletna weryfikacja projektu: `npm run verify`. Uruchomionej instancji AI Studio nie można uznać za zweryfikowaną tylko na podstawie zmian w repozytorium.
 
 ## Kolejność wypowiedzi i streaming
 
