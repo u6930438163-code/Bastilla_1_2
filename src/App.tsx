@@ -571,6 +571,7 @@ export default function App() {
     spokenCount: number;
     silentAgents: string[];
     messages: Array<{ agent: string; tekst: string }>;
+    engines: Record<string, string>;
   }> => {
     setIsAgentLoading(true);
     setAgentError(null);
@@ -593,6 +594,14 @@ export default function App() {
       }
 
       const spokenAgents: string[] = Array.isArray(result.spokenAgents) ? result.spokenAgents : [];
+      const engines: Record<string, string> = {};
+      if (result.engines && typeof result.engines === 'object' && !Array.isArray(result.engines)) {
+        for (const [name, engine] of Object.entries(result.engines)) {
+          if (['Alex', 'Astyria', 'Aurelius', 'si_1'].includes(name) && typeof engine === 'string') {
+            engines[name] = engine.slice(0, 120);
+          }
+        }
+      }
       const messages: Array<{ agent: string; tekst: string }> =
         result.replies && typeof result.replies === 'object'
           ? Object.entries(result.replies as Record<string, unknown>)
@@ -609,6 +618,7 @@ export default function App() {
         spokenCount: spokenAgents.length,
         silentAgents,
         messages,
+        engines,
       };
     } catch (error) {
       const messageText = error instanceof Error ? error.message : 'Nie udało się otworzyć swobodnego głosu AI.';
