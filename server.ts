@@ -6172,7 +6172,18 @@ app.post('/api/triad/free-voice', async (req, res) => {
   const topicHint = typeof req.body?.topicHint === 'string' ? req.body.topicHint.trim().slice(0, 600) : '';
   const allowSilenceAll = Boolean(req.body?.allowSilenceAll);
   const target = requestedTarget as ChatTarget;
-  const llmProviders = configuredProviders(LLM_CHAIN_CONFIG);
+  const configuredLlmProviders = configuredProviders(LLM_CHAIN_CONFIG);
+  const llmProviders = requestedProviderMode === undefined
+    ? configuredLlmProviders
+    : requestedProviderMode === 'ollama'
+      ? configuredLlmProviders.filter((provider) => provider === 'ollama')
+      : configuredLlmProviders.filter((provider) => provider !== 'ollama');
+  if (requestedProviderMode === 'ollama' && llmProviders.length === 0) {
+    return sendChatError(req, res, 503, 'Ollama nie jest skonfigurowana. Sprawdź OLLAMA_BASE_URL i dostępność modelu na serwerze.');
+  }
+  if (requestedProviderMode === 'api' && llmProviders.length === 0) {
+    return sendChatError(req, res, 503, 'Brak skonfigurowanego dostawcy API. Dodaj klucz Gemini lub xAI po stronie serwera.');
+  }
 
   if (llmProviders.length === 0 && !CHAT_LOCAL_FALLBACK) {
     return sendChatError(req, res, 503, 'Brak skonfigurowanego modelu czatu dla swobodnej wypowiedzi AI.');
@@ -6334,6 +6345,10 @@ app.post('/api/triad/message', async (req, res) => {
   }
   const target = requestedTarget as ChatTarget;
   const freedomMode = req.body?.freedomMode === true;
+  const requestedProviderMode: unknown = req.body?.providerMode;
+  if (requestedProviderMode !== undefined && requestedProviderMode !== 'api' && requestedProviderMode !== 'ollama') {
+    return res.status(400).json({ success: false, error: 'Nieznany tryb dostawcy AI.' });
+  }
   const persistedMessage = approvalCommand?.type === 'propose' && approvalCommand.action.type === 'write-file'
     ? message
     : cleanMessage;
@@ -6557,7 +6572,7 @@ app.post('/api/triad/message', async (req, res) => {
         } catch (error: any) {
           const failures = error instanceof LlmChainError ? error.failures.join(' | ') : String(error?.message || error);
           pushSystemLog('warn', 'KERNEL', `[CZAT] ${agent}: modele niedostępne (${failures})${CHAT_LOCAL_FALLBACK ? ' — fallback without_nlp.' : '.'}`);
-          if (!CHAT_LOCAL_FALLBACK || hasImageAttachment) {
+          if (!CHAT_LOCAL_FALLBACK || hasImageAttachment || requestedProviderMode !== undefined) {
             return { agent, text: '', engine: 'error', llm: false, error: `${agent}: ${failures}` };
           }
         }
