@@ -534,3 +534,21 @@ input, select, textarea {
 .ops-led.is-offline {background:#fbbf24;box-shadow:none;flex:0 0 auto}
 @media (max-width:900px) {.bastilla-ops-worker-list {grid-template-columns:repeat(2,minmax(0,1fr))}}
 @media (max-width:420px) {.bastilla-ops-jobs-section {padding:10px}.bastilla-ops-worker-list>div {padding:8px}.bastilla-ops-job-metrics>div {padding:8px}}
+
+
+/* Mobile-first focus: terminal and operations open directly on their working area. */
+.bastilla-terminal-shell > header,
+.bastilla-terminal-shell > .bastilla-terminal-metrics { display: none !important; }
+
+@media (max-width: 639px) {
+  .bastilla-ops-shell { padding: 12px; gap: 10px; }
+  .bastilla-ops-header { gap: 8px; }
+  .bastilla-ops-brand-icon { min-width: 42px; width: 42px; height: 42px; }
+  .bastilla-ops-header h1 { font-size: 15px; letter-spacing: .04em; }
+  .bastilla-ops-header p { font-size: 11px; }
+  .bastilla-ops-status-line { gap: 6px 10px; padding: 8px 10px; }
+  .bastilla-ops-tabs { padding: 4px; }
+  .bastilla-ops-tabs button { min-width: 92px; min-height: 38px; padding: 7px 8px; font-size: 11px; }
+  .bastilla-ops-panel { gap: 12px; padding: 14px; border-radius: 14px; }
+  .bastilla-ops-section-heading h2 { font-size: 16px; }
+}
