@@ -78,6 +78,22 @@ export function LibreChatView() {
           LibreChat wymaga osobnego uruchomienia Docker i zalogowania. Jego gotowość nie jest tu automatycznie potwierdzana.
         </p>
       </div>
+      <div className="mb-5 rounded-xl border border-cyan-500/20 bg-slate-900/80 p-5">
+        <h2 className="font-semibold text-cyan-200">Pamięć długoterminowa</h2>
+        <p className="mt-2 text-sm text-slate-300">
+          W konfiguracji LibreChat włączono trwałą pamięć użytkownika z możliwością edycji,
+          usuwania i wyłączania. Wybrane informacje są przekazywane przez most do oryginalnych
+          agentów Bastilla, gdy LibreChat dołącza je do rozmowy.
+        </p>
+        <p className="mt-2 text-sm text-amber-300">
+          Synchronizacja pamięci ChatGPT z subskrypcji nie działa automatycznie.
+          Możesz bezpiecznie przenieść wybrane informacje ręcznie w prywatnym panelu Memories LibreChat.
+        </p>
+        <p className="mt-2 text-xs text-slate-400">
+          Limit magazynu: 8000 tokenów. Most przekazuje ograniczony fragment kontekstu;
+          nie przeszukuje całej historii rozmów. Automatyczny agent pamięci nie jest uruchamiany.
+        </p>
+      </div>
       <div className="rounded-xl border border-slate-700 bg-slate-900/80 p-5">
         <h2 className="mb-3 font-semibold">Oryginalni agenci Bastilla LIVE</h2>
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
