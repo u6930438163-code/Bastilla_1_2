@@ -421,6 +421,7 @@ export function diagnosticSnapshot() {
     diskFreePercent, uptimeSeconds: Math.round(os.uptime()),
     storeWeakPermissions,
     workerRunsAsRoot: typeof process.getuid === 'function' ? process.getuid() === 0 : null,
+    networkInterfaceCount: Object.values(os.networkInterfaces()).flat().filter(item => item && !item.internal).length,
     note: 'Odczyt systemu widzianego przez proces; dla kontenera nie oznacza pełnego hosta.',
   };
 }
@@ -435,7 +436,7 @@ const ROLE_ALERTS = Object.freeze({
     ...(s.storeWeakPermissions === true ? ['Plik stanu czatu dostępny dla grupy/innych użytkowników'] : []),
     ...(s.workerRunsAsRoot === true ? ['Worker agenta działa jako root; zalecane konto nieuprzywilejowane'] : []),
   ],
-  Aurelius: s => [], // Network checks require a separately configured, trusted target.
+  Aurelius: s => s.networkInterfaceCount === 0 ? ['Nie wykryto interfejsu sieciowego poza loopback; sprawdź konfigurację'] : [],
 });
 
 export function createBackgroundAgentDiagnostics({
@@ -455,7 +456,6 @@ export function createBackgroundAgentDiagnostics({
     const key = alerts.join('|');
     if (!alerts.length) { lastAlertKey = ''; return false; }
     if (key === lastAlertKey) return false;
-    lastAlertKey = key;
     await context.sendMessage(
       '[AUTOMATYCZNY ALERT DIAGNOSTYCZNY / ' + agent + ']\n' +
       alerts.map(item => '- ' + item).join('\n') +
@@ -464,6 +464,7 @@ export function createBackgroundAgentDiagnostics({
       '\nWymagana weryfikacja przed naprawą. Żadne polecenie naprawcze nie zostało wykonane.',
       { channel: 'Wszyscy', signal: context.signal },
     );
+    lastAlertKey = key; // Never suppress retries when delivery failed.
     return true;
   };
 }

@@ -5,7 +5,7 @@
 - Odczytowy snapshot hosta/kontenera: `GET /api/operations/diagnostics/snapshot` (bez uprawnień do wykonywania poleceń).
 - Nowa zakładka „50 narzędzi” w Operations Center; filtr, link do repo i bezpieczne przygotowanie zadania dla wybranego agenta.
 - Wykrywanie dostępności binarki w serwerowym PATH. **Nie pobiera, nie instaluje, nie uruchamia ani nie testuje żadnej z 50 aplikacji**. Narzędzia usługowe są oznaczone jako „Sprawdź ręcznie”.
-- Autonomiczny, odczytowy monitoring wykonywany w ramach idle *prawdziwego workera*: Aria (pamięć/load), Alex (wolny dysk), Astyria (uprawnienia magazynu danych/użytkownik root), Aurelius (miejsce na przyszły bezpieczny test wybranego celu — bez sondowania sieci bez konfiguracji).
+- Autonomiczny, odczytowy monitoring wykonywany w ramach idle *prawdziwego workera*: Aria (pamięć/load), Alex (wolny dysk), Astyria (uprawnienia magazynu danych/użytkownik root), Aurelius (obecność interfejsów sieciowych poza loopback; brak aktywnego sondowania adresów).
 - Wiadomości są wysyłane do istniejącego czatu wyłącznie po wykryciu zmiany w krytycznym alercie, bez zasypywania go raportami. Nie wykonują napraw.
 - `packaging/live-chat/bastilla-agent@.service` dla 4 oddzielnych procesów systemd wraz ze skryptem instalacji.
 

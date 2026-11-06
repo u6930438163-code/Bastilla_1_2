@@ -52,3 +52,15 @@ test('background diagnostics posts only real threshold changes, never repairs', 
   assert.match(seen[0].text,/dysku poniżej 10%/);
   assert.equal(seen[0].options.channel,'Wszyscy');
 });
+
+test('Aurelius reports absent non-loopback interface and retries failed delivery', async () => {
+  let time = 2000000;
+  const snapshotProvider = () => ({ sampledAt:'2026-11-06T18:00:00Z', hostScope:'test-container', networkInterfaceCount:0 });
+  const monitor = createBackgroundAgentDiagnostics({ agent:'Aurelius', now:()=>time, intervalMs:60000, snapshotProvider });
+  await assert.rejects(monitor({ sendMessage: async () => { throw new Error('temporary network error'); } }), /temporary network error/);
+  time += 61000;
+  const out=[];
+  assert.equal(await monitor({ sendMessage: async text => out.push(text) }), true);
+  assert.equal(out.length, 1);
+  assert.match(out[0], /interfejsu sieciowego/);
+});
