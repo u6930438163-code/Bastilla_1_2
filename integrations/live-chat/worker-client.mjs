@@ -2,18 +2,18 @@ import { randomUUID } from 'node:crypto';
 
 const AGENTS = ['Aria', 'Alex', 'Astyria', 'Aurelius'];
 
-function sleep(ms, signal) {
+// Remove exactly the listener registered on AbortSignal after each poll.
+// Otherwise a 24/7 worker accumulates one abandoned listener per iteration.
+export function abortableSleep(ms, signal) {
   return new Promise((resolve) => {
     if (signal?.aborted) return resolve();
-    const timer = setTimeout(done, ms);
-    function done() {
+    const done = () => {
+      clearTimeout(timer);
       signal?.removeEventListener('abort', done);
       resolve();
-    }
-    signal?.addEventListener('abort', () => {
-      clearTimeout(timer);
-      done();
-    }, { once: true });
+    };
+    const timer = setTimeout(done, ms);
+    signal?.addEventListener('abort', done, { once: true });
   });
 }
 
@@ -48,6 +48,7 @@ export function createAgentWorker(options = {}) {
   const apiRoot = new URL('/api/live-chat/', baseUrl);
   const internalController = new AbortController();
   let lastHeartbeatAt = 0;
+  let heartbeatInFlight = null;
   let stopped = false;
   const activeJobs = new Set();
 
@@ -75,10 +76,24 @@ export function createAgentWorker(options = {}) {
   }
 
   async function sendHeartbeat(signal) {
-    const heartbeatResult = await request('worker/heartbeat', { method: 'POST', body: { concurrency: maxConcurrency, ...(policyMode ? { mode: policyMode } : {}) }, signal });
-    if (heartbeatResult?.agent !== agent) throw new Error('Worker token identity does not match configured agent ' + agent);
-    lastHeartbeatAt = Date.now();
-    return heartbeatResult;
+    // One authenticated heartbeat at a time, even with multiple active async jobs.
+    if (heartbeatInFlight) return heartbeatInFlight;
+    const operation = (async () => {
+      const heartbeatResult = await request('worker/heartbeat', {
+        method: 'POST',
+        body: { concurrency: maxConcurrency, ...(policyMode ? { mode: policyMode } : {}) },
+        signal,
+      });
+      if (heartbeatResult?.agent !== agent) throw new Error('Worker token identity does not match configured agent ' + agent);
+      lastHeartbeatAt = Date.now();
+      return heartbeatResult;
+    })();
+    heartbeatInFlight = operation;
+    try {
+      return await operation;
+    } finally {
+      if (heartbeatInFlight === operation) heartbeatInFlight = null;
+    }
   }
 
   async function verifyIdentity(signal) {
@@ -211,12 +226,26 @@ export function createAgentWorker(options = {}) {
     }
     const signal = internalController.signal;
 
+    // Keep the authenticated identity online while a real agent performs long
+    // onIdle activity (which otherwise prevents polling for over 45 seconds).
+    // This is a process heartbeat, NOT proof of a completed AI/model inference.
+    const backgroundHeartbeat = setInterval(() => {
+      if (stopped || signal.aborted) return;
+      if (Date.now() - lastHeartbeatAt < heartbeatIntervalMs) return;
+      void sendHeartbeat(signal).catch((error) => {
+        if (!signal.aborted && !stopped) {
+          try { onError(error); } catch { /* user callback cannot crash worker */ }
+        }
+      });
+    }, heartbeatIntervalMs);
+
     // Each claimed task has its own promise and its own renewable lease.
     // Never allow more than maxConcurrency jobs to be active for this agent.
-    while (!stopped && !signal.aborted) {
+    try {
+      while (!stopped && !signal.aborted) {
       try {
         if (activeJobs.size >= maxConcurrency) {
-          await sleep(pollIntervalMs, signal);
+          await abortableSleep(pollIntervalMs, signal);
           continue;
         }
 
@@ -238,13 +267,16 @@ export function createAgentWorker(options = {}) {
           lastIdleAt = Date.now();
           try { await runIdleOnce({ signal }); } catch (error) { onError(error); }
         }
-        await sleep(pollIntervalMs, signal);
+        await abortableSleep(pollIntervalMs, signal);
       } catch (error) {
         if (!signal.aborted) {
           try { onError(error); } catch { /* allow worker to retry */ }
-          await sleep(Math.min(30000, pollIntervalMs * 2), signal);
+          await abortableSleep(Math.min(30000, pollIntervalMs * 2), signal);
         }
       }
+      }
+    } finally {
+      clearInterval(backgroundHeartbeat);
     }
     // Give cooperative adapters time to stop. A hung external model must not block restart forever.
     if (activeJobs.size) {

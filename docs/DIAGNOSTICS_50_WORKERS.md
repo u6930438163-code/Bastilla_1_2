@@ -113,3 +113,6 @@ Nowy skrypt `npm run check:workers` jest tylko do odczytu. Weryfikuje obecność
 Worker ma też limit czasu łagodnego zatrzymania `BASTILLA_AGENT_SHUTDOWN_TIMEOUT_MS` (domyślnie 15000 ms, 1000–60000 ms). Jeśli adapter ignoruje anulowanie, proces przestaje na niego czekać, a systemd ma `TimeoutStopSec=25s` i może dokończyć zatrzymanie usługi. Po restarcie lease wygasłego zadania zostanie ponownie przydzielony. To wymaga idempotentnych działań zewnętrznych; nie wolno bez zgody wykonywać automatycznych powtórzeń zmian administracyjnych.
 
 Heartbeat przypisany do pojedynczego zadania jest teraz natychmiast wyłączany przy `AbortSignal`, nawet gdy oryginalny adapter modelu nie potrafi się sam zakończyć. Zapobiega to pozostawieniu timerów po zatrzymaniu workera.
+
+## Heartbeat przy długich zadaniach idle
+Wywołanie `onIdle` oryginalnego agenta może trwać dłużej niż 45-sekundowy TTL online. Worker wysyła teraz niezależny, uwierzytelniony heartbeat co 15 sekund (częściej tylko zgodnie z jawnie ustawionym parametrem uruchomienia) również podczas `onIdle`. Równoległe próby heartbeat są łączone do jednego żądania, a zatrzymanie workera wyłącza okresowe odświeżanie. Usunięto również zbędne nasłuchy AbortSignal po każdym oczekiwaniu na kolejkę. Wskazanie ONLINE nadal nie dowodzi odpowiedzi modelu AI.
