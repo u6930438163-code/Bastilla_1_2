@@ -734,7 +734,8 @@ export default function App() {
             />
           )}
 
-          {activeTab === 'terminal' && (
+          {/* Keep the terminal mounted so local command history and live events survive navigation. */}
+          <div className={activeTab === 'terminal' ? 'flex min-h-0 min-w-0 flex-1' : 'hidden'}>
             <TerminalView
               dataStore={dataStore}
               onUpdateDataStore={setDataStore}
@@ -742,7 +743,7 @@ export default function App() {
               onExecutePythonCommand={handleExecutePythonCommand}
               workspaceLive={workspaceLive}
             />
-          )}
+          </div>
 
           {activeTab === 'monolith' && (
             <MonolithView
