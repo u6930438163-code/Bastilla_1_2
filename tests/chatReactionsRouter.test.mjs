@@ -54,6 +54,9 @@ test('real reaction endpoints reject impersonation, support workers/live events 
     const operator = await post('/vote', { messageKey: kernelKey, vote: 'up', actor: 'Alex' }, allowed);
     assert.equal(operator.status, 200);
     assert.deepEqual((await operator.json()).votes, { Operator: 'up' }, 'Browser input cannot impersonate AI');
+    const idempotent = await post('/vote', { messageKey: kernelKey, vote: 'up', mode: 'set' }, allowed);
+    assert.equal(idempotent.status, 200);
+    assert.equal((await idempotent.json()).votes.Operator, 'up', 'Retried browser vote must not toggle off');
     const worker = await post('/worker/vote', { messageKey: kernelKey, vote: 'down', actor: 'Aria' },
       { Authorization: 'Bearer secret-Alex' });
     assert.equal(worker.status, 200);
@@ -78,7 +81,7 @@ test('real reaction endpoints reject impersonation, support workers/live events 
     const cleared = await fetch(endpoint, { method: 'DELETE', headers: allowed });
     assert.equal(cleared.status, 200);
     assert.deepEqual(new ChatReactionStore(persistentFile).list(), {});
-    assert.equal(published, 4);
+    assert.equal(published, 5);
   } finally {
     await new Promise(resolve => server.close(resolve));
     fs.rmSync(folder, { recursive: true, force: true });
