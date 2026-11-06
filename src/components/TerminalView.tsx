@@ -2,6 +2,8 @@ import React, { useState, useRef, useEffect, useCallback, useMemo } from 'react'
 import { DataStore, OPERATOR_NAME, SYS_VERSION, generateTextReport, generatePythonMonolith } from '../kernel/svlKernel';
 import { SYSTEM_AGENTS } from '../kernel/agents';
 import type { AgentProtocolCommand, AgentProtocolReply, AgentProtocolRequest } from '../kernel/agentProtocol';
+import { TerminalWorkCard, type TerminalCardEntry } from './TerminalWorkCard';
+import { TerminalAnalyticsPanel } from './TerminalAnalyticsPanel';
 import {
   Play,
   CornerDownLeft,
@@ -354,6 +356,7 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
   const runningRef = useRef(false);
   const [viewFilter, setViewFilter] = useState<'all' | 'errors' | 'sync'>('all');
   const [inspectorOpen, setInspectorOpen] = useState(true);
+  const [advancedView, setAdvancedView] = useState<'console' | 'cards' | 'monitoring'>('console');
   const [activity, setActivity] = useState<Array<{ topic: string; at: string }>>([]);
   const [lastSyncAt, setLastSyncAt] = useState('');
   const [copyStatus, setCopyStatus] = useState('');
@@ -750,7 +753,31 @@ Integralność tagów:  ZGODNA (<<<DATA_STORE_START>>> ... <<<DATA_STORE_END>>>)
         <div><span className="metric-label">ZMIANY LIVE</span><strong>{activity.length}</strong></div>
       </div>
 
-      <div className="bastilla-terminal-body">
+      <nav className="flex shrink-0 gap-1.5 border-y border-cyan-900/60 bg-[#081827] px-3 py-2" aria-label="Widoki terminala">
+        {([
+          ['console','Konsola'],
+          ['cards','Karta terminala'],
+          ['monitoring','Wykresy i monitoring'],
+        ] as const).map(([id,label]) => <button key={id} type="button" aria-pressed={advancedView===id}
+          onClick={()=>setAdvancedView(id)} className={'shrink-0 rounded-lg border px-3 py-2 text-[11px] font-semibold transition ' +
+            (advancedView===id ? 'border-cyan-500 bg-cyan-900/60 text-white' : 'border-slate-700 bg-slate-900 text-slate-300 hover:text-white')}>
+          {label}
+        </button>)}
+      </nav>
+
+      {advancedView==='cards' && <div className="min-h-0 flex-1 overflow-y-auto p-2.5 sm:p-4 space-y-3">
+        <TerminalWorkCard title="BASTILLA / COMMAND CENTER · KARTA SESJI"
+          command={history[history.length-1] || ''}
+          status={running ? 'running' : logs.some(l=>l.type==='error') ? 'error' : history.length ? 'success' : 'idle'}
+          source="Lokalna historia poleceń i wyników; backend SVL tylko dla obsługiwanych komend"
+          entries={logs.map(l=>({type:l.type,text:l.content,time:l.timestamp} as TerminalCardEntry))}
+          onCommandRequested={command=>void handleExecute(command)} />
+        <p className="text-xs text-slate-400">W karcie pełnego terminala wykonanie wymaga dwóch kliknięć. Polecenia podlegają mechanizmom istniejącej konsoli i uprawnieniom serwera.</p>
+      </div>}
+      {advancedView==='monitoring' && <div className="min-h-0 flex-1 overflow-y-auto p-2.5 sm:p-4">
+        <TerminalAnalyticsPanel />
+      </div>}
+      <div className="bastilla-terminal-body" style={{ display: advancedView==='console' ? undefined : 'none' }}>
         <section className="bastilla-terminal-console" aria-label="Konsola poleceń">
           <div className="bastilla-terminal-quickbar">
             <span className="bastilla-terminal-quicklabel"><Sparkles className="w-3.5 h-3.5" /> SZYBKIE AKCJE</span>
@@ -808,7 +835,7 @@ Integralność tagów:  ZGODNA (<<<DATA_STORE_START>>> ... <<<DATA_STORE_END>>>)
           <div className="bastilla-terminal-inspector-title"><Activity className="w-4 h-4 text-cyan-300" /> AKTYWNOŚĆ SYSTEMU</div>
           <div className="bastilla-terminal-info-card">
             <div className="flex items-center justify-between"><span>Stan synchronizacji</span><span className={workspaceLive ? 'text-emerald-300' : 'text-amber-300'}>{workspaceLive ? 'LIVE' : 'POLLING'}</span></div>
-            <p>{workspaceLive ? 'Zmiany czatu i terminala są przekazywane przez prywatny strumień zdarzeń SSE.' : 'Dane jądra odświeżają się co 4 sekundy. Zaloguj się w czacie LIVE, aby włączyć strumień między urządzeniami.'}</p>
+            <p>{workspaceLive ? 'Zmiany czatu i terminala są przekazywane przez prywatny strumień zdarzeń SSE.' : 'Dane jądra odświeżają się co 4 sekundy. Zaloguj się jako operator w Menedżerze zadań, aby włączyć strumień między urządzeniami.'}</p>
           </div>
           <div className="bastilla-terminal-inspector-subtitle">OSTATNIE ZDARZENIA</div>
           <div className="bastilla-terminal-activity-list">
