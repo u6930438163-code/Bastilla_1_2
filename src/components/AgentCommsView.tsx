@@ -113,6 +113,9 @@ export const AgentCommsView: React.FC<AgentCommsViewProps> = ({
   const [terminalCardStatus, setTerminalCardStatus] = useState<TerminalCardStatus>('idle');
   const [terminalCardEntries, setTerminalCardEntries] = useState<TerminalCardEntry[]>([]);
   const [workNotice, setWorkNotice] = useState<string | null>(null);
+  const [quickBusy, setQuickBusy] = useState(false);
+  const [quickResult, setQuickResult] = useState<{ title: string; lines: string[]; at: string; failed?: boolean } | null>(null);
+  const handledDraftRef = useRef<number | null>(null);
   const [liveAuthenticated, setLiveAuthenticated] = useState(false);
   const [liveMode, setLiveMode] = useState(true);
   const [providerMode, setProviderMode] = useState<'api' | 'ollama'>(() => {
@@ -247,13 +250,95 @@ export const AgentCommsView: React.FC<AgentCommsViewProps> = ({
     window.requestAnimationFrame(() => chatInputRef.current?.focus());
   };
 
+  // A click on an AI-supplied action is not a chat composer event.
+  // Known read-only diagnostics call existing authenticated API routes.
+  // Other actions ask the selected AI directly, never execute untrusted shell commands.
+  const runQuickAction = async (rawPrompt: string, target = selectedTarget) => {
+    const prompt = rawPrompt.trim().slice(0, 8000);
+    if (!prompt || quickBusy || isLoading || liveBusy) return;
+    const normalized = prompt.toLocaleLowerCase('pl');
+    const readOnly =
+      /(?:sprawdź|pokaż|wyświetl|odczytaj|przejrzyj).{0,65}logi|logi systemowe|rzeczywiste logi|potwierdzone logi/.test(normalized) ? 'logs'
+      : /(?:sprawdź|pokaż|wyświetl|odczytaj).{0,55}(?:proces|obciążenie cpu|użycie pamięci|zużycie pamięci)/.test(normalized) ? 'processes'
+      : /(?:sprawdź|pokaż|odczytaj).{0,55}(?:stan ollamy|status ollamy|status ollama)/.test(normalized) ? 'ollama'
+      : /(?:sprawdź|pokaż|odczytaj).{0,55}(?:status workerów|stan workerów)/.test(normalized) ? 'workers'
+      : /(?:sprawdź|pokaż|odczytaj).{0,55}(?:narzędzia diagnostyczne|dostępność narzędzi)/.test(normalized) ? 'tools' : null;
+    const endpoints: Record<string, string> = {
+      logs: '/api/operations/logs?filter=all',
+      processes: '/api/operations/processes',
+      ollama: '/api/operations/ollama',
+      workers: '/api/live-chat/status',
+      tools: '/api/operations/diagnostics/tools',
+    };
+    const titles: Record<string, string> = {
+      logs: 'Logi systemowe', processes: 'Procesy i obciążenie',
+      ollama: 'Ollama · stan serwera', workers: 'Workery AI', tools: 'Narzędzia diagnostyczne',
+    };
+    setQuickBusy(true);
+    setQuickResult(null);
+    setWorkNotice(null);
+    try {
+      if (!readOnly) {
+        // No privileged or mutating actions can run from AI-generated buttons.
+        // A potentially sensitive request is delegated to the agent only after confirmation.
+        if (/(?:usuń|kasuj|zrestartuj|uruchom ponownie|zainstaluj|optymalizuj|zmień konfigurację|wyczyść pamięć|sudo|rm -rf)/i.test(prompt)
+          && !window.confirm('Przekazać to polecenie agentowi do analizy? Nie jest to zgoda na zmianę systemu.')) return;
+        await onSendMessage(prompt, target, [], freedomEnabled, providerMode);
+        setWorkNotice('Akcja przekazana do AI bez użycia pola wiadomości. Wynik pojawi się w rozmowie.');
+        return;
+      }
+      const response = await fetch(endpoints[readOnly], { credentials: 'same-origin', cache: 'no-store' });
+      if (!response.ok) throw new Error(response.status === 401 || response.status === 503
+        ? 'Diagnostyka wymaga aktywnej sesji operatora.'
+        : 'Odczyt diagnostyki nie powiódł się (HTTP ' + response.status + ').');
+      const data = await response.json() as Record<string, any>;
+      const lines: string[] = [];
+      if (readOnly === 'logs') {
+        lines.push('Błędy: ' + (data.counts?.errors ?? '—') + ' · Sukcesy: ' + (data.counts?.success ?? '—') + ' · Info: ' + (data.counts?.info ?? '—'));
+        for (const item of (Array.isArray(data.logs) ? data.logs : []).slice(0, 20)) {
+          lines.push('[' + String(item.level ?? item.category ?? 'info').slice(0, 12) + '] '
+            + String(item.source ?? 'system').slice(0, 50) + ': ' + String(item.message ?? '').slice(0, 240));
+        }
+      } else if (readOnly === 'processes') {
+        lines.push('Stan pomiaru: ' + (data.available ? 'dostępny' : 'niedostępny'));
+        for (const proc of (Array.isArray(data.processes) ? data.processes : []).slice(0, 15)) {
+          lines.push(String(proc.name ?? 'proces').slice(0, 80) + ' · PID ' + (proc.pid ?? '—')
+            + ' · CPU ' + (typeof proc.cpuPercent === 'number' ? proc.cpuPercent.toFixed(1) : '—') + '%');
+        }
+      } else if (readOnly === 'ollama') {
+        lines.push('Serwer: ' + (data.connected ? 'ONLINE' : 'OFFLINE'));
+        lines.push('Model: ' + String(data.configuredModel ?? 'nieznany').slice(0, 100));
+        lines.push('Model w RAM: ' + (data.modelLoaded === true ? 'TAK' : data.modelLoaded === false ? 'NIE' : 'nieznany'));
+        if (data.error) lines.push('Błąd: ' + String(data.error).slice(0, 240));
+      } else if (readOnly === 'workers') {
+        for (const [name, details] of Object.entries(data.agents || {}).slice(0, 8)) {
+          const status = details as { status?: string; queued?: number; running?: number };
+          lines.push(name + ': ' + (status.status ?? 'nieznany') + ' · kolejka ' + (status.queued ?? '?') + ' · wykonuje ' + (status.running ?? '?'));
+        }
+      } else {
+        lines.push('W katalogu: ' + (data.total ?? '—') + ' · wykryte w PATH: ' + (data.pathDetected ?? '—'));
+        for (const tool of (Array.isArray(data.tools) ? data.tools : []).slice(0, 10)) {
+          lines.push(String(tool.name ?? 'narzędzie').slice(0, 100) + ': ' + (tool.available === true ? 'wykryte' : 'niepotwierdzone'));
+        }
+      }
+      setQuickResult({ title: titles[readOnly], lines: lines.length ? lines : ['Serwer nie zwrócił danych do wyświetlenia.'], at: new Date().toLocaleTimeString('pl-PL') });
+    } catch (error) {
+      setQuickResult({
+        title: readOnly ? titles[readOnly] : 'Akcja AI',
+        lines: [error instanceof Error ? error.message : 'Nie udało się wykonać akcji.'],
+        at: new Date().toLocaleTimeString('pl-PL'), failed: true,
+      });
+    } finally {
+      setQuickBusy(false);
+    }
+  };
+
   useEffect(() => {
-    if (!preparedDraft) return;
+    if (!preparedDraft || handledDraftRef.current === preparedDraft.id || isLoading) return;
+    handledDraftRef.current = preparedDraft.id;
     setSelectedTarget(preparedDraft.agent);
-    setMessageText(preparedDraft.text.slice(0, 20_500));
-    setWorkNotice('Zgłoszenie diagnostyczne przygotowane w głównym czacie. Zatwierdź przyciskiem Wyślij.');
-    window.requestAnimationFrame(() => chatInputRef.current?.focus());
-  }, [preparedDraft?.id]);
+    void runQuickAction(preparedDraft.text, preparedDraft.agent);
+  }, [preparedDraft?.id, isLoading]);
 
   // One real worker transport, shown within the existing conversation rather than a
   // second floating chat. GET /history includes all channels when channel=Wszyscy.
@@ -704,7 +789,7 @@ export const AgentCommsView: React.FC<AgentCommsViewProps> = ({
         history={dataStore.chat_history}
         streamingChat={streamingChat}
         isLoading={isLoading}
-        onPreparePrompt={prepareWorkPrompt}
+        onPreparePrompt={prompt => { void runQuickAction(prompt); }}
         onToggleTerminal={() => setTerminalCardVisible((visible) => !visible)}
         onOpenTerminal={onOpenTerminal}
         onSync={onForceSync}
@@ -818,7 +903,7 @@ export const AgentCommsView: React.FC<AgentCommsViewProps> = ({
         }}
         className="bastilla-chat-scroller min-h-0 min-w-0 flex-1 overflow-y-auto px-2.5 py-3 sm:px-6 sm:py-5 space-y-2.5 sm:space-y-3.5 scrollbar-thin w-full max-w-6xl mx-auto"
       >
-        {showWorkPreview && <WorkChatDemo onPrompt={prepareWorkPrompt} onOpenTerminal={onOpenTerminal} />}
+        {showWorkPreview && <WorkChatDemo onPrompt={prompt => { void runQuickAction(prompt); }} onOpenTerminal={onOpenTerminal} />}
         {sendError && (
           <div role="alert" aria-live="assertive" className="rounded-lg border border-rose-500/40 bg-rose-950/40 p-3 text-xs text-rose-200">
             Nie udało się wysłać żądania: {sendError}
@@ -884,7 +969,7 @@ export const AgentCommsView: React.FC<AgentCommsViewProps> = ({
 
                 {/* Message Body with KaTeX LaTeX formulas and Markdown */}
                 <WorkChatMessage content={destination ? msg.tekst.replace(/^\[Do: [^\]\n]+\]\n/, '') : msg.tekst}
-                  onPrompt={prepareWorkPrompt} onOpenTerminal={onOpenTerminal} />
+                  onPrompt={prompt => { void runQuickAction(prompt); }} onOpenTerminal={onOpenTerminal} />
                 <div className="bastilla-chat-card__actions mt-2 flex flex-wrap items-center justify-end gap-1">
                   <ChatReactionBar
                     votes={reactionVotes[reactionKeys[idx]] || {}}
@@ -970,7 +1055,7 @@ export const AgentCommsView: React.FC<AgentCommsViewProps> = ({
                     {item.channel} · {Number.isFinite(Date.parse(item.at)) ? new Date(item.at).toLocaleTimeString('pl-PL') : 'czas nieznany'}
                   </span>
                 </div>
-                <WorkChatMessage content={item.text} onPrompt={prepareWorkPrompt} onOpenTerminal={onOpenTerminal}/>
+                <WorkChatMessage content={item.text} onPrompt={prompt => { void runQuickAction(prompt); }} onOpenTerminal={onOpenTerminal}/>
                 <div className="mt-2 border-t border-slate-800/60 pt-2">
                   <ChatReactionBar
                     votes={reactionVotes[liveReactionKey(item)] || {}}
@@ -1054,7 +1139,7 @@ export const AgentCommsView: React.FC<AgentCommsViewProps> = ({
         </button>
         {liveBusy && <span role="status" className="animate-pulse text-[10px] text-cyan-300">Kolejkowanie…</span>}
       </div>}
-      {/* Work actions in the original chat, with explicit operator confirmation before sending */}
+      {/* Single-click Work actions: read-only data in panel, AI requests sent directly. */}
       {showMoreMenu && <div className="bastilla-chat-actions flex w-full shrink-0 gap-1.5 overflow-x-auto border-t border-cyan-900/60 bg-[#071625] px-3 py-2" aria-label="Akcje AI Work">
         {([
           { label: 'Wykres', icon: BarChart3, prompt: 'Pokaż wykres oparty wyłącznie na rzeczywistych danych systemowych. Jeśli brak pomiarów, wyjaśnij to. Gdy dane są dostępne użyj bloku bastilla-ui z blocks type chart, labels, values, unit oraz caption.' },
@@ -1062,9 +1147,9 @@ export const AgentCommsView: React.FC<AgentCommsViewProps> = ({
           { label: 'Wideo', icon: Clapperboard, prompt: 'Pokaż istniejące wideo jako osadzony odtwarzacz w wiadomości. Zwróć prawdziwy adres HTTPS MP4/WebM/YouTube w bastilla-ui type video, src i title. Nie wymyślaj filmu.' },
           { label: 'Kod', icon: Code2, prompt: 'Przygotuj kod rozwiązania z objaśnieniem i gotowym blokiem kodu Markdown. Nie wykonuj go bez autoryzacji.' },
           { label: 'cURL', icon: Code2, prompt: 'Pokaż techniczną kartę HTTP/cURL i JSON dla opisywanego API. Użyj bloku bastilla-ui z type curl, title, method, url, headers i opcjonalnie response. Nie podawaj tajnych tokenów.' },
-          { label: 'Dynamiczne UI', icon: Sparkles, prompt: 'Zaprojektuj w tej wiadomości responsywny panel bastilla-ui. Wybierz odpowiednie komponenty spośród: metric, chart, table, actions, terminal, progress, steps, alert, timeline, tabs, accordion, checklist, form, code, handoff, curl, http, json, diff, logs. Używaj tylko potwierdzonych danych; działania przygotowują szkic, nie wykonują poleceń.' },
+          { label: 'Dynamiczne UI', icon: Sparkles, prompt: 'Zaprojektuj w tej wiadomości responsywny panel bastilla-ui. Wybierz odpowiednie komponenty spośród: metric, chart, table, actions, terminal, progress, steps, alert, timeline, tabs, accordion, checklist, form, code, handoff, curl, http, json, diff, logs. Używaj tylko potwierdzonych danych; przyciski odczytują bezpośrednio, a zmiany systemowe wymagają zgody.' },
           { label: 'Raport', icon: FileText, prompt: 'Przedstaw raport w formie tabel, metryk i interaktywnych elementów, rozdziel sukcesy i błędy. Wykorzystuj tylko potwierdzone dane i logi; możesz użyć bastilla-ui type table, metric, chart, actions.' },
-        ] as const).map((item) => <button key={item.label} type="button" disabled={isLoading} onClick={() => prepareWorkPrompt(item.prompt)}
+        ] as const).map((item) => <button key={item.label} type="button" disabled={isLoading} onClick={() => void runQuickAction(item.prompt)}
           className="flex shrink-0 items-center gap-1.5 rounded-lg border border-cyan-800/70 bg-slate-900/90 px-3 py-1.5 text-[11px] font-semibold text-cyan-100 hover:bg-cyan-950 disabled:opacity-40 transition">
           <item.icon className="w-3.5 h-3.5" />{item.label}
         </button>)}
@@ -1074,6 +1159,18 @@ export const AgentCommsView: React.FC<AgentCommsViewProps> = ({
           <Code2 className="w-3.5 h-3.5" />Terminal
         </button>
       </div>}
+      {(quickBusy || quickResult) && <section role="region" aria-label="Wynik akcji" className="mx-3 my-2 max-h-[32dvh] overflow-y-auto rounded-xl border border-cyan-700/70 bg-[#071c2b] p-3 text-xs text-slate-200">
+        <div className="flex items-center justify-between gap-2">
+          <strong className="text-cyan-200">{quickBusy ? 'Wykonuję akcję…' : quickResult?.title}</strong>
+          <button type="button" onClick={() => setQuickResult(null)} disabled={quickBusy} className="rounded p-1 hover:bg-slate-800" aria-label="Zamknij wynik"><X className="h-4 w-4"/></button>
+        </div>
+        {quickResult && <>
+          <p className="mt-1 text-[10px] text-slate-400">Odczyt z API · {quickResult.at}</p>
+          <div role={quickResult.failed ? 'alert' : 'status'} className={'mt-2 space-y-1 whitespace-pre-wrap break-words ' + (quickResult.failed ? 'text-rose-300' : 'text-slate-200')}>
+            {quickResult.lines.map((line, index) => <p key={index}>{line}</p>)}
+          </div>
+        </>}
+      </section>}
       {workNotice && <div role="status" className="flex items-center justify-between gap-2 bg-slate-900/90 px-3 py-1.5 text-[11px] text-cyan-200">
         <span>{workNotice}</span>
         <button type="button" onClick={() => setWorkNotice(null)} aria-label="Zamknij komunikat" className="p-1 text-slate-300 hover:text-white"><X className="w-3 h-3"/></button>
