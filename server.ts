@@ -6054,7 +6054,13 @@ function queueAgentToAgentResponse(entry: AgentInboxEntry): void {
 
 app.get('/api/agents/channel/status', (_req, res) => {
   res.setHeader('Cache-Control', 'no-store');
-  res.json({
+  // Public UI only needs the switch state. Private worker identities and
+  // message counts require a valid operator session.
+  return res.json({ enabled: agentChannelEnabled, mode: 'agent-event-bus' });
+});
+app.get('/api/agents/channel/detail', liveChatAuth.requireUser, (_req, res) => {
+  res.setHeader('Cache-Control', 'no-store');
+  return res.json({
     enabled: agentChannelEnabled,
     mode: 'agent-event-bus',
     messages: agentInbox.length,
@@ -6064,7 +6070,7 @@ app.get('/api/agents/channel/status', (_req, res) => {
       .map(([agent]) => agent === 'si_1' ? 'Aria' : agent),
   });
 });
-app.post('/api/agents/channel/settings', (req, res) => {
+app.post('/api/agents/channel/settings', liveChatAuth.requireUser, (req, res) => {
   if (!isSameOriginApprovalRequest(req)) {
     return res.status(403).json({ error: 'Only the same-origin operator UI may change channel settings.' });
   }
@@ -6080,7 +6086,7 @@ app.post('/api/agents/channel/settings', (req, res) => {
   }
   return res.json({ success: true, enabled: agentChannelEnabled });
 });
-app.get('/api/agents/inbox', (_req, res) => {
+app.get('/api/agents/inbox', liveChatAuth.requireUser, (_req, res) => {
   res.setHeader('Cache-Control', 'no-store');
   const visible = agentInbox.filter(item => !item.to || item.to === 'Operator' || item.to === 'all');
   res.json({
