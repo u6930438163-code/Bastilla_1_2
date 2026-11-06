@@ -678,7 +678,7 @@ export const AgentCommsView: React.FC<AgentCommsViewProps> = ({
       </div>
 
       <LiveWorkspaceSession onChange={setLiveAuthenticated} />
-      <WorkspaceCommandCenter
+      {showMoreMenu && <WorkspaceCommandCenter
         history={dataStore.chat_history}
         streamingChat={streamingChat}
         isLoading={isLoading}
@@ -686,8 +686,7 @@ export const AgentCommsView: React.FC<AgentCommsViewProps> = ({
         onToggleTerminal={() => setTerminalCardVisible((visible) => !visible)}
         onOpenTerminal={onOpenTerminal}
         onSync={onForceSync}
-      />
-
+      />}
       {/* Collapsible Protocol & Mission Drawer (hidden by default so chat gets 100% height) */}
       {showProtocolTools && (
         <div className="flex flex-col gap-2 border-b border-slate-800 bg-slate-900/95 px-3 py-2.5 shrink-0 max-h-[45dvh] overflow-y-auto">
@@ -814,7 +813,11 @@ export const AgentCommsView: React.FC<AgentCommsViewProps> = ({
             const agentKey = msg.agent === OPERATOR_NAME ? 'Operator' : msg.agent;
             const profile: AgentProfile | undefined = SYSTEM_AGENTS[agentKey] || SYSTEM_AGENTS[msg.agent];
             const isOperator = msg.agent === OPERATOR_NAME || msg.agent === 'Operator';
+
             const sentImages = isOperator ? (sentImagesByMessageIndex.get(idx) ?? []) : [];
+            const destination = !isOperator && typeof msg.tekst === 'string'
+              ? msg.tekst.match(/^\[Do: ([^\]\n]+)\]\n/)?.[1] : undefined;
+
 
             return (
               <div
@@ -842,6 +845,9 @@ export const AgentCommsView: React.FC<AgentCommsViewProps> = ({
                     >
                       {msg.agent === 'si_1' ? 'Aria' : msg.agent}
                     </span>
+                    {destination && <span className="rounded border border-cyan-800/60 bg-[#0b2537] px-1.5 py-0.5 text-[10px] font-medium text-cyan-200">
+                      → {destination}
+                    </span>}
                     {!isOperator && spontaneousAgentMessageIndices.has(idx) && (
                       <span className="px-1.5 py-0.5 rounded bg-emerald-950/90 border border-emerald-500/40 text-emerald-300 text-[9px] font-semibold tracking-wider uppercase">
                         Swobodny głos · bez przymusu
@@ -855,7 +861,8 @@ export const AgentCommsView: React.FC<AgentCommsViewProps> = ({
                 </div>
 
                 {/* Message Body with KaTeX LaTeX formulas and Markdown */}
-                <WorkChatMessage content={msg.tekst} onPrompt={prepareWorkPrompt} onOpenTerminal={onOpenTerminal} />
+                <WorkChatMessage content={destination ? msg.tekst.replace(/^\[Do: [^\]\n]+\]\n/, '') : msg.tekst}
+                  onPrompt={prepareWorkPrompt} onOpenTerminal={onOpenTerminal} />
                 <div className="mt-2 flex flex-wrap items-center justify-end gap-1">
                   <ChatReactionBar
                     votes={reactionVotes[reactionKeys[idx]] || {}}
@@ -1004,7 +1011,7 @@ export const AgentCommsView: React.FC<AgentCommsViewProps> = ({
           </div>
         </div>
       </div>}
-      {liveAuthenticated && <div className="flex shrink-0 items-center gap-2 border-t border-cyan-900/60 bg-[#091b2b] px-3 py-1.5" aria-label="Wybierz transport czatu">
+      {showMoreMenu && liveAuthenticated && <div className="flex shrink-0 items-center gap-2 border-t border-cyan-900/60 bg-[#091b2b] px-3 py-1.5" aria-label="Wybierz transport czatu">
         <span className="text-[10px] text-slate-400">Transport:</span>
         <button type="button" aria-pressed={liveMode} disabled={liveBusy} onClick={() => setLiveMode(true)}
           className={'rounded-lg border px-2.5 py-1 text-[11px] font-semibold ' +
