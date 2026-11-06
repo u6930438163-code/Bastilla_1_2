@@ -160,7 +160,7 @@ export function WorkspaceCommandCenter({
             </button>)}
           </div>
           {filtered.length === 0 && <p className="p-3 text-xs text-slate-400">Nie znaleziono narzędzi.</p>}
-          <p className="mt-3 text-[10px] text-slate-500">Przyciski przygotowują edytowalną wiadomość do wybranego agenta. Nie wykonują komend ani instalacji automatycznie.</p>
+          <p className="mt-3 text-[10px] text-slate-500">Przyciski uruchamiają odczyt lub wysyłają polecenie do wybranego agenta bez wypełniania czatu. Nie wykonują instalacji ani zmian uprzywilejowanych bez zgody.</p>
         </> : <>
           <div className="space-y-2 rounded-xl border border-slate-800 bg-slate-950/70 p-3">
             <p className="text-xs font-bold text-slate-100">Wiadomości zapisane w historii · {history.length}</p>
