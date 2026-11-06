@@ -4,9 +4,7 @@ This optional bridge exposes a **read-only** subset of the existing BastillaOS A
 
 ## Start
 
-From the repository root in a Linux Codespace, run `npm run start:mcp` to start the local services and perform the MCP smoke test. The script checks whether Ollama is reachable but never launches it. An unavailable Ollama is reported separately and does not by itself mean the MCP transport is offline. Keep the terminal open while using the services.
-
-The startup smoke test performs MCP `initialize`, `ping`, `tools/list`, and read-only diagnostic tool calls. A successful test confirms a local MCP handshake and a working local BastillaOS API path. It does **not** establish an authenticated connection from an external MCP client, including ChatGPT. The MCP listener binds to `127.0.0.1` only. If port 8000 is busy, choose another local port with `BASTILLA_MCP_PORT`; the startup script refuses to replace an existing listener.
+From the repository root in a Linux Codespace, run `npm run start:mcp` to start the local services and perform the MCP smoke test. This checks local reachability, not remote ChatGPT authorization. Keep the terminal open while using the services.
 
 Alternatively, start the bridge manually:
 
@@ -19,14 +17,12 @@ pip install -r integrations/mcp/requirements.txt
 python integrations/mcp/server.py
 ```
 
-By default the MCP endpoint is `http://127.0.0.1:8000/mcp` and the BastillaOS API is `http://127.0.0.1:3000`. Override the latter with `BASTILLA_API_URL` if necessary. Set `BASTILLA_MCP_PORT` to choose another listener port; it remains bound to loopback.
+By default the MCP endpoint is `http://127.0.0.1:8000/mcp` and the BastillaOS API is `http://127.0.0.1:3000`. Override the latter with `BASTILLA_API_URL` if necessary.
 
 ## Available tools
 
-- `ollama_status`: GET /api/ollama/models; reports provider reachability independently of MCP transport state
-- `agents_status`: GET /api/agents/background/status
-- `vm_status`: reads VM configuration/runtime status
-- `agent_command`: optional limited diagnostics through POST /api/triad/command; disabled by default
+- `ollama_status`: GET /api/ollama/models
+- `agent_command`: limited diagnostics through POST /api/triad/command
 
 No shell access, arbitrary commands, file writes, or model cloud API keys are required.
 

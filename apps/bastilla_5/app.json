@@ -1,8 +1,0 @@
-{
-  "id": "bastilla_5",
-  "name": "Bastilla 5 — Advanced Autonomous Agent OS & Neural Nexus",
-  "type": "html5-web",
-  "version": "5.0.0",
-  "description": "Najnowsza ewolucja systemu operacyjnego agentów autonomicznych Bastilla OS 5 z neuralnym rdzeniem V-5 i podglądem na żywo.",
-  "entrypoint": "index.html"
-}

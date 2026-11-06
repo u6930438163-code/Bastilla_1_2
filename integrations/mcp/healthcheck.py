@@ -5,8 +5,7 @@ from mcp import ClientSession
 from mcp.client.streamable_http import streamablehttp_client
 
 async def main():
-    port = os.environ.get("BASTILLA_MCP_PORT", "8000")
-    url = os.environ.get("BASTILLA_MCP_URL", f"http://127.0.0.1:{port}/mcp/")
+    url = os.environ.get("BASTILLA_MCP_URL", "http://127.0.0.1:8000/mcp/")
     async with streamablehttp_client(url, timeout=5) as (read, write, _):
         async with ClientSession(read, write) as session:
             await session.initialize()

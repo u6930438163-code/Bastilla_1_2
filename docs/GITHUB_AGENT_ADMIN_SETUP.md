@@ -1,6 +1,6 @@
 # Uprawnienia Administracyjne Agentów AI dla GitHub (Bastilla OS 2)
 
-Repozytorium: `u6930438163-code/Bastilla_1_2`  
+Repozytorium: `mmitek515-netizen/Bastilla_OS_2`  
 Status uprawnień: **FULL_ADMINISTRATIVE_ACCESS** (Przyznane przez Właściciela)
 
 ---
@@ -38,7 +38,7 @@ Jeśli chcesz, aby workflowy agentów miały pełny dostęp administracyjny do r
    - `workflow` (aktualizacja workflowów GitHub Actions)
    - `admin:repo_hook` (zarządzanie webhookami repozytorium)
    - `security_events` (odczyt i zapis zdarzeń bezpieczeństwa)
-3. Przejdź do repozytorium: `https://github.com/u6930438163-code/Bastilla_1_2/settings/secrets/actions`.
+3. Przejdź do repozytorium: `https://github.com/mmitek515-netizen/Bastilla_OS_2/settings/secrets/actions`.
 4. Kliknij **New repository secret**:
    - Name: `GH_ADMIN_TOKEN`
    - Value: wklej wygenerowany token.

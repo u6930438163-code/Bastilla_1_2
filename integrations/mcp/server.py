@@ -10,8 +10,7 @@ from mcp.server.fastmcp import FastMCP
 BASE = os.environ.get("BASTILLA_API_URL", "http://127.0.0.1:3000").rstrip("/")
 TIMEOUT = float(os.environ.get("BASTILLA_API_TIMEOUT", "90"))
 READ_ONLY = os.environ.get("BASTILLA_MCP_READ_ONLY", "1").strip().lower() not in {"0", "false", "no"}
-PORT = int(os.environ.get("BASTILLA_MCP_PORT", "8000"))
-mcp = FastMCP("BastillaOS Ollama Bridge", host="127.0.0.1", port=PORT, json_response=True)
+mcp = FastMCP("BastillaOS Ollama Bridge", host="127.0.0.1", port=8000, json_response=True)
 
 async def request(method: str, path: str, payload=None):
     async with httpx.AsyncClient(timeout=TIMEOUT, trust_env=False) as client:

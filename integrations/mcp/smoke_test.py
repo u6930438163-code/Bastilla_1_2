@@ -9,7 +9,6 @@ async def main():
     async with streamablehttp_client(os.environ.get("BASTILLA_MCP_URL", "http://127.0.0.1:8000/mcp")) as (read, write, _):
         async with ClientSession(read, write) as session:
             await session.initialize()
-            await session.send_ping()
             tools = await session.list_tools()
             names = {tool.name for tool in tools.tools}
             expected = {"ollama_status", "agents_status", "vm_status"}
@@ -24,13 +23,10 @@ async def main():
                 raise RuntimeError("MCP ollama_status returned a tool error")
             if not result.content:
                 raise RuntimeError("MCP ollama_status returned an empty response")
-            diagnostic = getattr(result, "structuredContent", None)
-            if not isinstance(diagnostic, dict):
-                try:
-                    diagnostic = json.loads(result.content[0].text)
-                except (AttributeError, IndexError, TypeError, json.JSONDecodeError):
-                    diagnostic = {}
             if os.environ.get("BASTILLA_MCP_EXPECT_OFFLINE") == "1":
+                diagnostic = getattr(result, "structuredContent", None)
+                if not isinstance(diagnostic, dict):
+                    diagnostic = json.loads(result.content[0].text)
                 if diagnostic.get("connected") is not False:
                     raise RuntimeError("Expected Ollama offline diagnostic, got a different state")
             agents_result = await session.call_tool("agents_status", {})
@@ -59,16 +55,13 @@ async def main():
                 if not rejected_agent.isError:
                     raise RuntimeError("MCP accepted an unsupported agent role")
     
-            ollama_connected = diagnostic.get("connected")
-            if not isinstance(ollama_connected, bool):
-                ollama_connected = "not reported"
-            print("MCP initialize: PASS")
-            print("MCP ping: PASS")
-            print("MCP tools/list: PASS")
-            print("MCP read-only diagnostics: PASS (Ollama, agents, VM)")
-            print("Ollama API connected:", ollama_connected)
-            print("Agent command:", "PASS" if allow_commands else agent_result)
-            print("External MCP client connection: NOT TESTED")
+            print("MCP handshake, diagnostics, command and agent allowlists: OK")
+            print("Tools:", ", ".join(sorted(names)))
+            print("Ollama diagnostic:", result)
+            print("Agents monitoring diagnostic:", agents_result)
+            print("VM diagnostic:", vm_result)
+            print("Agent diagnostic:", agent_result)
+            print("Note: tool responses do not independently prove an LLM model is online.")
 
 if __name__ == "__main__":
     asyncio.run(main())

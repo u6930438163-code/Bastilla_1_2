@@ -1,6 +1,6 @@
 # Bastilla OS 2 — misja implementacyjna
 
-Repozytorium docelowe: u6930438163-code/Bastilla_1_2, main.
+Repozytorium docelowe: mmitek515-netizen/Bastilla_OS_2, main.
 Zlecenie właściciela: rozwinąć BastillaOS, uruchomić, przetestować, następnie przygotować działający projekt dla Google AI Studio i zsynchronizować kod z tym repozytorium.
 
 ## Źródła i odzyskiwanie

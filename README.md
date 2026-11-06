@@ -1,6 +1,6 @@
-# Bastilla OS 2 — Bastilla_1_2
+# Bastilla OS 2
 
-Repozytorium tej kopii projektu: **u6930438163-code/Bastilla_1_2** (`main`).
+Repozytorium główne: **mmitek515-netizen/Bastilla_OS_2**.
 
 Odtworzona baza aplikacji webowej BastillaOS, integracji AI/MCP i narzędzi
 Debian/QEMU. Obecność konfiguracji VM lub profili AI nie oznacza ich uruchomienia.
@@ -26,21 +26,3 @@ Port Codespaces pozostaw prywatny do zakończenia audytu uwierzytelniania.
 Źródło importu: `u6930438163-code/AI_Studio_BastillaOS` @
 `2203ac94b1dbbad0f9e2a470c00a4b24bc9900ed`. Zachowano istniejące moduły;
 pominięto prywatne bazy, stan wykonawczy i archiwa.
-
-## LibreChat — opcjonalny interfejs agentów
-
-LibreChat można uruchomić obok BastillaOS. Most API łączy jego czat z **istniejącymi** agentami Aria, Alex, Astyria i Aurelius przez uwierzytelniony transport Bastilla LIVE, bez tworzenia zastępczych agentów. Przed uruchomieniem wymagane są klucze, Docker i działające oryginalne workery. Instrukcja: [LibreChat + Bastilla](docs/LIBRECHAT_INTEGRATION.md).
-
-
-## Automatyczna instalacja narzędzi diagnostycznych
-
-Katalog 50 narzędzi ma opcjonalny, bezpieczny instalator APT dla Debian/Ubuntu.
-Domyślnie generuje plan bez zmian systemowych; instalacja wymaga flagi --apply.
-
-```sh
-npm run setup:diagnostics
-npm run setup:diagnostics -- --apply --profile expanded
-```
-
-Instrukcja, zakres automatyzacji oraz ograniczenia:
-[Automatyczna diagnostyka](docs/DIAGNOSTICS_AUTO_INSTALL.md).

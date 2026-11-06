@@ -88,8 +88,8 @@ export const Header: React.FC<HeaderProps> = ({ dataStore, activeTab, onSelectTa
               <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75" />
               <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-amber-400 shadow-[0_0_10px_#f59e0b]" />
             </span>
-            <span className="whitespace-nowrap bg-gradient-to-r from-amber-200 via-yellow-100 to-amber-400 bg-clip-text font-mono text-sm font-extrabold tracking-[0.16em] text-transparent">
-              BASTILLA 5
+            <span className="whitespace-nowrap bg-gradient-to-r from-amber-200 via-yellow-100 to-cyan-200 bg-clip-text font-mono text-sm font-extrabold tracking-[0.16em] text-transparent">
+              BASTILLA OS 2
             </span>
             <span
               title={`Build version ${buildVersion}; commit SHA ${buildCommit}`}
@@ -106,28 +106,30 @@ export const Header: React.FC<HeaderProps> = ({ dataStore, activeTab, onSelectTa
               SVL {formattedVersion}
             </span>
             {onSelectTab && (
-              <div className="flex items-center gap-1 rounded-lg border border-cyan-300/25 bg-slate-900/90 p-0.5">
+              <div className="flex items-center gap-1 rounded-lg border border-amber-300/25 bg-slate-900/90 p-0.5">
                 <button
                   type="button"
-                  onClick={() => onSelectTab('comms')}
+                  onClick={() => onSelectTab('bastilla_os_2')}
                   className={`flex items-center gap-1 rounded-md px-2 py-0.5 font-mono text-[10px] font-bold transition cursor-pointer ${
-                    activeTab === 'comms'
-                      ? 'bg-cyan-500 text-slate-950 shadow-xs'
-                      : 'text-cyan-200/80 hover:text-cyan-100'
+                    activeTab === 'bastilla_os_2'
+                      ? 'bg-gradient-to-r from-[#DFB96C] via-[#C5A059] to-[#997A3D] text-slate-950 shadow-xs'
+                      : 'text-amber-200/80 hover:text-amber-100'
                   }`}
                 >
-                  <span>Czat</span>
+                  <Shield className="h-3 w-3" />
+                  <span>Bastilla OS 2</span>
                 </button>
                 <button
                   type="button"
-                  onClick={() => onSelectTab('terminal')}
-                  className={`flex items-center gap-1 rounded-md px-2 py-0.5 font-mono text-[10px] font-bold transition cursor-pointer ${
-                    activeTab === 'terminal'
-                      ? 'bg-cyan-500 text-slate-950 shadow-xs'
-                      : 'text-cyan-200/80 hover:text-cyan-100'
+                  onClick={() => onSelectTab('home')}
+                  className={`rounded-md px-2 py-0.5 font-mono text-[10px] font-bold transition cursor-pointer ${
+                    activeTab === 'home'
+                      ? 'bg-cyan-600 text-slate-950 shadow-xs'
+                      : 'text-slate-400 hover:text-cyan-200'
                   }`}
+                  title="Przełącz na zachowany klasyczny interfejs BastillaOS 1"
                 >
-                  <span>Terminal</span>
+                  BastillaOS 1
                 </button>
               </div>
             )}
