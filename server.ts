@@ -2,6 +2,7 @@ import { createLiveChatRouter } from './integrations/live-chat/router.mjs';
 import { createLiveChatSessionAuth, createLiveChatWorkerAuth } from './integrations/live-chat/auth.mjs';
 import { LiveChatStore } from './integrations/live-chat/store.mjs';
 import { createWorkspaceSyncHub } from './integrations/workspace-sync/hub.mjs';
+import { createOperationsRouter } from './integrations/operations/router.mjs';
 import express from 'express';
 import { registerGptActions } from './src/lib/gptActions.mjs';
 import { sendChatError } from './src/lib/chatTransport.mjs';
@@ -209,6 +210,20 @@ app.use((err: any, _req: express.Request, res: express.Response, next: express.N
 // chat transcripts, terminal output or credentials to other devices.
 const workspaceSync = createWorkspaceSyncHub(liveChatAuth.requireUser);
 app.use('/api/workspace', workspaceSync.router);
+app.use('/api/operations', createOperationsRouter({
+  requireUser: liveChatAuth.requireUser,
+  getLogs: () => systemLogs,
+  getConfig: () => ({
+    baseUrl: LLM_CHAIN_CONFIG.ollamaBaseUrl || DEFAULT_OLLAMA_BASE_URL,
+    configuredModel: LLM_CHAIN_CONFIG.ollamaModel,
+    providers: configuredProviders(LLM_CHAIN_CONFIG),
+    fallbackModels: configuredProviders(LLM_CHAIN_CONFIG).includes('gemini')
+      ? GEMINI_FALLBACK_MODELS.split(',').map(value => value.trim()).filter(Boolean) : [],
+    localFallback: CHAT_LOCAL_FALLBACK,
+    keepAlive: LLM_CHAIN_CONFIG.ollamaKeepAlive,
+  }),
+  execFileAsync,
+}));
 const workspaceTopics: Record<string, 'chat' | 'terminal' | 'kernel' | 'agents' | 'workspace'> = {
   '/api/kernel/command': 'terminal',
   '/api/kernel/save-store': 'kernel',
