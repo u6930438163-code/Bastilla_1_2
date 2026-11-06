@@ -699,6 +699,8 @@ export default function App() {
               onForceSync={handleForceSync}
               onTriggerFreeVoice={handleTriggerFreeVoice}
               preparedDraft={preparedChatDraft}
+              onRunKernelCommand={handleExecutePythonCommand}
+              onOpenTerminal={() => setActiveTab('terminal')}
             />
           )}
 
