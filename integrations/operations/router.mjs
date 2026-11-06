@@ -52,7 +52,7 @@ export function makeLogsSnapshot(entries, filter = 'all') {
       source: String(log?.source || 'SYSTEM').slice(0, 40),
       message: redactDiagnostic(log?.message),
     };
-  }).filter(log => filter === 'all' || log.category === filter).slice(-100).reverse();
+  }).filter(log => filter === 'all' || log.category === (filter === 'errors' ? 'error' : filter)).slice(-100).reverse();
   return { counts, logs, sampled: recent.length, source: 'server-runtime-logs' };
 }
 
