@@ -20,6 +20,10 @@ if [[ ! -f "$SETTINGS" ]]; then
   echo "Configure your secrets in $SETTINGS (copy .env.local.example)." >&2
   exit 2
 fi
+if ! command -v node >/dev/null 2>&1; then
+  echo "Node.js 24 is required for the LibreChat preflight." >&2; exit 1
+fi
+node "$ROOT/scripts/check-librechat.mjs"
 if [[ ! -f "$HOME_DIR/docker-compose.yml" ]]; then
   mkdir -p "$(dirname "$HOME_DIR")"
   git clone --depth 1 https://github.com/LibreChat-AI/LibreChat.git "$HOME_DIR"
