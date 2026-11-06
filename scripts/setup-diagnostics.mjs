@@ -35,6 +35,8 @@ export function selectDiagnosticTools({ profile = 'core', names = [], agent = nu
     if (!tool) throw new Error('Nieznane narzędzie: ' + name);
     return tool;
   }) : DIAGNOSTIC_TOOLS;
+  if (names.length && agent !== null && selected.some(tool => tool.agent !== agent))
+    throw new Error('Wybrane narzędzie nie należy do agenta: ' + agent);
   return selected.filter(tool => agent === null || tool.agent === agent).map(tool => {
     const pkg = INSTALL_MAP[tool.name] || null;
     const eligible = Boolean(pkg && (names.length || profile === 'expanded' || Object.hasOwn(CORE, tool.name)));
