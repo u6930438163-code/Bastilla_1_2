@@ -23,12 +23,13 @@ export type TabId =
   | 'gpt_actions'
   | 'cloud_library'
   | 'integrations'
+  | 'librechat'
   | 'project_progress';
 
 export const TAB_IDS: readonly TabId[] = [
   'home', 'bastilla_os_2', 'comms', 'approvals', 'process_matrix', 'astyria_mission', 'schema_graph', 'temporal',
   'terminal', 'monolith', 'datastore', 'diagnostics', 'visualizer', 'file_explorer',
-  'apps', 'hyper_com', 'without_nlp', 'github', 'gpt_actions', 'cloud_library', 'integrations', 'project_progress',
+  'apps', 'hyper_com', 'without_nlp', 'github', 'gpt_actions', 'cloud_library', 'integrations', 'librechat', 'project_progress',
 ];
 
 /** Widok startowy z adresu — domyślnie uruchamia Bastilla OS 2 (zachowując BastillaOS 1 pod ?view=home). */
@@ -164,6 +165,7 @@ export const Navigation: React.FC<NavigationProps> = ({
       badge: 'API'
     },
     { id: 'integrations' as TabId, label: 'Integracje', icon: Blocks, badge: 'USŁUGI' },
+    { id: 'librechat' as TabId, label: 'LibreChat · Bastilla', icon: MessagesSquare, badge: '4 AGENTÓW' },
     { id: 'cloud_library' as TabId, label: 'Zdjęcia i notatki', icon: Images, badge: 'IMPORT' },
     {
       id: 'project_progress' as TabId,
@@ -186,6 +188,7 @@ export const Navigation: React.FC<NavigationProps> = ({
     terminal: 'Terminal',
     apps: 'Aplikacje',
     integrations: 'Integracje',
+    librechat: 'LibreChat',
   };
 
   return (
