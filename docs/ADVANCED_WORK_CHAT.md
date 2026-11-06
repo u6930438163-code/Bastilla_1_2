@@ -52,6 +52,47 @@ Oprócz Markdown, terminala, wykresów, obrazów, wideo i tabel, dostępne są:
 }
 ```
 
+## Dynamiczne LIVE — opcja dla metryk, wykresów i pasków
+
+W głównym czacie wybierz **Więcej → Work → Dynamiczne LIVE**. Każda powiązana karta ma przyciski **Włącz LIVE / Wstrzymaj LIVE**, **Odśwież** oraz selektor **CPU / RAM**. Na żywo aktualizuje się też wykres (ostatnie 24 odczyty). Po zatrzymaniu karta pokazuje wyłącznie statyczne wartości z wiadomości, a nie symuluje nowych danych.
+
+W wiadomości agent może włączyć odczyt tylko dla wspieranych typów `metric`, `chart`, `progress`, `table`, przez jawne pole `live`:
+
+```bastilla-ui
+{
+  "title": "Monitoring hosta",
+  "blocks": [
+    {
+      "type": "chart",
+      "title": "CPU · LIVE",
+      "chart": "line",
+      "labels": [],
+      "values": [],
+      "live": {
+        "source": "system_metrics",
+        "field": "cpuPercent",
+        "intervalMs": 5000
+      }
+    },
+    {
+      "type": "progress",
+      "title": "Użycie RAM",
+      "value": 0,
+      "live": {
+        "source": "system_metrics",
+        "field": "ramPercent",
+        "intervalMs": 5000
+      }
+    }
+  ]
+}
+```
+
+- Jedynym dozwolonym źródłem w tej wersji jest **GET /api/system/metrics** (odczyt hosta Bastilla). Pole `field` to wyłącznie `cpuPercent` albo `ramPercent`; RAM jest liczony na podstawie `ramUsedBytes / ramTotalBytes`. Agent nie może przez blok ustawić dowolnego URL.
+- Interwał jest ograniczony do 2–30 sekund; nieaktywna karta przeglądarki nie wykonuje cyklicznych odczytów. Przycisk **Odśwież** wymusza nowy odczyt.
+- Stan `LIVE` oznacza udany odczyt serwera. Przy błędzie pojawia się komunikat offline; zachowane ostatnie pomiary są oznaczane jako **nieaktualne**. Brak danych nie jest zastępowany fikcyjnym postępem.
+- Wszystkie elementy pozostają komponentami wyświetlania. Wygenerowane karty **nie uruchamiają komend**, nie wykonują żądań zapisu i nie zmieniają konfiguracji systemu.
+
 ## Kolejność wypowiedzi i streaming
 
 - `/api/triad/message` z nagłówkiem `Accept: text/event-stream` obsługuje SSE.
