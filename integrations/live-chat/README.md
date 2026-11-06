@@ -7,13 +7,19 @@ This module provides authenticated user sessions, a persistent message/event sto
 Configure these values in the deployment secret manager, not in Git:
 
 - BASTILLA_LIVE_CHAT_ALLOWED_ORIGIN: exact public origin, including scheme and port when nonstandard; no path.
-- BASTILLA_LIVE_CHAT_USER_PASSWORD: private operator password with at least 16 characters.
+- BASTILLA_LIVE_CHAT_USER_PASSWORD: legacy operator password, at least 16 characters. If set, disables first-run enrollment.
+- BASTILLA_LIVE_CHAT_SETUP_TOKEN: one-time server-side enrollment token (32+ random bytes), remove after enrollment.
+- BASTILLA_LIVE_CHAT_CREDENTIALS_PATH: persistent credentials file, default data/live-chat-credentials.json (salted scrypt password hash, mode 0600).
 - BASTILLA_LIVE_CHAT_SESSION_SECRET: random secret with at least 32 bytes.
 - BASTILLA_LIVE_CHAT_COOKIE_SECURE: true for HTTPS; set false only for localhost development.
 - BASTILLA_LIVE_CHAT_WORKER_TOKENS: JSON object containing four distinct random secrets, each at least 32 characters, keyed by Aria, Alex, Astyria and Aurelius.
 - BASTILLA_LIVE_CHAT_STORE_PATH: persistent writable file path. The default is data/live-chat-state.json.
 
 If the user session or worker credentials are missing, the relevant routes fail closed. The store uses atomic file replacement and serialized writes. Mount its directory on persistent storage; an ephemeral container filesystem is not a durable deployment.
+
+## First-run owner setup
+
+When no operator password or credentials file exists, set the allowed origin, session secret and setup token as **private deployment secrets**, then restart the Bastilla server. In the main chat, click **Połącz LIVE**, enter the token once and choose a unique 16+ character password. POST /api/live-chat/setup requires the exact Origin and setup token, is rate limited and cannot replace an existing password. GET /api/live-chat/setup exposes only a non-secret readiness state. On success the server issues a signed cookie. Save credentials on a durable private volume; remove the setup token from the environment and restart when done. When a legacy operator password is already configured, change it with the deployment secret manager, not the enrollment form. This never provisions original AI workers.
 
 ## Original agent workers
 
