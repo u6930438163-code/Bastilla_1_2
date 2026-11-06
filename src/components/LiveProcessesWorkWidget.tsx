@@ -77,10 +77,16 @@ export function LiveProcessesWorkWidget({
     void poll();
     const timer = window.setInterval(() => { void poll(); }, 9000);
     const visible = () => { if (!document.hidden) void poll(); };
+    const onWorkspace = (event: Event) => {
+      const topic = (event as CustomEvent<{ topic?: string }>).detail?.topic;
+      if (['terminal', 'agents', 'kernel', 'workspace'].includes(String(topic))) void poll();
+    };
     document.addEventListener('visibilitychange', visible);
+    window.addEventListener('bastilla:workspace-event', onWorkspace);
     return () => {
       disposed = true; active?.abort(); window.clearInterval(timer);
       document.removeEventListener('visibilitychange', visible);
+      window.removeEventListener('bastilla:workspace-event', onWorkspace);
     };
   }, [enabled, refresh, cardVisible]);
 
