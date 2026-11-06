@@ -1,4 +1,6 @@
 import { createLiveChatRouter } from './integrations/live-chat/router.mjs';
+import { ChatReactionStore } from './integrations/reactions/store.mjs';
+import { createChatReactionsRouter } from './integrations/reactions/router.mjs';
 import { createLiveChatSessionAuth, createLiveChatWorkerAuth } from './integrations/live-chat/auth.mjs';
 import { LiveChatStore } from './integrations/live-chat/store.mjs';
 import { createWorkspaceSyncHub } from './integrations/workspace-sync/hub.mjs';
@@ -15,7 +17,7 @@ import { promisify } from 'util';
 import fs from 'fs';
 import os from 'os';
 import { randomUUID, createHash } from 'crypto';
-import { INITIAL_DATA_STORE } from './src/kernel/svlKernel';
+import { INITIAL_DATA_STORE, normalizeDataStore } from './src/kernel/svlKernel';
 import type { ChatSystemChange } from './src/kernel/chatChanges';
 import { withoutNlpEngine } from './src/lib/withoutNlpEngine';
 import {
@@ -210,6 +212,22 @@ app.use((err: any, _req: express.Request, res: express.Response, next: express.N
 // chat transcripts, terminal output or credentials to other devices.
 const workspaceSync = createWorkspaceSyncHub(liveChatAuth.requireUser);
 app.use('/api/workspace', workspaceSync.router);
+// Reactions belong to the original Triada conversation, not a separate live-chat feed.
+// A real agent identity is assigned only by its own configured worker token.
+const chatReactionStore = new ChatReactionStore(
+  process.env.BASTILLA_CHAT_REACTIONS_STORE_PATH || 'data/chat-reactions.json'
+);
+app.use('/api/chat/reactions', createChatReactionsRouter({
+  store: chatReactionStore,
+  getHistory: async () => {
+    const state = await getPythonKernelState(true);
+    if (!state?.store) throw new Error('Historia czatu jest niedostępna.');
+    return normalizeDataStore(state.store).chat_history;
+  },
+  sameOrigin: isSameOriginApprovalRequest,
+  requireWorker: liveChatWorkerAuth,
+  notify: () => workspaceSync.publish('chat'),
+}));
 app.use('/api/operations', createOperationsRouter({
   requireUser: liveChatAuth.requireUser,
   getLogs: () => systemLogs,
