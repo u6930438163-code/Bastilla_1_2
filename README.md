@@ -1,6 +1,6 @@
-# Bastilla OS 2
+# Bastilla OS 2 — Bastilla_1_2
 
-Repozytorium główne: **mmitek515-netizen/Bastilla_OS_2**.
+Repozytorium tej kopii projektu: **u6930438163-code/Bastilla_1_2** (`main`).
 
 Odtworzona baza aplikacji webowej BastillaOS, integracji AI/MCP i narzędzi
 Debian/QEMU. Obecność konfiguracji VM lub profili AI nie oznacza ich uruchomienia.
