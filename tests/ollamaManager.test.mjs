@@ -130,3 +130,29 @@ test('listOllamaModels i deleteOllamaModel obsługują API Ollamy poprawnie', as
   await deleteOllamaModel('http://127.0.0.1:11434', 'old-model:1b', fetchImpl);
   assert.deepEqual(deleted, ['old-model:1b']);
 });
+
+test('przywrócenie Ollamy bez pruneOthers nigdy nie usuwa istniejących modeli', async () => {
+  const calls = [];
+  const fakeFetch = async (url, init = {}) => {
+    const path = new URL(url).pathname;
+    calls.push({ path, method: init.method || 'GET' });
+    if (path === '/api/version') return json(200, { version: '0.9.0' });
+    if (path === '/api/pull') return json(200, { status: 'success' });
+    if (path === '/api/tags') return json(200, {
+      models: [{ name: 'qwen3:14b' }, { name: 'dolphin-mixtral:8x7b' }],
+    });
+    if (path === '/api/chat') return json(200, { done: true });
+    if (path === '/api/delete') throw new Error('Model deletion is forbidden by default');
+    throw new Error('unexpected request ' + path);
+  };
+  const result = await syncOllamaExclusiveModel({
+    baseUrl: 'http://127.0.0.1:11434',
+    targetModel: 'dolphin-mixtral:8x7b',
+    fetchImpl: fakeFetch,
+  });
+  assert.equal(result.ok, true);
+  assert.equal(result.connected, true);
+  assert.deepEqual(result.removedModels, []);
+  assert.deepEqual(result.keptModels, ['qwen3:14b', 'dolphin-mixtral:8x7b']);
+  assert.equal(calls.some(c => c.path === '/api/delete'), false);
+});
