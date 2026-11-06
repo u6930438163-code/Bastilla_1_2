@@ -1,8 +1,11 @@
 # Bastilla AI Work — interaktywny czat LIVE
 
-Interfejs `src/components/LiveAgentChat.tsx` ma przełącznik **Tryb Work**,
-przyciskowe skróty poleceń i renderowanie wiadomości przez
-`src/components/WorkChatMessage.tsx`.
+Główny czat `src/components/AgentCommsView.tsx` (zakładka **Czat**, z wyborem
+Aria, Alex, Astyria, Aurelius i Wszyscy) renderuje wiadomości za pomocą
+`src/components/WorkChatMessage.tsx`. Podręczne przyciski Wykres, Grafika,
+Wideo, Kod i Raport są w jego polu tworzenia wiadomości. Przełącznik Work
+pokazuje demonstrację możliwości wewnątrz tej samej historii. Osobny interfejs
+"Czat AI · LIVE" został usunięty — nie ma dodatkowego wyskakującego okna.
 
 ## Co obsługujemy
 
@@ -13,8 +16,15 @@ przyciskowe skróty poleceń i renderowanie wiadomości przez
   WebM i YouTube.
 - Przycisk działania **wstawia propozycję do pola edycji**. Operator sam
   zatwierdza wysłanie; sam klik nie uruchamia polecenia ani skryptu.
-- Historyczne wiadomości i streaming SSE pozostają w API `/api/live-chat`;
-  dla widgetów nie dodano obejścia autoryzacji.
+- Historia wiadomości głównego czatu zachowuje dotychczasowy magazyn i
+  `/api/triad/message`; istniejący mechanizm synchronizacji dostarcza
+  wiadomości agentów do tego samego ekranu.
+- Serwerowy `/api/live-chat` pozostaje jako infrastruktura sesji,
+  statusów workerów i kolejki diagnostycznej, ale bez osobnego popupu czatu.
+- Menedżer procesów/ollamy może przygotować zgłoszenie do wybranego agenta
+  **bezpośrednio w głównym czacie**. Użytkownik musi potwierdzić wysłanie.
+- Nie obchodzimy autoryzacji: prywatny menedżer diagnostyczny oferuje
+  formularz logowania operatora w swoim panelu.
 
 ## Format odpowiedzi agenta
 
@@ -68,6 +78,9 @@ komend terminala ani zdalnego działania bez zgody użytkownika.
 ## Weryfikacja
 
 W repozytorium wykonaj `npm ci && npm run lint && npm test && npm run build`.
-W celu sprawdzenia czatu w trybie LIVE muszą być skonfigurowane zmienne
-uwierzytelnienia, aktywne API `/api/live-chat` oraz prawdziwe workery agentów
+Aby zobaczyć nowe elementy, otwórz **główny czat agentów**, kliknij Work
+lub jeden z przycisków nad polem wpisywania. Zmiana ta nie gwarantuje
+zdolności agenta do wygenerowania obrazu/filmu — źródło musi rzeczywiście
+zwrócić zasób. Dla statusu workerów i prywatnego panelu diagnostyki wymagane
+są działające API, logowanie operatora i poprawna konfiguracja
 (patrz `docs/LIVE_CHAT_SETUP.md`).
