@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { BarChart3, ChevronDown, ChevronUp, Clapperboard, Code2, Copy, Image as ImageIcon, Play, Sparkles } from 'lucide-react';
 import { FormattedMessage } from './FormattedMessage';
 import { RichInlineWidget } from './RichInlineWidget';
+import { AgentChoiceWidget } from './AgentChoiceWidget';
 import { AdvancedWorkWidget } from './AdvancedWorkWidget';
 import { TerminalWorkCard, type TerminalCardEntry, type TerminalCardStatus } from './TerminalWorkCard';
 import { ProgressWorkWidget, StepsWorkWidget, FileExplorerWorkWidget, ModelSettingsWorkWidget, ThreeDWorkWidget, PdfWorkWidget } from './AdvancedWorkWidgets';
@@ -100,6 +101,7 @@ function VideoPlayer({ src, title }: { src: string; title: string }) {
 function Widget({ block, onPrompt, onOpenTerminal }: { block: WorkBlock; onPrompt: (prompt: string) => void; onOpenTerminal?: () => void }) {
   const kind = block.type;
   if (kind === 'rich_inline') return <RichInlineWidget block={block}/>;
+  if (kind === 'guide') return <AgentChoiceWidget block={block} onPrompt={onPrompt} onOpenTerminal={onOpenTerminal}/>;
   if (kind === 'progress') return <ProgressWorkWidget block={block}/>;
   if (kind === 'steps') return <StepsWorkWidget block={block}/>;
   if (kind === 'files') return <FileExplorerWorkWidget block={block}/>;
@@ -201,6 +203,26 @@ export function WorkChatMessage({ content, onPrompt, onOpenTerminal }: WorkChatM
 }
 
 const examples = {
+  freedom: {
+    title: 'Dowolność AI · wybór kolejnego kroku (DEMO)',
+    blocks: [
+      { type: 'text', content: '**Astyria:** Proponuję przygotować raport diagnostyczny systemu. Możesz wybrać kolejne działanie — samodzielnie decydujesz, co zrobić.' },
+      { type: 'guide', title: 'Co robimy dalej?', description: 'Agent dobiera kartę i proponuje działania zależnie od tematu rozmowy.',
+        steps: ['Otwórz raport, aby zobaczyć wyniki i błędy.', 'Sprawdź szczegóły logów i działanie MCP.', 'Zdecyduj, czy przekazać diagnozę wybranemu agentowi.'],
+        actions: [
+          {label: 'Pokaż raport', prompt: 'Przygotuj raport systemu z rzeczywistych danych, sukcesów i błędów, z odpowiednimi kartami bastilla-ui.'},
+          {label: 'Sprawdź logi', prompt: 'Pokaż rzeczywiste logi sukcesów i błędów, bez wymyślania pomiarów.'},
+          {label: 'Otwórz terminal', kind: 'terminal'},
+        ]},
+      { type: 'rich_inline', items: [
+        {kind: 'text', value: 'Dostępne formaty:'},
+        {kind: 'badge', value: 'Raport'},
+        {kind: 'code', value: 'curl'},
+        {kind: 'info', value: 'Wykresy'},
+        {kind: 'success', value: 'Statusy'},
+      ]},
+    ],
+  },
   inline: {
     title: 'Formatowanie inline · przykład',
     blocks: [{
@@ -301,7 +323,7 @@ const examples = {
 
 export function WorkChatDemo({ onPrompt, onOpenTerminal }: { onPrompt: (prompt: string) => void; onOpenTerminal?: () => void }) {
   const [open, setOpen] = useState(true);
-  const [tab, setTab] = useState<keyof typeof examples>('chart');
+  const [tab, setTab] = useState<keyof typeof examples>('freedom');
   return <div className="border-b border-sky-900 bg-[#091827] px-3 py-2">
     <div className="flex items-center justify-between gap-2">
       <div className="flex gap-2 items-center"><Sparkles size={16} className="text-cyan-300"/><strong className="text-sm text-white">Work · interaktywny podgląd</strong></div>
@@ -310,6 +332,7 @@ export function WorkChatDemo({ onPrompt, onOpenTerminal }: { onPrompt: (prompt: 
     {open && <div className="pt-2">
       <div className="flex flex-wrap gap-1.5 mb-2">
         {([
+          ['freedom', Sparkles, 'Dowolność AI'],
           ['inline', Code2, 'Inline + status'],
           ['chart', BarChart3, 'Wykres'],
           ['image', ImageIcon, 'Grafiki'],
