@@ -6172,18 +6172,7 @@ app.post('/api/triad/free-voice', async (req, res) => {
   const topicHint = typeof req.body?.topicHint === 'string' ? req.body.topicHint.trim().slice(0, 600) : '';
   const allowSilenceAll = Boolean(req.body?.allowSilenceAll);
   const target = requestedTarget as ChatTarget;
-  const configuredLlmProviders = configuredProviders(LLM_CHAIN_CONFIG);
-  const llmProviders = requestedProviderMode === undefined
-    ? configuredLlmProviders
-    : requestedProviderMode === 'ollama'
-      ? configuredLlmProviders.filter((provider) => provider === 'ollama')
-      : configuredLlmProviders.filter((provider) => provider !== 'ollama');
-  if (requestedProviderMode === 'ollama' && llmProviders.length === 0) {
-    return sendChatError(req, res, 503, 'Ollama nie jest skonfigurowana. Sprawdź OLLAMA_BASE_URL i dostępność modelu na serwerze.');
-  }
-  if (requestedProviderMode === 'api' && llmProviders.length === 0) {
-    return sendChatError(req, res, 503, 'Brak skonfigurowanego dostawcy API. Dodaj klucz Gemini lub xAI po stronie serwera.');
-  }
+  const llmProviders = configuredProviders(LLM_CHAIN_CONFIG);
 
   if (llmProviders.length === 0 && !CHAT_LOCAL_FALLBACK) {
     return sendChatError(req, res, 503, 'Brak skonfigurowanego modelu czatu dla swobodnej wypowiedzi AI.');
@@ -6509,7 +6498,19 @@ app.post('/api/triad/message', async (req, res) => {
   }
 
   // CZAT TRIADY: swobodna rozmowa — Gemini → xAI (Grok) → Ollama (lokalny model) → without_nlp.
-  const llmProviders = configuredProviders(LLM_CHAIN_CONFIG);
+  const availableLlmProviders = configuredProviders(LLM_CHAIN_CONFIG);
+  const llmProviders = requestedProviderMode === 'ollama'
+    ? availableLlmProviders.filter((provider) => provider === 'ollama')
+    : requestedProviderMode === 'api'
+      ? availableLlmProviders.filter((provider) => provider !== 'ollama')
+      : availableLlmProviders;
+  if (requestedProviderMode && llmProviders.length === 0) {
+    return sendChatError(req, res, 503,
+      requestedProviderMode === 'ollama'
+        ? 'Wybrano Ollamę, lecz model lokalny nie jest skonfigurowany.'
+        : 'Wybrano API, ale żaden dostawca API nie jest skonfigurowany.');
+  }
+  const chatLlmConfig: LlmChainConfig = { ...LLM_CHAIN_CONFIG, providers: llmProviders };
   if (llmProviders.length === 0 && (!CHAT_LOCAL_FALLBACK || attachments.some((attachment) => attachment.mimeType?.startsWith('image/')))) {
     return sendChatError(req, res, 503, 'Brak skonfigurowanego modelu czatu. Ustaw LLM_PROVIDERS="ollama" i uruchom Ollamę albo skonfiguruj dostawcę API w sekretach serwera.');
   }
@@ -6557,7 +6558,7 @@ app.post('/api/triad/message', async (req, res) => {
       const currentResult = await (async () => {
       if (llmProviders.length > 0) {
         try {
-          const result = await generateWithChain(LLM_CHAIN_CONFIG, {
+          const result = await generateWithChain(chatLlmConfig, {
             system: `${CHAT_AGENT_MISSIONS[agent]} ${CHAT_AGENT_CONVERSATION_STYLE} ${CHAT_AGENT_RICH_UI_STYLE} ${freedomMode ? CHAT_AGENT_FREEDOM_STYLE : ""} ${CHAT_AGENT_SAFETY_BOUNDARIES}${hasImageAttachment ? ' Do wiadomości dołączono zdjęcie — obejrzyj je i opisz konkretnie, co faktycznie na nim widać (obiekty, osoby, światło, zmiany). Nie powtarzaj wcześniejszych odpowiedzi i nie odpowiadaj ogólnikami o systemie.' : ''}`,
             // Lokalny model: krótsza historia = mniej tokenów do przetworzenia przed odpowiedzią.
             // Przy zdjęciu pomijamy historię, by model nie powielał poprzednich, identycznych odpowiedzi.
