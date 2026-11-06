@@ -1,8 +1,9 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import { DiagnosticsToolsPanel } from './DiagnosticsToolsPanel';
 import { Activity, AlertTriangle, Bot, CheckCircle2, CircleHelp, Cpu, HardDrive, MemoryStick, RefreshCw, Send, Server, ShieldCheck, Terminal, Wrench } from 'lucide-react';
 
 type AgentName = 'Aria' | 'Alex' | 'Astyria' | 'Aurelius';
-type ManagerSection = 'processes' | 'logs' | 'ollama';
+type ManagerSection = 'processes' | 'logs' | 'ollama' | 'tools';
 type LogFilter = 'all' | 'errors' | 'success' | 'info';
 type ProcessItem = { pid: number; ppid: number; name: string; cpuPercent: number; rssBytes: number; state: string; elapsed: string };
 type ProcessReport = { available: boolean; processes: ProcessItem[]; sampledAt?: string; error?: string; currentPid?: number };
@@ -209,6 +210,7 @@ export function TaskManagerView({ initialSection = 'processes', onPrepareMainCha
           ['processes', 'Procesy', Cpu],
           ['logs', 'Logi', Terminal],
           ['ollama', 'Ollama AI', MemoryStick],
+          ['tools', '50 narzędzi', Wrench],
         ] as const).map(([id, name, Icon]) => (
           <button type="button" role="tab" key={id} aria-selected={section === id}
             onClick={() => setSection(id)} className={section === id ? 'is-active' : ''}>
@@ -233,6 +235,7 @@ export function TaskManagerView({ initialSection = 'processes', onPrepareMainCha
       {loading && <div className="bastilla-ops-loading" role="status"><RefreshCw className="animate-spin w-4 h-4"/> Pobieranie prawdziwych danych…</div>}
 
       {!locked && <div className="bastilla-ops-body">
+        {section === 'tools' && <DiagnosticsToolsPanel agent={selectedAgent} onPrepareMainChat={onPrepareMainChat} />}
         {section === 'processes' && <section className="bastilla-ops-panel" aria-label="Procesy systemowe">
           <div className="bastilla-ops-section-heading">
             <div><h2>Procesy systemu</h2><p>Rzeczywisty snapshot `ps`: PID, CPU, RSS, stan i czas działania. Bez fikcyjnych procesów.</p></div>

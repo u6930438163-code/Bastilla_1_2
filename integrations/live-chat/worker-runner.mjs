@@ -2,6 +2,7 @@ import 'dotenv/config';
 import { resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { createAgentWorker } from './worker-client.mjs';
+import { createBackgroundAgentDiagnostics } from '../diagnostics/catalog.mjs';
 
 const agent = process.env.BASTILLA_LIVE_CHAT_AGENT || '';
 const adapterPath = process.env.BASTILLA_AGENT_ADAPTER || '';
@@ -12,12 +13,18 @@ if (typeof adapter.runAgent !== 'function') {
   throw new Error('The original agent adapter must export async function runAgent(job, context)');
 }
 
+const diagnosticOnIdle = createBackgroundAgentDiagnostics({ agent });
+
 const worker = createAgentWorker({
   baseUrl: process.env.BASTILLA_LIVE_CHAT_BASE_URL || '',
   agent,
   token: process.env.BASTILLA_LIVE_CHAT_WORKER_TOKEN || '',
   runAgent: adapter.runAgent,
-  onIdle: typeof adapter.onIdle === 'function' ? adapter.onIdle : undefined,
+  onIdle: async (context) => {
+    // Read-only agent diagnostics are distinct from original agent's autonomous LLM actions.
+    await diagnosticOnIdle(context);
+    if (typeof adapter.onIdle === 'function') await adapter.onIdle(context);
+  },
   onError: (error) => console.error('[LIVE CHAT WORKER]', agent, error?.message || error),
 });
 

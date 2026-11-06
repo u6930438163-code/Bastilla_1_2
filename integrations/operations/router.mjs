@@ -1,4 +1,5 @@
 import { Router } from 'express';
+import { diagnosticInventory, diagnosticSnapshot } from '../diagnostics/catalog.mjs';
 
 // Operator-only, read-only diagnostics. No shell input or privileged process controls.
 // Do not expose command lines, environment variables or unredacted stack traces.
@@ -109,6 +110,9 @@ export function createOperationsRouter({ requireUser, getLogs, getConfig, execFi
   const router = Router();
   router.use(requireUser);
   router.use((_req, res, next) => { res.setHeader('Cache-Control', 'no-store'); next(); });
+
+  router.get('/diagnostics/tools', (_req, res) => res.json(diagnosticInventory()));
+  router.get('/diagnostics/snapshot', (_req, res) => res.json(diagnosticSnapshot()));
 
   router.get('/logs', (_req, res) => {
     const filter = ['all', 'errors', 'success', 'info'].includes(String(_req.query.filter))
