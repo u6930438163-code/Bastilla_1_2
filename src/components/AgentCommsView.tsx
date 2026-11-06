@@ -3,6 +3,7 @@ import { DataStore, OPERATOR_NAME } from '../kernel/svlKernel';
 import { SYSTEM_AGENTS, AgentProfile } from '../kernel/agents';
 import { Sparkles, ShieldCheck, RefreshCw, Image as ImageIcon, FileText, MessagesSquare, Paperclip, Send, X, SlidersHorizontal, Maximize2, Minimize2, BarChart3, Clapperboard, Code2, Copy, Download, Reply, ThumbsDown, ThumbsUp } from 'lucide-react';
 import { WorkChatMessage, WorkChatDemo } from './WorkChatMessage';
+import { ChatEngineSelector } from './ChatEngineSelector';
 import { TerminalWorkCard, type TerminalCardEntry, type TerminalCardStatus } from './TerminalWorkCard';
 import { WorkspaceCommandCenter } from './WorkspaceCommandCenter';
 import { ChatAvatar, ChatReactionBar, type ChatVotes } from './ChatReactionBar';
@@ -1196,17 +1197,7 @@ export const AgentCommsView: React.FC<AgentCommsViewProps> = ({
                   aria-label="Dołącz pliki tekstowe, DOCX, PDF lub zdjęcia"/>
               </div>
               <div className="min-w-0 flex-1"/>
-              <label className="flex shrink-0 items-center gap-1.5 rounded-full px-2 py-1 text-sm text-slate-300 hover:bg-white/5">
-                <span className="hidden text-xs text-slate-500 sm:inline">Silnik</span>
-                <select aria-label="Wybierz silnik AI" value={providerMode}
-                  onChange={event => setProviderMode(event.target.value as 'api' | 'ollama')}
-                  disabled={isLoading}
-                  className="max-w-[112px] rounded-lg border border-slate-600/60 bg-slate-900 px-2 py-2 text-[13px] font-medium text-slate-100 outline-none focus:border-cyan-400">
-                  <option value="api" className="bg-slate-900">OpenAI API</option>
-                  <option value="ollama" className="bg-slate-900">Ollama</option>
-                </select>
-                <span aria-hidden="true" className="pointer-events-none -ml-4 text-[10px] text-slate-400">▾</span>
-              </label>
+              <ChatEngineSelector value={providerMode} onChange={setProviderMode} disabled={isLoading}/>
               <button type="submit"
                 aria-label={isLoading ? 'Wysyłanie wiadomości' : `Wyślij wiadomość do ${{ triad: 'wszystkich agentów', si_1: 'Arii', Alex: 'Alexa', Astyria: 'Astyrii', Aurelius: 'Aureliusa' }[selectedTarget]}`}
                 disabled={(!messageText.trim() && chatAttachments.length === 0) || isLoading}
