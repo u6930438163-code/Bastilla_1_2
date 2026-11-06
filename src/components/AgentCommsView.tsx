@@ -992,7 +992,7 @@ export const AgentCommsView: React.FC<AgentCommsViewProps> = ({
         }}
         className="bastilla-chat-scroller min-h-0 min-w-0 flex-1 overflow-y-auto px-2.5 py-3 sm:px-6 sm:py-5 space-y-2.5 sm:space-y-3.5 scrollbar-thin w-full max-w-6xl mx-auto"
       >
-        {showWorkPreview && <WorkChatDemo onPrompt={prompt => { void runQuickAction(prompt); }} onOpenTerminal={onOpenTerminal} />}
+        {showWorkPreview && <WorkChatDemo onPrompt={prompt => { void runQuickAction(prompt); }} onPreparePrompt={prepareWorkPrompt} onOpenTerminal={onOpenTerminal} />}
         {sendError && (
           <div role="alert" aria-live="assertive" className="rounded-lg border border-rose-500/40 bg-rose-950/40 p-3 text-xs text-rose-200">
             Nie udało się wysłać żądania: {sendError}
@@ -1058,7 +1058,7 @@ export const AgentCommsView: React.FC<AgentCommsViewProps> = ({
 
                 {/* Message Body with KaTeX LaTeX formulas and Markdown */}
                 <WorkChatMessage content={destination ? msg.tekst.replace(/^\[Do: [^\]\n]+\]\n/, '') : msg.tekst}
-                  onPrompt={prompt => { void runQuickAction(prompt); }} onOpenTerminal={onOpenTerminal} />
+                  onPrompt={prompt => { void runQuickAction(prompt); }} onPreparePrompt={prepareWorkPrompt} onOpenTerminal={onOpenTerminal} />
                 <div className="bastilla-chat-card__actions mt-2 flex flex-wrap items-center justify-end gap-1">
                   <ChatReactionBar
                     votes={reactionVotes[reactionKeys[idx]] || {}}
@@ -1144,7 +1144,7 @@ export const AgentCommsView: React.FC<AgentCommsViewProps> = ({
                     {item.channel} · {Number.isFinite(Date.parse(item.at)) ? new Date(item.at).toLocaleTimeString('pl-PL') : 'czas nieznany'}
                   </span>
                 </div>
-                <WorkChatMessage content={item.text} onPrompt={prompt => { void runQuickAction(prompt); }} onOpenTerminal={onOpenTerminal}/>
+                <WorkChatMessage content={item.text} onPrompt={prompt => { void runQuickAction(prompt); }} onPreparePrompt={prepareWorkPrompt} onOpenTerminal={onOpenTerminal}/>
                 <div className="mt-2 border-t border-slate-800/60 pt-2">
                   <ChatReactionBar
                     votes={reactionVotes[liveReactionKey(item)] || {}}
@@ -1176,7 +1176,7 @@ export const AgentCommsView: React.FC<AgentCommsViewProps> = ({
                   </span>
                 </div>
                 {entry.status === 'done'
-                  ? <WorkChatMessage content={entry.text} onPrompt={prompt => { void runQuickAction(prompt); }} onOpenTerminal={onOpenTerminal}/>
+                  ? <WorkChatMessage content={entry.text} onPrompt={prompt => { void runQuickAction(prompt); }} onPreparePrompt={prepareWorkPrompt} onOpenTerminal={onOpenTerminal}/>
                   : <div className="min-h-[24px] whitespace-pre-wrap break-words font-mono text-sm leading-relaxed text-slate-100">
                     {entry.text || '…'}<span aria-hidden="true" className="ml-1 inline-block h-4 w-1.5 animate-pulse bg-cyan-400 align-middle" />
                   </div>}
