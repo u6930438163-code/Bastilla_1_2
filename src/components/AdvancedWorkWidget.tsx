@@ -202,6 +202,59 @@ function AgentHandoffWidget({ block, onPrompt }: Props) {
   </section>;
 }
 
+
+/** Read-only technical views: copying does not call any endpoint or execute a shell command. */
+function TechnicalWidget({ block }: { block: AdvancedBlock }) {
+  const [mode, setMode] = useState<'request' | 'curl' | 'response'>('request');
+  const [copied, setCopied] = useState(false);
+  const kind = String(block.type);
+  const method = s(block.method, 12).toUpperCase().replace(/[^A-Z]/g, '') || 'GET';
+  const url = s(block.url, 2000).replace(/[\r\n]/g, '');
+  const body = typeof block.body === 'string' ? s(block.body, 12000)
+    : block.body == null ? '' : JSON.stringify(block.body, null, 2).slice(0, 12000);
+  const sourceHeaders = block.headers && typeof block.headers === 'object' && !Array.isArray(block.headers)
+    ? Object.entries(block.headers).slice(0, 20).filter(([key, value]) => typeof value === 'string' && key.length <= 100)
+    : [];
+  const shell = (part: string) => "'" + part.replace(/'/g, "'\\''") + "'";
+  const command = s(block.command, 12000) || [
+    'curl', '-X', method, ...sourceHeaders.flatMap(([k,v]) => ['-H', shell(k.replace(/[\r\n]/g, '') + ': ' + String(v).replace(/[\r\n]/g, ''))]),
+    ...(body ? ['--data-raw', shell(body)] : []), shell(url || 'https://example.invalid'),
+  ].join(' ');
+  const response = typeof block.response === 'string' ? s(block.response, 16000)
+    : block.response === undefined ? '' : JSON.stringify(block.response, null, 2).slice(0, 16000);
+  const json = typeof block.data === 'string' ? s(block.data, 16000) : JSON.stringify(block.data ?? block.body ?? {}, null, 2).slice(0, 16000);
+  const lines = s(block.diff, 18000).split('\n').slice(0, 350);
+  const logEntries = records(block.entries, 100);
+  const [filter, setFilter] = useState('all');
+  const selectedLogs = logEntries.filter(entry => filter === 'all' || s(entry.level, 20).toLowerCase() === filter);
+  const display = kind === 'curl' || kind === 'http'
+    ? mode === 'curl' ? command : mode === 'response' ? response : [method + ' ' + url, ...sourceHeaders.map(([k,v])=> k + ': ' + v), '', body].join('\n')
+    : kind === 'json' ? json : kind === 'diff' ? lines.join('\n') : selectedLogs.map(entry => '[' + s(entry.level, 12) + '] ' + s(entry.text, 2500)).join('\n');
+  const copy = () => { void navigator.clipboard?.writeText(display).then(() => setCopied(true)).catch(() => setCopied(false)); };
+  return <section className={surface} aria-label={'Formatowanie: ' + kind}>
+    <div className="flex flex-wrap items-center justify-between gap-2">
+      <strong className="text-sm">{s(block.title, 100) || ({ curl: 'cURL / HTTP', http: 'HTTP request', json: 'JSON', diff: 'Zmiany plików', logs: 'Logi' } as Record<string,string>)[kind] || 'Dane techniczne'}</strong>
+      <button type="button" onClick={copy} className={buttonStyle}>{copied ? 'Skopiowano' : 'Kopiuj'}</button>
+    </div>
+    {(kind === 'curl' || kind === 'http') && <div role="tablist" className="my-3 flex gap-1.5">
+      {(['request','curl','response'] as const).map(tab => <button key={tab} type="button" role="tab" aria-selected={mode === tab}
+        onClick={() => { setMode(tab); setCopied(false); }}
+        className={mode === tab ? buttonStyle : 'rounded-lg border border-slate-700 px-3 py-2 text-xs text-slate-400'}>
+        {tab === 'request' ? 'Żądanie' : tab === 'curl' ? 'cURL' : 'Odpowiedź'}
+      </button>)}
+    </div>}
+    {kind === 'logs' && <div className="my-3 flex flex-wrap gap-1.5">{['all','success','error','warn','info'].map(key =>
+      <button type="button" key={key} onClick={() => setFilter(key)} aria-pressed={filter === key}
+        className={filter === key ? buttonStyle : 'rounded-lg border border-slate-700 px-2 py-1.5 text-xs text-slate-400'}>
+        {key === 'all' ? 'Wszystkie' : key === 'error' ? 'Błędy' : key === 'success' ? 'Sukcesy' : key}
+      </button>)}</div>}
+    <pre className="mt-3 max-h-[420px] overflow-auto rounded-lg border border-slate-800 bg-slate-950 p-3 text-[11px] leading-relaxed text-sky-100 whitespace-pre-wrap break-all"><code>
+      {kind === 'diff' ? lines.map((line,i) => <span key={i} className={'block ' + (line.startsWith('+') ? 'text-emerald-300' : line.startsWith('-') ? 'text-rose-300' : line.startsWith('@@') ? 'text-amber-300' : 'text-slate-300')}>{line}</span>) : display || 'Brak danych do wyświetlenia.'}
+    </code></pre>
+    <p className="mt-2 text-[10px] text-slate-500">Dane od agenta — niezweryfikowane. Kopiowanie nie wykonuje poleceń. Nie umieszczaj haseł ani tokenów w blokach cURL.</p>
+  </section>;
+}
+
 export function AdvancedWorkWidget({ block, onPrompt }: Props): React.ReactElement | null {
   switch (block.type) {
     case 'progress': return <ProgressWidget block={block}/>;
@@ -213,6 +266,7 @@ export function AdvancedWorkWidget({ block, onPrompt }: Props): React.ReactEleme
     case 'form': return <FormWidget block={block} onPrompt={onPrompt}/>;
     case 'code': return <CodeWidget block={block}/>;
     case 'handoff': return <AgentHandoffWidget block={block} onPrompt={onPrompt}/>;
+    case 'curl': case 'http': case 'json': case 'diff': case 'logs': return <TechnicalWidget block={block}/>;
     default: return null;
   }
 }
