@@ -23,6 +23,19 @@ export class ChatReactionStore {
   }
   list() { return structuredClone(this.data); }
   get(key) { return { ...(this.data[key] || {}) }; }
+  clear() {
+    const draft = {};
+    fs.mkdirSync(path.dirname(this.filePath), { recursive: true });
+    const temporary = this.filePath + '.tmp-' + process.pid;
+    try {
+      fs.writeFileSync(temporary, JSON.stringify(draft), { mode: 0o600 });
+      fs.renameSync(temporary, this.filePath);
+      this.data = draft;
+    } finally {
+      try { fs.unlinkSync(temporary); } catch { /* renamed or not created */ }
+    }
+    return this.list();
+  }
   vote(key, actor, requested) {
     if (!keyPattern.test(key) || !REACTION_ACTORS.includes(actor) ||
       (requested !== null && !VALID_VOTES.has(requested))) {
