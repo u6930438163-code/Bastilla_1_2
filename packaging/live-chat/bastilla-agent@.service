@@ -2,6 +2,7 @@
 Description=Bastilla original AI agent worker (%i)
 Wants=network-online.target
 After=network-online.target
+StartLimitIntervalSec=0
 
 [Service]
 Type=simple
@@ -13,7 +14,6 @@ Environment=NODE_ENV=production
 ExecStart=/usr/bin/node /opt/bastilla/integrations/live-chat/worker-runner.mjs
 Restart=on-failure
 RestartSec=10
-StartLimitIntervalSec=0
 NoNewPrivileges=true
 PrivateTmp=true
 ProtectSystem=strict
