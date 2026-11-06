@@ -11,8 +11,10 @@ let sourceRevision = '';
 let isDirty = true;
 
 try {
-  sourceRevision = execFileSync('git', ['rev-parse', 'HEAD'], {encoding: 'utf8'}).trim();
-  isDirty = Boolean(execFileSync('git', ['status', '--porcelain'], {encoding: 'utf8'}).trim());
+  // Google AI Studio previews may have no .git directory; avoid noisy stderr from Git.
+  const quietGit = { encoding: 'utf8' as const, stdio: ['ignore', 'pipe', 'ignore'] as const };
+  sourceRevision = execFileSync('git', ['rev-parse', 'HEAD'], quietGit).trim();
+  isDirty = Boolean(execFileSync('git', ['status', '--porcelain'], quietGit).trim());
 } catch {
   sourceRevision = '';
   isDirty = true;
