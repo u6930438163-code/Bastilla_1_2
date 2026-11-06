@@ -92,6 +92,38 @@ export function createAgentWorker(options = {}) {
     return result.event;
   }
 
+  // Expose a real, identity-bound voting action to original agent adapters.
+  // No background or fabricated votes: the agent must request each vote explicitly.
+  async function reactionRequest(path, options = {}) {
+    const signal = options.signal || internalController.signal;
+    await verifyIdentity(signal);
+    const headers = { Authorization: 'Bearer ' + token, Accept: 'application/json' };
+    const body = options.body === undefined ? undefined : JSON.stringify(options.body);
+    if (body !== undefined) headers['Content-Type'] = 'application/json';
+    const response = await fetchImpl(new URL(path, new URL('/api/chat/reactions/', baseUrl)), {
+      method: options.method || 'GET', headers, body, signal,
+    });
+    const raw = await response.text();
+    if (!response.ok) throw new Error('Reaction API HTTP ' + response.status + ': ' + raw.slice(0, 300));
+    return raw ? JSON.parse(raw) : {};
+  }
+
+  async function listReactionMessages(options = {}) {
+    const result = await reactionRequest('worker/messages', options);
+    return Array.isArray(result.messages) ? result.messages : [];
+  }
+
+  async function voteOnMessage(messageKey, vote, options = {}) {
+    if (typeof messageKey !== 'string' ||
+        !/^(?:m_[a-z0-9]{1,16}_[a-z0-9]{1,8}|l_[a-z0-9]{1,16})$/.test(messageKey) ||
+        !['up', 'down', null].includes(vote)) {
+      throw new Error('Vote requires an existing reaction message key and up/down/null direction');
+    }
+    return reactionRequest('worker/vote', {
+      method: 'POST', body: { messageKey, vote }, signal: options.signal,
+    });
+  }
+
   async function pollOnce(options = {}) {
     const signal = options.signal || internalController.signal;
     await verifyIdentity(signal);
@@ -108,7 +140,9 @@ export function createAgentWorker(options = {}) {
     }, heartbeatIntervalMs);
 
     try {
-      let output = await runAgent(job, { signal, agent, workerId, sendMessage });
+      let output = await runAgent(job, {
+        signal, agent, workerId, sendMessage, listReactionMessages, voteOnMessage,
+      });
       if (typeof output === 'string') output = { text: output };
       if (!output || typeof output.text !== 'string' || !output.text.trim()) {
         throw new Error('Original agent adapter returned no message');
@@ -141,7 +175,7 @@ export function createAgentWorker(options = {}) {
     if (!onIdle) return false;
     const signal = options.signal || internalController.signal;
     await verifyIdentity(signal);
-    await onIdle({ agent, workerId, sendMessage, signal });
+    await onIdle({ agent, workerId, sendMessage, listReactionMessages, voteOnMessage, signal });
     return true;
   }
 
@@ -173,5 +207,5 @@ export function createAgentWorker(options = {}) {
     internalController.abort();
   }
 
-  return { start, stop, pollOnce, runIdleOnce, sendMessage, workerId, agent };
+  return { start, stop, pollOnce, runIdleOnce, sendMessage, listReactionMessages, voteOnMessage, workerId, agent };
 }
