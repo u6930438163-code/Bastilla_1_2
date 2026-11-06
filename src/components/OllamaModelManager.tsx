@@ -73,7 +73,7 @@ export function OllamaModelManager() {
 
   const handleSyncExclusiveQwen = async (targetModel = DEFAULT_EXCLUSIVE_OLLAMA_MODEL) => {
     if (busyAction) return;
-    setBusyAction(`Pobieranie i uruchamianie ${targetModel} oraz usuwanie pozostałych modeli…`);
+    setBusyAction(`Pobieranie i uruchamianie ${targetModel} · bez usuwania innych modeli…`);
     setError('');
     setStatusMessage(null);
     try {
@@ -82,7 +82,7 @@ export function OllamaModelManager() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           model: targetModel,
-          pruneOthers: true,
+          pruneOthers: false,
           warmup: true,
         }),
       });
@@ -94,10 +94,7 @@ export function OllamaModelManager() {
         error: data.error,
       }));
       if (data.ok && data.connected) {
-        const removedNote =
-          data.removedModels.length > 0
-            ? ` Usunięto pozostałe modele (${data.removedModels.join(', ')}).`
-            : ' Brak innych modeli do usunięcia.';
+        const removedNote = ' Pozostałe modele zachowano.';
         setStatusMessage(
           `Model ${data.configuredModel} został pobrany, skonfigurowany i uruchomiony w pamięci Ollamy.${removedNote}`,
         );
@@ -202,7 +199,7 @@ export function OllamaModelManager() {
             onClick={() => void handleSyncExclusiveQwen(DEFAULT_EXCLUSIVE_OLLAMA_MODEL)}
             className="rounded-md border border-emerald-500/60 bg-emerald-950/70 px-3 py-1.5 text-xs font-semibold text-emerald-200 transition hover:bg-emerald-900/80 disabled:opacity-50"
           >
-            Pobierz i uruchom dolphin-mixtral:8x7b (usuń pozostałe)
+            Pobierz i uruchom dolphin-mixtral:8x7b (zachowaj pozostałe)
           </button>
           <button
             type="button"
@@ -320,8 +317,8 @@ export function OllamaModelManager() {
       </div>
 
       <p className="text-xs text-slate-500">
-        Przycisk „Pobierz i uruchom dolphin-mixtral:8x7b (usuń pozostałe)” lub polecenie{' '}
-        <code>npm run setup:ollama</code> pobiera <code>dolphin-mixtral:8x7b</code>, usuwa wszystkie inne modele z
+        Przycisk „Pobierz i uruchom dolphin-mixtral:8x7b (zachowaj pozostałe)” lub polecenie{' '}
+        <code>npm run setup:ollama</code> pobiera <code>dolphin-mixtral:8x7b</code>, zachowuje pozostałe modele z
         lokalnej Ollamy i ładuje model do pamięci z <code>keep_alive=24h</code>.
       </p>
     </section>
