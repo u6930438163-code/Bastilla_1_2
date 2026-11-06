@@ -5,6 +5,7 @@ const services: Service[] = [
   { name:'GitHub (ChatGPT)', status:'potwierdzone', details:'Połączenie ChatGPT z repozytorium BastillaOS zostało zweryfikowane. Nie oznacza to automatycznego połączenia kont w BastillaOS.' },
   { name:'Ollama (BastillaOS)', status:'wymaga konfiguracji', details:'Aplikacja zawiera obsługę lokalnych modeli; stan działającego serwera należy sprawdzić w diagnostyce.' },
   { name:'Google AI Studio / Gemini', status:'wymaga konfiguracji', details:'Projekt ma komponenty Gemini; połączenie produkcyjne i klucze należy zweryfikować na serwerze.' },
+  { name:'LibreChat · Bastilla', status:'wymaga konfiguracji', details:'Oddzielny interfejs LibreChat ze sprawdzanym połączeniem do istniejących czterech workerów Bastilla LIVE. Wymaga Docker, sekretów i uruchomionych oryginalnych agentów.', url:'https://github.com/LibreChat-AI/LibreChat' },
   { name:'ChatGPT / OpenAI API', status:'wymaga konfiguracji', details:'Wymaga osobnej konfiguracji API lub MCP. Subskrypcja ChatGPT nie zapewnia automatycznie kredytów API.' },
   { name:'Google Zdjęcia', status:'wymaga konfiguracji', details:'Import ręczny jest dostępny w module Zdjęcia i notatki. Bezpośredni Picker wymaga OAuth i backendu.', url:'https://photos.google.com/' },
   { name:'Samsung Notes', status:'wymaga konfiguracji', details:'Obsługiwany jest wybór wyeksportowanych plików PDF/TXT. Brak potwierdzonego publicznego API synchronizacji.' },
@@ -16,11 +17,14 @@ const services: Service[] = [
   { name:'Todoist / TickTick', status:'dostępne opcjonalnie', details:'Aplikacje z katalogu ChatGPT do zadań i przypomnień.', url:'https://chatgpt.com/plugins' },
   { name:'Windsor.ai / narzędzia marketingowe', status:'dostępne opcjonalnie', details:'Zewnętrzne źródła danych po osobnym podłączeniu.', url:'https://chatgpt.com/plugins' },
 ];
-export function IntegrationsView({ onOpenLibrary }: { onOpenLibrary: () => void }) {
+export function IntegrationsView({ onOpenLibrary, onOpenLibreChat }: { onOpenLibrary: () => void; onOpenLibreChat: () => void }) {
   return <section className="min-h-0 flex-1 overflow-y-auto bg-[#050b18] p-4 text-slate-100">
     <h1 className="text-xl font-semibold text-cyan-200">Integracje BastillaOS</h1>
     <p className="my-3 text-sm text-slate-400">Katalog możliwości i stanów zweryfikowanych podczas konfiguracji. Połączenia ChatGPT nie są automatycznie połączeniami BastillaOS. Lista możliwych aplikacji nie jest wyczerpująca.</p>
-    <button type="button" onClick={onOpenLibrary} className="mb-5 rounded-lg bg-cyan-700 px-4 py-2 text-sm font-semibold text-white">Otwórz Zdjęcia i notatki</button>
+    <div className="mb-5 flex flex-wrap gap-3">
+      <button type="button" onClick={onOpenLibreChat} className="rounded-lg bg-cyan-700 px-4 py-2 text-sm font-semibold text-white">Panel LibreChat</button>
+      <button type="button" onClick={onOpenLibrary} className="rounded-lg bg-slate-700 px-4 py-2 text-sm font-semibold text-white">Otwórz Zdjęcia i notatki</button>
+    </div>
     <div className="grid gap-3 md:grid-cols-2">
       {services.map(service => <article key={service.name} className="rounded-xl border border-slate-700 bg-slate-900/80 p-4">
         <div className="flex flex-wrap items-center justify-between gap-2">
