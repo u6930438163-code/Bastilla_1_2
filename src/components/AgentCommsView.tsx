@@ -114,7 +114,7 @@ export const AgentCommsView: React.FC<AgentCommsViewProps> = ({
   const [terminalCardEntries, setTerminalCardEntries] = useState<TerminalCardEntry[]>([]);
   const [workNotice, setWorkNotice] = useState<string | null>(null);
   const [quickBusy, setQuickBusy] = useState(false);
-  const [quickResult, setQuickResult] = useState<{ title: string; lines: string[]; at: string; failed?: boolean } | null>(null);
+  const [quickResult, setQuickResult] = useState<{ title: string; lines: string[]; at: string; failed?: boolean; reply?: string } | null>(null);
   const handledDraftRef = useRef<number | null>(null);
   const [liveAuthenticated, setLiveAuthenticated] = useState(false);
   const [liveMode, setLiveMode] = useState(true);
@@ -280,12 +280,21 @@ export const AgentCommsView: React.FC<AgentCommsViewProps> = ({
     setWorkNotice(null);
     try {
       if (!readOnly) {
-        // No privileged or mutating actions can run from AI-generated buttons.
-        // A potentially sensitive request is delegated to the agent only after confirmation.
-        if (/(?:usuń|kasuj|zrestartuj|uruchom ponownie|zainstaluj|optymalizuj|zmień konfigurację|wyczyść pamięć|sudo|rm -rf)/i.test(prompt)
-          && !window.confirm('Przekazać to polecenie agentowi do analizy? Nie jest to zgoda na zmianę systemu.')) return;
-        await onSendMessage(prompt, target, [], freedomEnabled, providerMode);
-        setWorkNotice('Akcja przekazana do AI bez użycia pola wiadomości. Wynik pojawi się w rozmowie.');
+        // The isolated endpoint returns an AI answer to this panel only;
+        // it does NOT append an operator message or execute a system command.
+        const response = await fetch('/api/work-actions/ask', {
+          method: 'POST', credentials: 'same-origin',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ prompt, agent: target, providerMode }),
+        });
+        const data = await response.json() as { success?: boolean; error?: string; agent?: string; reply?: string };
+        if (!response.ok || !data.success) throw new Error(data.error || 'Brak odpowiedzi agenta AI.');
+        setQuickResult({
+          title: 'Akcja AI · ' + (data.agent === 'si_1' ? 'Aria' : data.agent || target),
+          at: new Date().toLocaleTimeString('pl-PL'),
+          lines: ['Wynik analizy w panelu; niczego nie wysłano do czatu ani nie zmieniono w systemie.'],
+          reply: data.reply || 'Agent nie zwrócił treści.',
+        });
         return;
       }
       const response = await fetch(endpoints[readOnly], { credentials: 'same-origin', cache: 'no-store' });
@@ -1169,6 +1178,9 @@ export const AgentCommsView: React.FC<AgentCommsViewProps> = ({
           <p className="mt-1 text-[10px] text-slate-400">Odczyt z API · {quickResult.at}</p>
           <div role={quickResult.failed ? 'alert' : 'status'} className={'mt-2 space-y-1 whitespace-pre-wrap break-words ' + (quickResult.failed ? 'text-rose-300' : 'text-slate-200')}>
             {quickResult.lines.map((line, index) => <p key={index}>{line}</p>)}
+            {quickResult.reply && <div className="mt-2 border-t border-slate-700 pt-2 text-sm">
+              <WorkChatMessage content={quickResult.reply} onPrompt={next => { void runQuickAction(next); }} onOpenTerminal={onOpenTerminal}/>
+            </div>}
           </div>
         </>}
       </section>}
