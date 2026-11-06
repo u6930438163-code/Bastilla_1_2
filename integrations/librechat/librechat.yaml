@@ -2,6 +2,19 @@
 # This bridge does not create replacement agents. A worker must be online to reply.
 version: 1.3.18
 cache: true
+# Native LibreChat user memory persists across chats in LibreChat's database.
+# Managed manually in Memories; automatic extraction is deliberately OFF
+# (no hidden model calls or billing for a separate memory agent).
+memory:
+  disabled: false
+  personalize: true
+  validKeys:
+    - user_preferences
+    - conversation_context
+    - project_context
+    - learned_facts
+  tokenLimit: 8000
+  charLimit: 10000
 endpoints:
   custom:
     - name: "Bastilla Agents"
