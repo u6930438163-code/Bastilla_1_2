@@ -30,6 +30,27 @@ The LibreChat endpoint is named "Bastilla Agents", with four model names. The na
 
 The upstream LibreChat .env supports additional providers such as OpenAI, each requiring separate API keys; a ChatGPT subscription does not include OpenAI API credits.
 
+## Long-term memory (LibreChat and original Bastilla agents)
+
+- Native LibreChat User Memory is enabled in integrations/librechat/librechat.yaml. It is stored on the deployed LibreChat server, in its persistent database; it is NEVER committed to this GitHub repository.
+- The Memories panel in LibreChat lets the owner manually create, correct, disable and delete entries. The enabled keys are user_preferences, conversation_context, project_context and learned_facts. Overall storage cap: 8,000 tokens; per-entry cap: 10,000 characters. These values are guardrails, not a claim of unlimited context.
+- No automatic memory-extraction agent is enabled. This avoids extra model calls/charges and avoids asking the original workers for tool calling they do not support. Memory entries must be added through LibreChat's Memories UI.
+- The existing bridge now forwards a bounded portion of system context (including native LibreChat memory when injected into the request) together with the last few conversation turns to the **same original worker**. The Bastilla LIVE messages endpoint permits max 8,000 characters, so at most around 4,300 characters of system/memory context and a smaller amount of recent dialogue can fit. This is **not** whole-history semantic search; large memories must be edited/summarized to stay useful.
+- The bridge forwards memory context only when LibreChat includes it in the completion request, respecting LibreChat's per-user memory toggle. Its own conversation database and worker chat history are distinct; neither is synchronized with OpenAI ChatGPT memory.
+- Keep LibreChat's database volumes persistent and backed up securely on your deployment. Do not store account exports in a public GitHub repository.
+
+### Bring selected ChatGPT subscription memories manually (opt-in)
+
+There is **no supported automatic API connection** between your ChatGPT account memory and this open-source LibreChat deployment. ChatGPT subscription access is also separate from separately billed OpenAI API requests. Do NOT provide a ChatGPT password, authentication cookie or session token to Bastilla or the bridge.
+
+1. In ChatGPT, review the personal Memory summary under Settings > Personalization > Memory summary > Manage (if available). Select only project context and preferences that you are comfortable sharing with your self-hosted system.
+2. Log into your **private** LibreChat instance. Open Memories in the side panel and select Create Memory.
+3. Manually create keys such as project_context, conversation_context or user_preferences, with accurate, concise text. Never paste passwords, API keys, private identity documents or full chat exports.
+4. Start a new LibreChat conversation using endpoint Bastilla Agents and select an existing worker. Ask a concrete question about a saved fact. Verify that the response corresponds to the real worker in Bastilla LIVE.
+5. Correct or delete mistaken memories in the Memories panel. Use the per-chat Use memory setting to stop sending stored memories to that conversation.
+
+A personal memory entry is a durable fact, not an entire chat history. Large documents or retrospective search over months of conversations require a separately managed, access-controlled document/vector retrieval system and are **not** provided by this change.
+
 ## Operational notes
 
 Use 'bash scripts/setup-librechat.sh logs --tail=60 bastilla-agent-bridge' to inspect adapter failures, and 'bash scripts/setup-librechat.sh logs --tail=60 api' for LibreChat logs. 'bash scripts/setup-librechat.sh down' stops only the LibreChat stack. The upstream files are NOT embedded or copied into Bastilla Git.
