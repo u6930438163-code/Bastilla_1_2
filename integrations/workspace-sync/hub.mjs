@@ -4,7 +4,7 @@ import { Router } from 'express';
 // The Python kernel remains the authority for persisted state; this channel only invalidates UI caches.
 const TOPICS = new Set(['chat', 'terminal', 'kernel', 'agents', 'workspace']);
 
-export function createWorkspaceSyncHub({ requireUser, historyLimit = 120 } = {}) {
+export function createWorkspaceSyncHub(requireUser, historyLimit = 120) {
   if (typeof requireUser !== 'function') throw new Error('Workspace sync requires operator authentication');
   const router = Router();
   const listeners = new Set();
