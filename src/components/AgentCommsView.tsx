@@ -1,8 +1,8 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { DataStore, OPERATOR_NAME } from '../kernel/svlKernel';
 import { SYSTEM_AGENTS, AgentProfile } from '../kernel/agents';
-import { Sparkles, ShieldCheck, RefreshCw, Image as ImageIcon, FileText, MessagesSquare, Paperclip, Send, X, SlidersHorizontal, Maximize2, Minimize2 } from 'lucide-react';
-import { FormattedMessage } from './FormattedMessage';
+import { Sparkles, ShieldCheck, RefreshCw, Image as ImageIcon, FileText, MessagesSquare, Paperclip, Send, X, SlidersHorizontal, Maximize2, Minimize2, BarChart3, Clapperboard, Code2, Copy } from 'lucide-react';
+import { WorkChatMessage, WorkChatDemo } from './WorkChatMessage';
 import {
   ASTYRIA_MISSION_ACTIONS,
   ASTYRIA_MISSION_LABELS,
@@ -34,6 +34,7 @@ interface AgentCommsViewProps {
   isLoading: boolean;
   sendError?: string | null;
   onClearHistory: () => void;
+  preparedDraft?: { id: number; text: string; agent: 'triad' | 'Alex' | 'Astyria' | 'Aurelius' | 'si_1' } | null;
   onForceSync?: () => void;
   onTriggerFreeVoice?: (
     agent?: 'triad' | 'Alex' | 'Astyria' | 'Aurelius' | 'si_1',
@@ -61,6 +62,7 @@ export const AgentCommsView: React.FC<AgentCommsViewProps> = ({
   isLoading,
   sendError,
   onClearHistory,
+  preparedDraft,
   onForceSync,
   onTriggerFreeVoice,
 }) => {
@@ -75,6 +77,8 @@ export const AgentCommsView: React.FC<AgentCommsViewProps> = ({
   const [sentImageHistory, setSentImageHistory] = useState<Array<{ message: string; images: ChatAttachment[] }>>([]);
   const [attachmentError, setAttachmentError] = useState<string | null>(null);
   const [showProtocolTools, setShowProtocolTools] = useState(false);
+  const [showWorkPreview, setShowWorkPreview] = useState(false);
+  const [workNotice, setWorkNotice] = useState<string | null>(null);
   const [isFullViewport, setIsFullViewport] = useState(false);
   const [twoWayEnabled, setTwoWayEnabled] = useState<boolean>(() => {
     try {
@@ -86,7 +90,23 @@ export const AgentCommsView: React.FC<AgentCommsViewProps> = ({
   });
   const [freeVoiceNotice, setFreeVoiceNotice] = useState<string | null>(null);
   const chatScrollRef = useRef<HTMLDivElement>(null);
+  const chatInputRef = useRef<HTMLTextAreaElement>(null);
   const followLatestMessagesRef = useRef(true);
+  const prepareWorkPrompt = (text: string) => {
+    const prompt = text.slice(0, 20_500);
+    setMessageText(prompt);
+    setWorkNotice('Polecenie przygotowane. Możesz je edytować i wysłać do wybranego agenta.');
+    window.requestAnimationFrame(() => chatInputRef.current?.focus());
+  };
+
+  useEffect(() => {
+    if (!preparedDraft) return;
+    setSelectedTarget(preparedDraft.agent);
+    setMessageText(preparedDraft.text.slice(0, 20_500));
+    setWorkNotice('Zgłoszenie diagnostyczne przygotowane w głównym czacie. Zatwierdź przyciskiem Wyślij.');
+    window.requestAnimationFrame(() => chatInputRef.current?.focus());
+  }, [preparedDraft?.id]);
+
   const transmissionStatus = sendError
     ? { label: 'BŁĄD', color: 'rose' }
     : isLoading
@@ -253,6 +273,7 @@ export const AgentCommsView: React.FC<AgentCommsViewProps> = ({
       setMessageText('');
       setChatAttachments([]);
       setAttachmentError(null);
+      setWorkNotice(null);
     } catch {
       // The parent exposes transmission errors in the chat status.
     }
@@ -364,6 +385,18 @@ export const AgentCommsView: React.FC<AgentCommsViewProps> = ({
             />
             <span className="hidden md:inline">Obustronny:</span>
             <span>{twoWayEnabled ? '2-WŁ' : '2-WYŁ'}</span>
+          </button>
+
+          <button
+            type="button"
+            aria-expanded={showWorkPreview}
+            aria-pressed={showWorkPreview}
+            onClick={() => setShowWorkPreview((value) => !value)}
+            className={`p-1.5 sm:px-2 sm:py-1 rounded-lg border text-[11px] font-semibold flex items-center gap-1 transition cursor-pointer ${showWorkPreview ? 'bg-teal-950 border-teal-400 text-teal-200' : 'bg-slate-950 border-slate-700 text-cyan-200 hover:border-cyan-500/50'}`}
+            title="Interaktywne wykresy, grafiki, wideo i przyciski w tym czacie"
+          >
+            <Sparkles className="w-3.5 h-3.5 shrink-0"/>
+            <span>Work</span>
           </button>
 
           <button
@@ -529,6 +562,7 @@ export const AgentCommsView: React.FC<AgentCommsViewProps> = ({
         }}
         className="min-h-0 min-w-0 flex-1 overflow-y-auto px-2.5 py-3 sm:px-6 sm:py-5 space-y-2.5 sm:space-y-3.5 scrollbar-thin w-full max-w-6xl mx-auto"
       >
+        {showWorkPreview && <WorkChatDemo onPrompt={prepareWorkPrompt} />}
         {sendError && (
           <div role="alert" aria-live="assertive" className="rounded-lg border border-rose-500/40 bg-rose-950/40 p-3 text-xs text-rose-200">
             Nie udało się wysłać żądania: {sendError}
@@ -585,7 +619,12 @@ export const AgentCommsView: React.FC<AgentCommsViewProps> = ({
                 </div>
 
                 {/* Message Body with KaTeX LaTeX formulas and Markdown */}
-                <FormattedMessage content={msg.tekst} className="text-xs sm:text-sm leading-relaxed text-slate-100" />
+                <WorkChatMessage content={msg.tekst} onPrompt={prepareWorkPrompt} />
+                <div className="mt-2 flex items-center justify-end gap-1">
+                  <button type="button" className="rounded-lg px-2 py-1 text-[10px] text-slate-400 hover:text-cyan-200 hover:bg-slate-800 flex items-center gap-1"
+                    onClick={() => void navigator.clipboard?.writeText(msg.tekst).then(() => setWorkNotice('Skopiowano wiadomość.')).catch(() => setWorkNotice('Nie można skopiować.'))}
+                    title="Kopiuj treść wiadomości"><Copy className="w-3 h-3"/> Kopiuj</button>
+                </div>
 
                 {sentImages.length > 0 && !msg.file?.dataUrl && (
                   <div className="mt-2 flex flex-wrap gap-2" aria-label="Wysłane zdjęcia">
@@ -651,7 +690,24 @@ export const AgentCommsView: React.FC<AgentCommsViewProps> = ({
         )}
       </div>
 
-      {/* Compact Single-Row Message Input Box */}
+      {/* Work actions in the original chat, with explicit operator confirmation before sending */}
+      <div className="flex w-full shrink-0 gap-1.5 overflow-x-auto border-t border-cyan-900/60 bg-[#071625] px-3 py-2" aria-label="Akcje AI Work">
+        {([
+          { label: 'Wykres', icon: BarChart3, prompt: 'Pokaż wykres oparty wyłącznie na rzeczywistych danych systemowych. Jeśli brak pomiarów, wyjaśnij to. Gdy dane są dostępne użyj bloku bastilla-ui z blocks type chart, labels, values, unit oraz caption.' },
+          { label: 'Grafika', icon: ImageIcon, prompt: 'Wygeneruj lub wyszukaj grafikę i pokaż ją w odpowiedzi. Użyj prawdziwego adresu HTTPS lub lokalnej ścieżki w bastilla-ui type image, src, alt; jeśli nie możesz uzyskać obrazu, poinformuj o ograniczeniu.' },
+          { label: 'Wideo', icon: Clapperboard, prompt: 'Pokaż istniejące wideo jako osadzony odtwarzacz w wiadomości. Zwróć prawdziwy adres HTTPS MP4/WebM/YouTube w bastilla-ui type video, src i title. Nie wymyślaj filmu.' },
+          { label: 'Kod', icon: Code2, prompt: 'Przygotuj kod rozwiązania z objaśnieniem i gotowym blokiem kodu Markdown. Nie wykonuj go bez autoryzacji.' },
+          { label: 'Raport', icon: FileText, prompt: 'Przedstaw raport w formie tabel, metryk i interaktywnych elementów, rozdziel sukcesy i błędy. Wykorzystuj tylko potwierdzone dane i logi; możesz użyć bastilla-ui type table, metric, chart, actions.' },
+        ] as const).map((item) => <button key={item.label} type="button" disabled={isLoading} onClick={() => prepareWorkPrompt(item.prompt)}
+          className="flex shrink-0 items-center gap-1.5 rounded-lg border border-cyan-800/70 bg-slate-900/90 px-3 py-1.5 text-[11px] font-semibold text-cyan-100 hover:bg-cyan-950 disabled:opacity-40 transition">
+          <item.icon className="w-3.5 h-3.5" />{item.label}
+        </button>)}
+      </div>
+      {workNotice && <div role="status" className="flex items-center justify-between gap-2 bg-slate-900/90 px-3 py-1.5 text-[11px] text-cyan-200">
+        <span>{workNotice}</span>
+        <button type="button" onClick={() => setWorkNotice(null)} aria-label="Zamknij komunikat" className="p-1 text-slate-300 hover:text-white"><X className="w-3 h-3"/></button>
+      </div>}
+      {/* Original main chat composer */}
       <form onSubmit={handleSendMessage} className="relative w-full shrink-0 border-t border-cyan-500/30 bg-slate-950 px-2.5 py-2 sm:px-4 sm:py-2.5 backdrop-blur-xl">
         <div className="max-w-6xl mx-auto space-y-1.5">
           {chatAttachments.length > 0 && (
@@ -698,12 +754,13 @@ export const AgentCommsView: React.FC<AgentCommsViewProps> = ({
           <div className="flex items-center gap-1.5 sm:gap-2">
             <div className="relative flex min-w-0 flex-1 items-center">
               <textarea
+                ref={chatInputRef}
                 id="triad-chat-message"
                 aria-label="Wiadomość do czatu without_nlp"
                 value={messageText}
                 onChange={(event) => setMessageText(event.target.value)}
                 onKeyDown={(event) => {
-                  if (event.key === 'Enter' && !event.shiftKey) {
+                  if (event.key === 'Enter' && !event.shiftKey && !event.nativeEvent.isComposing) {
                     event.preventDefault();
                     event.currentTarget.form?.requestSubmit();
                   }
