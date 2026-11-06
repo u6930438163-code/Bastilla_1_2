@@ -6008,7 +6008,9 @@ async function persistRoutedAgentMessage(
   return entry;
 }
 
-const relayAutoReplies = process.env.BASTILLA_AGENT_AUTO_REPLY !== 'false';
+// Off by default: only original authenticated agent runtimes speak unless
+// the operator deliberately enables single-hop LLM relay on the server.
+const relayAutoReplies = process.env.BASTILLA_AGENT_AUTO_REPLY === 'true';
 const MAX_RELAY_AUTO_REPLIES_PER_HOUR = 24;
 let relayWindowStart = Date.now();
 let relayCount = 0;
