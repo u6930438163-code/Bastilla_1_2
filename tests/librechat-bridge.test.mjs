@@ -76,6 +76,7 @@ test('LibreChat bridge uses only existing authenticated Bastilla worker response
       ...process.env,
       PORT: String(bridgePort),
       BASTILLA_BRIDGE_API_KEY: key,
+      BASTILLA_LIBRECHAT_OWNER_EMAIL: 'owner@example.test',
       BASTILLA_LIVE_CHAT_USER_PASSWORD: 'operator-password-123',
       BASTILLA_LIVE_CHAT_ALLOWED_ORIGIN: 'http://localhost:3000',
       BASTILLA_API_BASE_URL: 'http://127.0.0.1:' + backendPort,
@@ -88,7 +89,7 @@ test('LibreChat bridge uses only existing authenticated Bastilla worker response
 
   const unauth = await fetch(base + '/v1/models');
   assert.equal(unauth.status, 401);
-  const headers = { Authorization: 'Bearer ' + key };
+  const headers = { Authorization: 'Bearer ' + key, 'X-Bastilla-Operator-Email': 'owner@example.test' };
   const models = await fetch(base + '/v1/models', { headers });
   assert.equal(models.status, 200);
   assert.deepEqual((await models.json()).data.map(model => model.id), ['Aria', 'Alex', 'Astyria', 'Aurelius']);
@@ -98,6 +99,19 @@ test('LibreChat bridge uses only existing authenticated Bastilla worker response
     headers: { ...headers, 'Content-Type': 'application/json' },
     body: JSON.stringify({ model: 'Aria', messages: [{ role: 'user', content: 'Hello original Aria' }] }),
   };
+  // Even with the shared backend API token, other LibreChat accounts must
+  // not access the operator's original agent queues or remembered context.
+  const noUser = await fetch(base + '/v1/chat/completions', {
+    ...options, headers: { Authorization: 'Bearer ' + key },
+  });
+  assert.equal(noUser.status, 403);
+  const otherUser = await fetch(base + '/v1/chat/completions', {
+    ...options,
+    headers: { ...headers, 'X-Bastilla-Operator-Email': 'another@example.test' },
+  });
+  assert.equal(otherUser.status, 403);
+  assert.equal(queued, false);
+
   const response = await fetch(base + '/v1/chat/completions', options);
   assert.equal(response.status, 200);
   const result = await response.json();
