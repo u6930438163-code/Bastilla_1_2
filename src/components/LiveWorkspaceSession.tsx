@@ -7,6 +7,7 @@ type LiveHealth = { agents?: Record<string, AgentHealth>; queue?: { queued?: num
 
 export function LiveWorkspaceSession({ onChange }: { onChange: (authenticated: boolean) => void }) {
   const [sessionState, setSessionState] = useState<SessionState>('loading');
+  // LIVE checks the existing signed session automatically; keep this panel compact by default.
   const [open, setOpen] = useState(false);
   const [password, setPassword] = useState('');
   const [setupCode, setSetupCode] = useState('');
@@ -46,9 +47,20 @@ export function LiveWorkspaceSession({ onChange }: { onChange: (authenticated: b
     }
   }, [onChange]);
   useEffect(() => {
+    // Resume LIVE without user interaction when reopening the app or returning to its tab.
+    // Credentials stay in a signed HttpOnly cookie; no password is stored in the UI.
     void check();
-    const timer = window.setInterval(() => { if (!document.hidden) void check(); }, 30000);
-    return () => window.clearInterval(timer);
+    const onResume = () => { if (!document.hidden) void check(); };
+    document.addEventListener('visibilitychange', onResume);
+    window.addEventListener('focus', onResume);
+    window.addEventListener('bastilla:live-chat-auth', onResume);
+    const timer = window.setInterval(onResume, 30000);
+    return () => {
+      window.clearInterval(timer);
+      document.removeEventListener('visibilitychange', onResume);
+      window.removeEventListener('focus', onResume);
+      window.removeEventListener('bastilla:live-chat-auth', onResume);
+    };
   }, [check]);
   const login = async (event: React.FormEvent) => {
     event.preventDefault();
@@ -140,11 +152,11 @@ export function LiveWorkspaceSession({ onChange }: { onChange: (authenticated: b
         <span className={'h-2 w-2 shrink-0 rounded-full ' +
           (sessionState === 'authenticated' ? 'bg-emerald-400' : sessionState === 'loading' ? 'animate-pulse bg-cyan-400' : 'bg-slate-500')} />
         <span className="min-w-0 flex-1 truncate text-[10px] font-semibold text-slate-300">
-          {sessionState === 'authenticated' ? 'Sesja LIVE · oryginalni agenci: ' + onlineCount + '/' + Math.max(4, healthEntries.length) + ' online' :
-            sessionState === 'loading' ? 'Sprawdzanie sesji agentów…' :
+          {sessionState === 'authenticated' ? 'LIVE włączony · oryginalni agenci: ' + onlineCount + '/' + Math.max(4, healthEntries.length) + ' online' :
+            sessionState === 'loading' ? 'LIVE · automatyczne łączenie…' :
             sessionState === 'setup' ? 'LIVE · pierwsze ustawienie hasła' :
             sessionState === 'unconfigured' ? 'LIVE wymaga konfiguracji serwera' :
-            sessionState === 'unauthenticated' ? 'LIVE wyłączony · zwykły czat jest dostępny' : 'Sesja LIVE niedostępna'}
+            sessionState === 'unauthenticated' ? 'LIVE gotowy · wymagane logowanie (czat API działa)' : 'LIVE · problem z połączeniem'}
         </span>
         <button type="button" onClick={() => setOpen((value) => !value)} aria-expanded={open}
           className="flex shrink-0 items-center gap-1 rounded-lg border border-cyan-700/60 bg-cyan-950/60 px-2 py-1 text-[11px] font-semibold text-cyan-100 hover:bg-cyan-900">
@@ -200,6 +212,7 @@ export function LiveWorkspaceSession({ onChange }: { onChange: (authenticated: b
             <button type="submit" disabled={pending || !password} className="flex items-center gap-1 rounded-lg bg-cyan-700 px-3 py-2 font-semibold text-white disabled:opacity-40">
               {pending ? <LoaderCircle className="h-4 w-4 animate-spin"/> : <KeyRound className="h-4 w-4"/>} Zaloguj
             </button>
+            <p className="w-full text-[11px] text-slate-400">Nie znasz hasła? Właściciel może ustawić nowe <code>BASTILLA_LIVE_CHAT_USER_PASSWORD</code> w prywatnych sekretach serwera i zrestartować usługę. Nie usuwaj danych LIVE ani nie wpisuj sekretów do czatu.</p>
           </form>}
         {notice && <p role="status" className="mt-2 text-[11px] text-cyan-200">{notice}</p>}
         <p className="mt-2 text-[10px] text-slate-500">Hasło nie jest zapisywane w przeglądarce ani w historii czatu. Dostęp do agentów potwierdza serwer; sam stan sesji nie oznacza, że workery są online.</p>
