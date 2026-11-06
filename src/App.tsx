@@ -436,6 +436,7 @@ export default function App() {
     message: string,
     chatAgent: AgentProtocolRequest['agent'] = 'triad',
     attachments: ChatAttachment[] = [],
+    freedomMode = true,
   ) => {
     const protocolCommand = attachments.length === 0
       ? parseChatProtocolCommand(message, chatAgent)
@@ -466,7 +467,7 @@ export default function App() {
         headers: { 'Content-Type': 'application/json', 'Accept': 'text/event-stream, application/json' },
         body: JSON.stringify(isFullChatRepair
           ? { action: 'full_system_app_chat_repair', userMessage: message.trim() }
-          : { message, agent: chatAgent, attachments }),
+          : { message, agent: chatAgent, attachments, freedomMode }),
       });
       let result: any;
       if (response.ok && response.headers.get('content-type')?.includes('text/event-stream') && response.body) {
