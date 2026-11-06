@@ -118,6 +118,9 @@ export const AgentCommsView: React.FC<AgentCommsViewProps> = ({
   const [chatAttachments, setChatAttachments] = useState<ChatAttachment[]>([]);
   const [sentImageHistory, setSentImageHistory] = useState<Array<{ message: string; images: ChatAttachment[] }>>([]);
   const [attachmentError, setAttachmentError] = useState<string | null>(null);
+  const [attachmentProgress, setAttachmentProgress] = useState<{done:number;total:number}|null>(null);
+  const [dragOver, setDragOver] = useState(false);
+  const [analyzeAttachments, setAnalyzeAttachments] = useState(true);
   const [showProtocolTools, setShowProtocolTools] = useState(false);
   const [showWorkPreview, setShowWorkPreview] = useState(false);
   const [showMoreMenu, setShowMoreMenu] = useState(false);
@@ -585,7 +588,12 @@ export const AgentCommsView: React.FC<AgentCommsViewProps> = ({
     if ((!message && chatAttachments.length === 0) || isLoading) return;
     const attachmentsSnapshot = [...chatAttachments];
     try {
-      await onSendMessage(message, selectedTarget, attachmentsSnapshot, freedomEnabled, providerMode);
+      await onSendMessage(
+        analyzeAttachments && attachmentsSnapshot.length > 0
+          ? (message ? message + '\\n\\nPrzeanalizuj dołączone materiały, podaj ustalenia i zaznacz niepewności.' : 'Przeanalizuj dołączone materiały, podaj ustalenia i zaznacz niepewności.')
+          : message,
+        selectedTarget, attachmentsSnapshot, freedomEnabled, providerMode
+      );
       const images = attachmentsSnapshot.filter((attachment) => attachment.mimeType?.startsWith('image/'));
       if (images.length > 0) {
         setSentImageHistory((prev) => [
@@ -602,28 +610,42 @@ export const AgentCommsView: React.FC<AgentCommsViewProps> = ({
     }
   };
 
-  const handleAttachmentSelection = async (event: React.ChangeEvent<HTMLInputElement>) => {
-    const files = Array.from(event.target.files ?? []);
-    event.target.value = '';
+  const addAttachmentFiles = async (files: File[]) => {
+    if (!files.length || isLoading) return;
     setAttachmentError(null);
-    if (files.length === 0) return;
     if (chatAttachments.length + files.length > MAX_CHAT_ATTACHMENTS) {
       setAttachmentError(`Możesz dołączyć maksymalnie ${MAX_CHAT_ATTACHMENTS} pliki.`);
       return;
     }
-    let incoming: ChatAttachment[];
+    setAttachmentProgress({done:0,total:files.length});
+    const incoming: ChatAttachment[] = [];
     try {
-      incoming = await Promise.all(files.map(readChatAttachmentFile));
+      for (const file of files) {
+        incoming.push(await readChatAttachmentFile(file));
+        setAttachmentProgress({done:incoming.length,total:files.length});
+      }
+      const validation = validateChatAttachments([...chatAttachments,...incoming]);
+      if (!validation.valid) { setAttachmentError(validation.error); return; }
+      setChatAttachments(validation.attachments);
     } catch (error) {
-      setAttachmentError(error instanceof Error ? error.message : 'Nie udało się odczytać wybranego pliku.');
-      return;
+      setAttachmentError(error instanceof Error ? error.message : 'Nie udało się odczytać pliku.');
+    } finally {
+      setAttachmentProgress(null);
     }
-    const validation = validateChatAttachments([...chatAttachments, ...incoming]);
-    if (!validation.valid) {
-      setAttachmentError(validation.error);
-      return;
-    }
-    setChatAttachments(validation.attachments);
+  };
+  const handleAttachmentSelection = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(event.target.files ?? []);
+    event.target.value = '';
+    await addAttachmentFiles(files);
+  };
+  const handleAttachmentPaste = (event: React.ClipboardEvent<HTMLDivElement>) => {
+    const images = Array.from(event.clipboardData.files).filter(file => file.type.startsWith('image/'));
+    if (!images.length) return;
+    event.preventDefault();
+    const named = images.map((file,index) => new File([file],
+      `schowek-${Date.now()}-${index}.${file.type === 'image/png' ? 'png' : file.type === 'image/webp' ? 'webp' : 'jpg'}`,
+      {type:file.type}));
+    void addAttachmentFiles(named);
   };
 
   return (
@@ -1143,7 +1165,19 @@ export const AgentCommsView: React.FC<AgentCommsViewProps> = ({
       </div>}
       {/* Main chat composer — mobile-first, two-row layout */}
       <form onSubmit={handleSendMessage} className="bastilla-chat-composer w-full shrink-0 border-t border-slate-800 bg-slate-950/95 px-3 py-2.5 sm:px-5 sm:py-3">
-        <div className="mx-auto max-w-4xl">
+        <div className="mx-auto max-w-4xl" onPaste={handleAttachmentPaste}
+          onDragOver={event => { if (event.dataTransfer.types.includes('Files')) { event.preventDefault(); setDragOver(true); } }}
+          onDragLeave={event => { if (!event.currentTarget.contains(event.relatedTarget as Node)) setDragOver(false); }}
+          onDrop={event => { event.preventDefault(); setDragOver(false); void addAttachmentFiles(Array.from(event.dataTransfer.files)); }}>
+          {dragOver && <div role="status" className="mb-2 rounded-xl border border-dashed border-cyan-300 bg-cyan-900/30 px-4 py-4 text-center text-sm text-cyan-100">Upuść pliki, aby dołączyć je do wiadomości</div>}
+          {attachmentProgress && <div role="status" className="mb-2 rounded-xl bg-slate-800 px-3 py-2 text-xs text-cyan-100">
+            <div className="mb-1 flex justify-between"><span>Przetwarzanie załączników</span><span>{attachmentProgress.done}/{attachmentProgress.total}</span></div>
+            <div className="h-1.5 overflow-hidden rounded-full bg-slate-700"><div className="h-full bg-cyan-400 transition-all" style={{width:`${100*attachmentProgress.done/attachmentProgress.total}%`}}/></div>
+          </div>}
+          <label className="mb-2 flex cursor-pointer items-center gap-2 text-xs text-slate-300">
+            <input type="checkbox" checked={analyzeAttachments} onChange={event=>setAnalyzeAttachments(event.target.checked)} className="accent-cyan-400"/>
+            Automatycznie poproś wybranego agenta o analizę załączników po wysłaniu
+          </label>
           {chatAttachments.length > 0 && (
             <ul aria-label="Załączone pliki" className="mb-2 flex flex-wrap gap-1.5">
               {chatAttachments.map((file, index) => (
