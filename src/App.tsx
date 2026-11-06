@@ -20,7 +20,7 @@ import { DataStoreView } from './components/DataStoreView';
 import { ChronolithView } from './components/ChronolithView';
 import { DiagnosticsView } from './components/DiagnosticsView';
 import { ReportModal } from './components/ReportModal';
-import { TaskProcessMatrix } from './components/TaskProcessMatrix';
+import { TaskManagerView } from './components/TaskManagerView';
 import { MemorySchemaGraph } from './components/MemorySchemaGraph';
 import { TemporalMatrix } from './components/TemporalMatrix';
 import { AstyriaMissionView } from './components/AstyriaMissionView';
@@ -709,8 +709,11 @@ export default function App() {
             />
           )}
 
-          {activeTab === 'process_matrix' && (
-            <TaskProcessMatrix />
+          {(activeTab === 'process_matrix' || activeTab === 'task_manager' || activeTab === 'ollama_manager') && (
+            <TaskManagerView
+              initialSection={activeTab === 'ollama_manager' ? 'ollama' : 'processes'}
+              onOpenLiveChat={() => setShowLiveAgentChat(true)}
+            />
           )}
 
           {activeTab === 'astyria_mission' && (
