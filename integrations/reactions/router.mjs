@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import { chatReactionKeys, canonicalReactionActor, liveReactionKey } from '../../src/lib/chatReactionKeys.mjs';
 
-export function createChatReactionsRouter({ store, getHistory, getLiveHistory = () => [], sameOrigin, requireWorker, notify }) {
+export function createChatReactionsRouter({ store, getHistory, getLiveHistory = () => Array(), sameOrigin, requireWorker, notify }) {
   if (!store || typeof getHistory !== 'function' || typeof sameOrigin !== 'function' ||
       typeof requireWorker !== 'function' || typeof notify !== 'function') {
     throw new Error('Reactions need a persistent store, history verification and actor authentication.');
