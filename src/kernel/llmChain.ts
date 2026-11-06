@@ -465,12 +465,25 @@ export async function generateOllama(
       const reader = response.body.getReader();
       const decoder = new TextDecoder();
       let buffer = '';
+      let emitted = '';
       const consume = (line: string) => {
         if (!line.trim()) return;
         const item = JSON.parse(line) as { message?: { content?: unknown }; error?: string };
         if (item.error) throw new LlmProviderError('ollama', 502, item.error);
         const fragment = typeof item.message?.content === 'string' ? item.message.content : '';
-        if (fragment) { raw += fragment; onDelta(fragment); }
+        if (fragment) {
+          raw += fragment;
+          // Never stream thought blocks or incomplete markup tags into chat.
+          const visible = raw.replace(/<think>[\s\S]*?<\/think>/gi, '')
+            .replace(/<think>[\s\S]*$/gi, '')
+            .replace(/^[\s\S]*?<\/think>/i, '')
+            .replace(/<[^>]*$/, '');
+          if (visible.startsWith(emitted)) {
+            const delta = visible.slice(emitted.length);
+            if (delta) onDelta(delta);
+            emitted = visible;
+          }
+        }
       };
       try {
         while (true) {
