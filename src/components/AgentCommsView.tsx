@@ -121,6 +121,8 @@ export const AgentCommsView: React.FC<AgentCommsViewProps> = ({
   const [attachmentProgress, setAttachmentProgress] = useState<{done:number;total:number}|null>(null);
   const [dragOver, setDragOver] = useState(false);
   const [previewAttachment, setPreviewAttachment] = useState<number | null>(null);
+  const [compareAttachments, setCompareAttachments] = useState<number[]>([]);
+  const [attachmentAgents, setAttachmentAgents] = useState<Record<string, 'triad'|'si_1'|'Alex'|'Astyria'|'Aurelius'>>({});
   const [analyzeAttachments, setAnalyzeAttachments] = useState(true);
   const [showProtocolTools, setShowProtocolTools] = useState(false);
   const [showWorkPreview, setShowWorkPreview] = useState(false);
@@ -1182,13 +1184,44 @@ export const AgentCommsView: React.FC<AgentCommsViewProps> = ({
           {chatAttachments.length > 0 && <section aria-label="Załączniki" className="mb-2 rounded-2xl border border-slate-700 bg-slate-900 p-2.5">
             <div className="mb-2 flex items-center justify-between">
               <span className="text-xs font-semibold text-slate-200">Załączniki · {chatAttachments.length}/{MAX_CHAT_ATTACHMENTS}</span>
-              <button type="button" onClick={()=>{setChatAttachments([]);setPreviewAttachment(null);}} className="rounded-lg border border-slate-600 px-2 py-1 text-xs text-slate-300 hover:border-rose-400">Wyczyść wszystkie</button>
+              <button type="button" onClick={()=>{setChatAttachments([]);setPreviewAttachment(null);setCompareAttachments([]);setAttachmentAgents({});}} className="rounded-lg border border-slate-600 px-2 py-1 text-xs text-slate-300 hover:border-rose-400">Wyczyść wszystkie</button>
             </div>
             <ul className="flex flex-wrap gap-2">{chatAttachments.map((file,index)=><li key={`${file.name}-${index}`} className="flex max-w-full items-center gap-2 rounded-xl border border-slate-700 bg-[#19374b] p-2">
               {file.mimeType?.startsWith('image/')?<img alt="" src={`data:${file.mimeType};base64,${file.content}`} className="h-9 w-9 rounded-lg object-cover"/>:<FileText className="h-5 w-5 text-cyan-300"/>}
               <button type="button" aria-expanded={previewAttachment===index} onClick={()=>setPreviewAttachment(previewAttachment===index?null:index)} className="max-w-[42vw] truncate text-xs text-slate-100 hover:underline">{file.name}</button>
               <button type="button" aria-label={`Usuń załącznik ${file.name}`} onClick={()=>{setChatAttachments(current=>current.filter((_,i)=>i!==index));setPreviewAttachment(null);}} className="rounded-lg p-1 text-slate-300 hover:bg-rose-900/40"><X className="h-4 w-4"/></button>
             </li>)}</ul>
+            <div className="mt-3 flex flex-wrap items-center gap-2">
+              <span className="text-xs text-slate-400">Porównanie: {compareAttachments.length}/2</span>
+              <button type="button" disabled={compareAttachments.length!==2} onClick={()=>{
+                const files=compareAttachments.map(index=>chatAttachments[index]).filter(Boolean);
+                setMessageText(current=>[current,'Porównaj te dwa załączniki: '+files.map(file=>file.name).join(' oraz ')+'. Pokaż różnice, ryzyka i rekomendacje.'].filter(Boolean).join('\n'));
+                chatInputRef.current?.focus();
+              }} className="rounded-lg border border-cyan-400/40 px-3 py-1.5 text-xs text-cyan-100 disabled:opacity-40">Pokaż różnice</button>
+              <button type="button" onClick={()=>setCompareAttachments([])} className="rounded-lg px-2 py-1 text-xs text-slate-400 hover:text-white">Reset</button>
+            </div>
+            <div className="mt-2 grid gap-2 sm:grid-cols-2">
+              {chatAttachments.map((file,index)=><div key={`controls-${index}`} className="rounded-xl border border-white/10 bg-[#102638] p-2">
+                <p className="mb-2 truncate text-xs font-medium text-slate-100">{file.name}</p>
+                <div className="flex flex-wrap items-center gap-2">
+                  <label className="flex items-center gap-1 text-xs text-slate-300">
+                    <input type="checkbox" className="accent-cyan-400" checked={compareAttachments.includes(index)}
+                      onChange={event=>setCompareAttachments(current=>event.target.checked ? current.length<2?[...current,index]:current : current.filter(i=>i!==index))}/>
+                    Porównaj
+                  </label>
+                  <select aria-label={`Agent dla ${file.name}`} value={attachmentAgents[String(index)]??'triad'}
+                    onChange={event=>setAttachmentAgents(current=>({...current,[String(index)]:event.target.value as 'triad'|'si_1'|'Alex'|'Astyria'|'Aurelius'}))}
+                    className="min-h-9 rounded-lg border border-slate-600 bg-[#1d3b50] px-2 text-xs text-white">
+                    <option value="triad">Wszyscy</option><option value="si_1">Aria</option><option value="Alex">Alex</option><option value="Astyria">Astyria</option><option value="Aurelius">Aurelius</option>
+                  </select>
+                  {(['Wyjaśnij','Napraw'] as const).map(action=><button key={action} type="button" onClick={()=>{
+                    setSelectedTarget(attachmentAgents[String(index)]??'triad');
+                    setMessageText(current=>[current,`${action} na podstawie załącznika "${file.name}". ${action==='Napraw'?'Zaproponuj poprawkę i poczekaj na zatwierdzenie przed zmianą plików.':'Opisz zawartość, problemy i zalecenia.'}`].filter(Boolean).join('\n'));
+                    chatInputRef.current?.focus();
+                  }} className="rounded-lg border border-cyan-400/30 px-2 py-1.5 text-xs text-cyan-100 hover:bg-cyan-900/30">{action}</button>)}
+                </div>
+              </div>)}
+            </div>
             {previewAttachment!==null&&chatAttachments[previewAttachment]&&<div className="mt-2 rounded-xl bg-[#102638] p-3">
               <div className="mb-2 flex items-center justify-between"><span className="truncate text-xs text-cyan-100">{chatAttachments[previewAttachment].name}</span><button type="button" aria-label="Zamknij podgląd" onClick={()=>setPreviewAttachment(null)}><X className="h-4 w-4"/></button></div>
               {chatAttachments[previewAttachment].mimeType?.startsWith('image/')?<img className="max-h-56 max-w-full rounded-lg object-contain" alt={chatAttachments[previewAttachment].name} src={`data:${chatAttachments[previewAttachment].mimeType};base64,${chatAttachments[previewAttachment].content}`}/>:
