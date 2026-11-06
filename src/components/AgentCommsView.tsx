@@ -25,6 +25,10 @@ import {
 
 interface AgentCommsViewProps {
   dataStore: DataStore;
+  streamingChat?: {
+    prompt: string;
+    agents: Array<{ agent: string; text: string; status: 'writing' | 'done' | 'error' }>;
+  } | null;
   onSendProtocol: (request: AgentProtocolRequest) => Promise<AgentProtocolReply | undefined>;
   onSendMessage: (
     message: string,
@@ -59,6 +63,7 @@ const TWO_WAY_STORAGE_KEY = 'bastilla_two_way_chat_enabled';
 
 export const AgentCommsView: React.FC<AgentCommsViewProps> = ({
   dataStore,
+  streamingChat,
   onSendProtocol,
   onSendMessage,
   onRunAstyriaMission,
@@ -262,7 +267,7 @@ export const AgentCommsView: React.FC<AgentCommsViewProps> = ({
     if (chatScroll && followLatestMessagesRef.current) {
       chatScroll.scrollTop = chatScroll.scrollHeight;
     }
-  }, [dataStore.chat_history.length, isLoading]);
+  }, [dataStore.chat_history.length, isLoading, streamingChat]);
 
   const handleSendProtocol = async () => {
     if (isLoading) return;
@@ -609,7 +614,7 @@ export const AgentCommsView: React.FC<AgentCommsViewProps> = ({
             Nie udało się wysłać żądania: {sendError}
           </div>
         )}
-        {dataStore.chat_history.length === 0 ? (
+        {dataStore.chat_history.length === 0 && !streamingChat ? (
           <div className="flex flex-col items-center justify-center h-full text-center text-slate-500 py-12 space-y-2">
             <MessagesSquare className="w-10 h-10 text-slate-600 stroke-[1.5]" />
             <p className="text-sm font-medium text-slate-400">Komora czatu operacyjnego jest pusta.</p>
@@ -713,7 +718,34 @@ export const AgentCommsView: React.FC<AgentCommsViewProps> = ({
           })
         )}
 
-        {isLoading && (
+        {streamingChat && (
+          <section className="space-y-3" aria-label="Bieżąca rozmowa z agentami">
+            <div className="ml-2 rounded-xl border border-purple-500/50 bg-purple-950/30 p-3 sm:ml-14 sm:p-4">
+              <div className="mb-2 text-xs font-bold text-purple-200">Operator · wysłano</div>
+              <div className="whitespace-pre-wrap break-words text-sm text-slate-200">{streamingChat.prompt}</div>
+            </div>
+            {streamingChat.agents.length === 0 && <div className="rounded-xl border border-cyan-900 bg-slate-900 p-3 text-xs text-cyan-200">
+              <RefreshCw className="mr-2 inline h-3.5 w-3.5 animate-spin"/>Oczekiwanie na pierwszego agenta…
+            </div>}
+            {streamingChat.agents.map(entry => {
+              const profile = SYSTEM_AGENTS[entry.agent];
+              return <div key={entry.agent} className={'mr-2 rounded-xl border bg-slate-900/95 p-3 shadow-md sm:mr-14 sm:p-4 ' + (profile?.borderColor || 'border-cyan-900')}>
+                <div className="mb-2 flex items-center justify-between border-b border-slate-800 pb-2 text-xs">
+                  <strong className="text-cyan-100">{entry.agent === 'si_1' ? 'Aria' : entry.agent}</strong>
+                  <span className={entry.status === 'done' ? 'text-emerald-300' : entry.status === 'error' ? 'text-rose-300' : 'text-cyan-300'}>
+                    {entry.status === 'done' ? 'Odpowiedź gotowa' : entry.status === 'error' ? 'Błąd' : 'Generowanie…'}
+                  </span>
+                </div>
+                {entry.status === 'done'
+                  ? <WorkChatMessage content={entry.text} onPrompt={prepareWorkPrompt} onOpenTerminal={onOpenTerminal}/>
+                  : <div className="min-h-[24px] whitespace-pre-wrap break-words font-mono text-sm leading-relaxed text-slate-100">
+                    {entry.text || '…'}<span aria-hidden="true" className="ml-1 inline-block h-4 w-1.5 animate-pulse bg-cyan-400 align-middle" />
+                  </div>}
+              </div>;
+            })}
+          </section>
+        )}
+        {isLoading && !streamingChat && (
           <div className="flex flex-wrap items-center justify-between gap-2 text-slate-200 p-3 bg-slate-900/80 rounded-xl border border-cyan-500/30">
             <div className="flex items-center gap-2">
               <RefreshCw className="w-3.5 h-3.5 text-cyan-400 animate-spin" />
@@ -750,6 +782,8 @@ export const AgentCommsView: React.FC<AgentCommsViewProps> = ({
           { label: 'Grafika', icon: ImageIcon, prompt: 'Wygeneruj lub wyszukaj grafikę i pokaż ją w odpowiedzi. Użyj prawdziwego adresu HTTPS lub lokalnej ścieżki w bastilla-ui type image, src, alt; jeśli nie możesz uzyskać obrazu, poinformuj o ograniczeniu.' },
           { label: 'Wideo', icon: Clapperboard, prompt: 'Pokaż istniejące wideo jako osadzony odtwarzacz w wiadomości. Zwróć prawdziwy adres HTTPS MP4/WebM/YouTube w bastilla-ui type video, src i title. Nie wymyślaj filmu.' },
           { label: 'Kod', icon: Code2, prompt: 'Przygotuj kod rozwiązania z objaśnieniem i gotowym blokiem kodu Markdown. Nie wykonuj go bez autoryzacji.' },
+          { label: 'cURL', icon: Code2, prompt: 'Pokaż techniczną kartę HTTP/cURL i JSON dla opisywanego API. Użyj bloku bastilla-ui z type curl, title, method, url, headers i opcjonalnie response. Nie podawaj tajnych tokenów.' },
+          { label: 'Dynamiczne UI', icon: Sparkles, prompt: 'Zaprojektuj w tej wiadomości responsywny panel bastilla-ui. Wybierz odpowiednie komponenty spośród: metric, chart, table, actions, terminal, progress, steps, alert, timeline, tabs, accordion, checklist, form, code, handoff, curl, http, json, diff, logs. Używaj tylko potwierdzonych danych; działania przygotowują szkic, nie wykonują poleceń.' },
           { label: 'Raport', icon: FileText, prompt: 'Przedstaw raport w formie tabel, metryk i interaktywnych elementów, rozdziel sukcesy i błędy. Wykorzystuj tylko potwierdzone dane i logi; możesz użyć bastilla-ui type table, metric, chart, actions.' },
         ] as const).map((item) => <button key={item.label} type="button" disabled={isLoading} onClick={() => prepareWorkPrompt(item.prompt)}
           className="flex shrink-0 items-center gap-1.5 rounded-lg border border-cyan-800/70 bg-slate-900/90 px-3 py-1.5 text-[11px] font-semibold text-cyan-100 hover:bg-cyan-950 disabled:opacity-40 transition">
