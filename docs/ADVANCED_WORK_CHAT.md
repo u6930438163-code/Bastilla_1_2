@@ -95,11 +95,12 @@ W wiadomości agent może włączyć odczyt tylko dla wspieranych typów `metric
 
 ## Nowe karty statusu: Ollama, agenci i logi LIVE
 
-W podglądzie **Work** dostępne są osobne zakładki **Ollama / Agenci LIVE** oraz **Logi LIVE**.
+W podglądzie **Work** dostępne są osobne zakładki **Ollama / Agenci LIVE**, **Logi LIVE** oraz **Procesy LIVE**.
 
 - `live_status` — read-only GET do jednego z dwóch ściśle ograniczonych endpointów: `/api/ollama/models` (Ollama, model skonfigurowany i dostępne modele) albo `/api/agents/background/status` (monitoring wspólnej Ollamy). Użytkownik może przełączać źródło, wstrzymać i wznowić aktualizacje, odświeżyć ręcznie i przygotować szkic diagnostyki. Interwał 5–30 s.
 - **Istotne:** `/api/agents/background/status` nie sprawdza samodzielnej aktywności workerów. Odczyt „online” oznacza tylko stan wspólnej Ollamy — **nie potwierdza wykonywania zadań przez Arię, Alexa, Astyrię ani Aureliusa**. Podobnie dostępność `/api/ollama/models` nie potwierdza modelu w RAM.
 - `live_logs` — osobna karta filtrów, wyszukiwania oraz rozwijania szczegółów. Pobiera **GET /api/operations/logs?filter=all**, wyłącznie przy aktywnej sesji operatora. Logi nie są automatycznie pisane na czacie. Kategoria `success` jest deklaracją systemowego wpisu `healed`, a nie potwierdzoną naprawą.
+- `live_processes` — lista aktualnych procesów z **GET /api/operations/processes**, filtrowanie po nazwie/PID i sortowanie CPU/RAM/PID, aktualizacja co 9 sekund. Podgląd jest tylko do odczytu, nie wysyła poleceń `ps` z przeglądarki i nie umożliwia zamykania procesów. Rzeczywisty zakres listy zależy od przestrzeni procesów dostępnej serwerowi/kontenerowi.
 - Przy logu błędu można wybrać agenta i przygotować **edytowalny szkic** diagnostyczny. Żadna wiadomość nie zostanie wysłana bez świadomej akcji użytkownika; kliknięcie nie uruchamia poleceń.
 - Przy odpowiedzi `401`/`403`/`503` karta logów pokazuje konieczność zalogowania operatora; nie omija uwierzytelnienia, nie pobiera haseł i nie pokazuje fikcyjnych logów.
 - Zapamiętane ostatnie pomiary pozostają widoczne po wstrzymaniu albo błędzie, ale są wyraźnie oznaczone jako nieaktualne.
@@ -113,7 +114,8 @@ Przykład wiadomości od agenta:
   "blocks": [
     { "type": "live_status", "title": "Ollama i agenci",
       "live": { "source": "ollama_inventory", "intervalMs": 15000 } },
-    { "type": "live_logs" }
+    { "type": "live_logs" },
+    { "type": "live_processes" }
   ]
 }
 ```
