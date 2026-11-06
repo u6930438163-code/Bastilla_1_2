@@ -244,6 +244,7 @@ export default function App() {
     if (data.state?.store) {
       setDataStore(normalizeDataStore(data.state.store));
     }
+    window.dispatchEvent(new CustomEvent('bastilla:workspace-local', { detail: { topic: 'terminal' } }));
     return data;
     } finally {
       terminalPendingRef.current = Math.max(0, terminalPendingRef.current - 1);
@@ -503,6 +504,7 @@ export default function App() {
       setDataStore(normalized);
       localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(normalized));
       setChatSystemChange(isChatSystemChange(result.change) ? result.change : null);
+      window.dispatchEvent(new CustomEvent('bastilla:workspace-local', { detail: { topic: 'chat' } }));
     } catch (error) {
       const messageText = error instanceof Error ? error.message : 'Nie udało się wysłać wiadomości.';
       setAgentError(messageText);
