@@ -132,8 +132,9 @@ export function DynamicWorkWidget({
 
   if (!spec) return <>{render(block)}</>;
   const hasData = samples.length > 0;
-  const currentBlock = enabled && hasData ? applyLiveValue(block, samples, field) : block;
-  const label = !enabled ? 'Statyczny' : status === 'live' ? 'LIVE · dane serwera' :
+  // Pause freezes the last verified measurement rather than reverting to a mock value.
+  const currentBlock = hasData ? applyLiveValue(block, samples, field) : block;
+  const label = !enabled ? 'Wstrzymano · ostatni pomiar' : status === 'live' ? 'LIVE · dane serwera' :
     status === 'error' ? 'Offline / nieaktualne' : 'Łączenie…';
   return <section className="min-w-0 space-y-2 rounded-xl border border-sky-800/60 bg-slate-950/30 p-2" aria-label="Dynamiczny element czatu">
     <div className="flex flex-wrap items-center gap-2 text-[11px]">
@@ -166,13 +167,13 @@ export function DynamicWorkWidget({
       {hasData ? 'Ostatnie dane nie są już aktualne. ' : 'Nie można pobrać danych. '}
       {error}
     </p>}
-    {enabled && !hasData ? <p role="status" className="p-3 text-xs text-slate-300">
-      {status === 'error' ? 'Brak pomiarów z backendu; nie pokazuję fikcyjnych wartości.' : 'Oczekiwanie na odczyt z serwera…'}
+    {!hasData ? <p role="status" className="p-3 text-xs text-slate-300">
+      {!enabled ? 'Brak wcześniejszego pomiaru. Włącz LIVE, aby pobrać dane.' : status === 'error' ? 'Brak pomiarów z backendu; nie pokazuję fikcyjnych wartości.' : 'Oczekiwanie na odczyt z serwera…'}
     </p> : render(currentBlock)}
     <p className="text-[10px] text-slate-500">
       {enabled && hasData ? 'Ostatni pomiar: ' + new Date(samples[samples.length - 1].at).toLocaleTimeString('pl-PL') +
         ' · odświeżanie co ' + (intervalMs / 1000) + ' s' :
-        enabled ? 'Źródło: /api/system/metrics · tylko odczyt' : 'Tryb statyczny: wartości z wiadomości agenta'}
+        enabled ? 'Źródło: /api/system/metrics · tylko odczyt' : hasData ? 'Wstrzymano odświeżanie · ostatni zweryfikowany pomiar' : 'Oczekiwanie na pierwszy pomiar'}
     </p>
   </section>;
 }
