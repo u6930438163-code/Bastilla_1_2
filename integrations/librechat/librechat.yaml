@@ -15,6 +15,9 @@ memory:
     - learned_facts
   tokenLimit: 8000
   charLimit: 10000
+  # No model subscription, billing or background extraction enabled here.
+  agent:
+    enabled: false
 endpoints:
   custom:
     - name: "Bastilla Agents"
