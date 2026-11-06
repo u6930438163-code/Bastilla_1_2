@@ -240,3 +240,91 @@
 @media (prefers-reduced-motion: reduce) {
   .bastilla-chat-card, .bastilla-chat-toolbar button { transition: none !important; }
 }
+
+
+/* Rich components embedded in agent messages: charts, media, PDF, code, forms and tabs. */
+.bastilla-chat-card :where(
+  section.rounded-xl, figure.rounded-xl, div.rounded-xl.border,
+  form.rounded-xl, section.rounded-2xl
+):not([role="alert"]):not([role="status"]) {
+  background: #0d2233 !important;
+  border-color: #305064 !important;
+  border-radius: 12px !important;
+  box-shadow: none !important;
+}
+.bastilla-chat-card :where(pre, code) {
+  font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
+}
+.bastilla-chat-card :where(pre, table, video, iframe, img, svg, canvas) { max-width: 100%; }
+.bastilla-chat-card :where(button[aria-pressed], button[role="tab"]) {
+  border: 1px solid #325369; border-radius: 9px;
+  background: #112d3e; color: #b9dfea;
+}
+.bastilla-chat-card :where(button[aria-pressed="true"], button[role="tab"][aria-selected="true"]) {
+  border-color: #53b8c8; background: #145568; color: #e8fcff;
+}
+.bastilla-chat-card :where(input:not([type="checkbox"]):not([type="range"]), textarea, select) {
+  background: #071827; border: 1px solid #36596c; color: #e5f5fd;
+  border-radius: 9px; max-width: 100%;
+}
+.bastilla-chat-card :where(progress, input[type="range"]) { accent-color: #22b9c6; }
+.bastilla-chat-card :where(table) { border-color: #2e4c5d; }
+.bastilla-chat-card :where(th) { background: #123347; }
+.bastilla-chat-card :where(td) { border-color: #29475a; }
+.bastilla-work-terminal-card {
+  background: #0d2233 !important;
+  border-color: #29475a !important;
+  border-radius: 13px !important;
+  box-shadow: none !important;
+}
+.bastilla-work-terminal-card > header { background: #112c3f !important; border-color: #284a5a !important; }
+.bastilla-work-terminal-card :where(nav, footer) { border-color: #29475a !important; }
+.bastilla-work-terminal-card button[aria-pressed="true"] {
+  border: 1px solid #4ca7b5; background: #135265; border-radius: 8px;
+}
+
+/* AI Work tool picker and diagnostic inventory: no distinct brightly colored cards. */
+.bastilla-chat-shell section[aria-label="Interaktywne centrum czatu"] {
+  background: #0b2030 !important; border-color: #29475a !important;
+}
+.bastilla-chat-shell section[aria-label="Interaktywne centrum czatu"] button {
+  border-color: #35566b; border-radius: 10px;
+}
+.bastilla-chat-shell section[aria-label="Interaktywne centrum czatu"] button:hover {
+  border-color: #4b9eb0;
+}
+.bastilla-chat-shell section[aria-label="Interaktywne centrum czatu"] button.min-h-16 {
+  background: #11283b !important; border-color: #29475a !important; box-shadow: none;
+}
+.app-shell .bastilla-ops-panel[aria-label="Katalog narzędzi diagnostycznych"] .grid > div {
+  background: var(--b5-card-bg); border: 1px solid var(--b5-card-border);
+  border-radius: 12px; min-width: 0;
+}
+.app-shell .bastilla-ops-panel[aria-label="Katalog narzędzi diagnostycznych"] .grid > div:hover {
+  border-color: #49869a;
+}
+
+/* Approvals: match the metadata shell while retaining green/red confirmation meanings. */
+.app-shell section.cyber-grid:has(> header h1) {
+  background: #071321 !important; background-image: none !important;
+}
+.app-shell section.cyber-grid:has(> header h1) > header {
+  background: #0b2030 !important; border-color: #29475a !important;
+}
+.app-shell section.cyber-grid:has(> header h1) article {
+  background: var(--b5-card-bg) !important;
+  border: 1px solid var(--b5-card-border) !important;
+  border-left: 3px solid #eab308 !important;
+  border-radius: 13px !important;
+}
+.app-shell section.cyber-grid:has(> header h1) details {
+  background: #081827; border-color: #29475a; border-radius: 10px;
+}
+@media (max-width: 639px) {
+  .bastilla-chat-card :where(section.rounded-xl, form.rounded-xl, section.rounded-2xl) {
+    padding: 10px;
+  }
+  .app-shell .bastilla-ops-panel[aria-label="Katalog narzędzi diagnostycznych"] .grid > div {
+    padding: 11px;
+  }
+}
