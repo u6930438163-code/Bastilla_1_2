@@ -1,10 +1,11 @@
 import React, { useState } from 'react';
 import { BarChart3, ChevronDown, ChevronUp, Clapperboard, Code2, Copy, Image as ImageIcon, Play, Sparkles } from 'lucide-react';
 import { FormattedMessage } from './FormattedMessage';
+import { TerminalWorkCard, type TerminalCardEntry, type TerminalCardStatus } from './TerminalWorkCard';
 
 type WorkBlock = Record<string, unknown>;
 type WorkPayload = { title?: string; blocks?: WorkBlock[] };
-type WorkChatMessageProps = { content: string; onPrompt: (prompt: string) => void };
+type WorkChatMessageProps = { content: string; onPrompt: (prompt: string) => void; onOpenTerminal?: () => void };
 
 const MAX_BLOCKS = 12;
 
@@ -93,8 +94,23 @@ function VideoPlayer({ src, title }: { src: string; title: string }) {
   </div>;
 }
 
-function Widget({ block, onPrompt }: { block: WorkBlock; onPrompt: (prompt: string) => void }) {
+function Widget({ block, onPrompt, onOpenTerminal }: { block: WorkBlock; onPrompt: (prompt: string) => void; onOpenTerminal?: () => void }) {
   const kind = block.type;
+  if (kind === 'terminal') {
+    const types = new Set(['input','output','success','error','system','banner']);
+    const entries: TerminalCardEntry[] = Array.isArray(block.entries)
+      ? block.entries.slice(0, 60).filter((v): v is Record<string, unknown> => Boolean(v) && typeof v === 'object' && !Array.isArray(v))
+        .map(v => ({ type: types.has(String(v.type)) ? v.type as TerminalCardEntry['type'] : 'output',
+          text: text(v.text, 4000), time: text(v.time, 30) }))
+      : [];
+    const status: TerminalCardStatus = ['idle','running','success','error'].includes(String(block.status))
+      ? block.status as TerminalCardStatus : 'idle';
+    return <TerminalWorkCard title={text(block.title, 110) || 'Terminal · odpowiedź AI'}
+      command={text(block.command, 1200)} status={status} entries={entries}
+      progress={typeof block.progress === 'number' && Number.isFinite(block.progress) ? block.progress : null}
+      source="Treść przesłana przez agenta — niezweryfikowana przez backend"
+      onOpenTerminal={onOpenTerminal} compact />;
+  }
   if (kind === 'chart') return <Chart block={block}/>;
   if (kind === 'image') {
     const src = safeSource(block.src);
@@ -140,7 +156,7 @@ function Widget({ block, onPrompt }: { block: WorkBlock; onPrompt: (prompt: stri
   return null;
 }
 
-function RichCard({ raw, onPrompt }: { raw: string; onPrompt: (prompt: string) => void }) {
+function RichCard({ raw, onPrompt, onOpenTerminal }: { raw: string; onPrompt: (prompt: string) => void; onOpenTerminal?: () => void }) {
   let payload: WorkPayload;
   try {
     payload = JSON.parse(raw) as WorkPayload;
@@ -151,7 +167,7 @@ function RichCard({ raw, onPrompt }: { raw: string; onPrompt: (prompt: string) =
   return <section className="my-3 rounded-2xl border border-sky-800/80 bg-[#0b1c2f] p-3 sm:p-4 space-y-3" aria-label="Interaktywna odpowiedź agenta">
     <div className="flex items-center gap-2 text-sky-200 font-bold text-sm"><Sparkles size={16}/>{text(payload.title, 120) || 'Bastilla · Work Card'}</div>
     {payload.blocks.slice(0, MAX_BLOCKS).filter((block) => block && typeof block === 'object').map((block, index) =>
-      <Widget key={index} block={block} onPrompt={onPrompt}/>)}
+      <Widget key={index} block={block} onPrompt={onPrompt} onOpenTerminal={onOpenTerminal}/>)}
   </section>;
 }
 
@@ -159,13 +175,13 @@ function RichCard({ raw, onPrompt }: { raw: string; onPrompt: (prompt: string) =
  * Renders normal agent messages with the existing Markdown/media renderer,
  * and optional fenced bastilla-ui JSON cards. No code executes from JSON.
  */
-export function WorkChatMessage({ content, onPrompt }: WorkChatMessageProps) {
+export function WorkChatMessage({ content, onPrompt, onOpenTerminal }: WorkChatMessageProps) {
   const segments: React.ReactNode[] = [];
   const regex = /```bastilla-ui\s*\n([\s\S]*?)```/gi;
   let last = 0, match: RegExpExecArray | null, i = 0;
   while ((match = regex.exec(content)) !== null) {
     if (match.index > last) segments.push(<FormattedMessage key={'text-' + i} content={content.slice(last, match.index)}/>);
-    segments.push(<RichCard key={'widget-' + i} raw={match[1]} onPrompt={onPrompt}/>);
+    segments.push(<RichCard key={'widget-' + i} raw={match[1]} onPrompt={onPrompt} onOpenTerminal={onOpenTerminal}/>);
     last = regex.lastIndex; i++;
     if (i >= 10) break;
   }
@@ -189,6 +205,15 @@ const examples = {
     title: 'Odtwarzanie wideo',
     blocks: [{ type: 'text', content: 'Agent może zwrócić link do filmu **MP4 / WebM** albo **YouTube**. Dla YouTube odtwarzacz jest ładowany dopiero po kliknięciu. Nie symulujemy nagrań ani transmisji.' }],
   },
+  terminal: {
+    title: 'Terminal osadzony w wiadomości',
+    blocks: [{ type: 'terminal', title: 'BASTILLA / TERMINAL', command: 'status',
+      status: 'success', entries: [
+        { type: 'input', text: '$ status', time: 'DEMO' },
+        { type: 'system', text: 'Tryb demonstracyjny; brak odczytu z prawdziwego serwera.', time: 'DEMO' },
+        { type: 'success', text: 'Przykładowy blok wyniku terminala.', time: 'DEMO' },
+      ] }],
+  },
   action: {
     title: 'Interaktywne przyciski',
     blocks: [{ type: 'actions', actions: [
@@ -199,7 +224,7 @@ const examples = {
   },
 } as const;
 
-export function WorkChatDemo({ onPrompt }: { onPrompt: (prompt: string) => void }) {
+export function WorkChatDemo({ onPrompt, onOpenTerminal }: { onPrompt: (prompt: string) => void; onOpenTerminal?: () => void }) {
   const [open, setOpen] = useState(true);
   const [tab, setTab] = useState<keyof typeof examples>('chart');
   return <div className="border-b border-sky-900 bg-[#091827] px-3 py-2">
@@ -214,10 +239,11 @@ export function WorkChatDemo({ onPrompt }: { onPrompt: (prompt: string) => void 
           ['image', ImageIcon, 'Grafiki'],
           ['video', Clapperboard, 'Wideo'],
           ['action', Code2, 'Przyciski'],
+          ['terminal', Code2, 'Terminal'],
         ] as const).map(([key, Icon, label]) =>
           <button key={key} type="button" onClick={() => setTab(key)} aria-pressed={tab === key} className={'px-3 py-2 rounded-lg text-xs flex gap-1.5 items-center border ' + (tab === key ? 'bg-cyan-900/70 border-cyan-500 text-white' : 'bg-slate-900 border-slate-700 text-slate-300')}><Icon size={14}/>{label}</button>)}
       </div>
-      <RichCard raw={JSON.stringify(examples[tab])} onPrompt={onPrompt}/>
+      <RichCard raw={JSON.stringify(examples[tab])} onPrompt={onPrompt} onOpenTerminal={onOpenTerminal}/>
       <p className="text-[11px] text-slate-400">To podgląd możliwości. Rzeczywiste dane i multimedia muszą pochodzić z wiadomości agenta.</p>
     </div>}
   </div>;
