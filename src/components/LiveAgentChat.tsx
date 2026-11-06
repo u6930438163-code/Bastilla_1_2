@@ -168,6 +168,7 @@ export default function LiveAgentChat() {
       if (!response.ok) throw new Error(data.error || 'Logowanie nie powiodło się.');
       setPassword('');
       setAuth('authenticated');
+      window.dispatchEvent(new Event('bastilla:live-chat-auth'));
     } catch (cause) {
       setLoginError(cause instanceof Error ? cause.message : 'Logowanie nie powiodło się.');
     } finally {
@@ -183,6 +184,7 @@ export default function LiveAgentChat() {
       setStatus(null);
       setAuth('login');
       setConnection('Wylogowano');
+      window.dispatchEvent(new Event('bastilla:live-chat-auth'));
     }
   }
 
