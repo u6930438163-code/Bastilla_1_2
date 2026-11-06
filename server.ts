@@ -6372,8 +6372,10 @@ app.post('/api/triad/message', async (req, res) => {
     const engines = {} as Record<ChatAgentName, string>;
     for (const result of results) {
       let text = result.text;
-      // AUTO-EXEC (ROOT UNLIMITED): polecenia /propose i /exec w odpowiedziach modeli wykonują się natychmiast.
-      if (result.llm) {
+      // Rich chat streaming must never execute commands merely because the model
+      // rendered an action, cURL example, code block or proposed operation.
+      // Preserve the legacy non-streaming contract for older API consumers.
+      if (result.llm && !wantsStream) {
         try {
           const execNote = await autoExecuteAgentReplyCommands(text);
           if (execNote) {
