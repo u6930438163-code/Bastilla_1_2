@@ -5,6 +5,7 @@ import { RichInlineWidget } from './RichInlineWidget';
 import { AgentChoiceWidget } from './AgentChoiceWidget';
 import { AdvancedWorkWidget } from './AdvancedWorkWidget';
 import { DynamicWorkWidget, getLiveWorkSpec } from './DynamicWorkWidget';
+import { LiveStatusWorkWidget } from './LiveStatusWorkWidget';
 import { TerminalWorkCard, type TerminalCardEntry, type TerminalCardStatus } from './TerminalWorkCard';
 import { ProgressWorkWidget, StepsWorkWidget, FileExplorerWorkWidget, ModelSettingsWorkWidget, ThreeDWorkWidget, PdfWorkWidget } from './AdvancedWorkWidgets';
 
@@ -101,6 +102,7 @@ function VideoPlayer({ src, title }: { src: string; title: string }) {
 
 function Widget({ block, onPrompt, onOpenTerminal }: { block: WorkBlock; onPrompt: (prompt: string) => void; onOpenTerminal?: () => void }) {
   const kind = block.type;
+  if (kind === 'live_status') return <LiveStatusWorkWidget block={block} onPrompt={onPrompt}/>;
   // Only allowlisted, read-only data bindings can become live; all other cards stay static.
   if (block.__bastillaLiveApplied !== true && getLiveWorkSpec(block)) {
     return <DynamicWorkWidget block={block} render={updated =>
@@ -272,6 +274,13 @@ const examples = {
       { type: 'progress', title: 'Użycie RAM', value: 0, live: { source: 'system_metrics', field: 'ramPercent', intervalMs: 5000 } },
     ],
   },
+  liveStatus: {
+    title: 'Status Ollama i agentów · LIVE',
+    blocks: [
+      { type: 'text', content: 'Te karty pokazują **odczyty API**, a nie symulację. Monitoring agentów sprawdza wspólną Ollamę i nie potwierdza pracy workerów. Przycisk diagnozy przygotowuje szkic wiadomości bez automatycznego wysłania.' },
+      { type: 'live_status', title: 'Ollama i agenci', live: { source: 'ollama_inventory', intervalMs: 15000 } },
+    ],
+  },
   image: {
     title: 'Wizualizacje i grafiki',
     blocks: [{ type: 'text', content: 'Agent może odesłać grafikę jako **HTTPS** lub lokalny plik **/assets/...**. Obrazy będą wyświetlane w wiadomościach z podpisem. Obsługiwane są również obrazy Markdown i wektorowe SVG.' }],
@@ -358,6 +367,7 @@ export function WorkChatDemo({ onPrompt, onOpenTerminal }: { onPrompt: (prompt: 
           ['form', Sparkles, 'Formularze'],
           ['advanced', Sparkles, 'Zaawansowane'],
           ['live', BarChart3, 'Dynamiczne LIVE'],
+          ['liveStatus', Sparkles, 'Ollama / Agenci LIVE'],
         ] as const).map(([key, Icon, label]) =>
           <button key={key} type="button" onClick={() => setTab(key)} aria-pressed={tab === key} className={'px-3 py-2 rounded-lg text-xs flex gap-1.5 items-center border ' + (tab === key ? 'bg-cyan-900/70 border-cyan-500 text-white' : 'bg-slate-900 border-slate-700 text-slate-300')}><Icon size={14}/>{label}</button>)}
       </div>
