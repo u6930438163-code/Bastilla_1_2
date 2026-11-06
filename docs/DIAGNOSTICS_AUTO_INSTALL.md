@@ -2,7 +2,7 @@
 
 Instalator korzysta z katalogu **50 projektów GitHub** w pliku
 integrations/diagnostics/catalog.mjs. **Nie instaluje wszystkich 50**:
-automatyzuje instalację 21 narzędzi z repozytoriów systemowych APT.
+automatyzuje instalację 24 narzędzi z repozytoriów systemowych APT.
 Pozostałe wymagają osobnych instalacji lub uruchomienia usług.
 
 ## Uruchomienie z katalogu repozytorium
@@ -19,7 +19,7 @@ Instalacja podstawowego profilu (do 13 programów, jeśli dostępne w APT):
 
     npm run setup:diagnostics -- --apply
 
-Instalacja profilu rozszerzonego (do 21 programów):
+Instalacja profilu rozszerzonego (do 24 programów):
 
     npm run setup:diagnostics -- --apply --profile expanded
 
@@ -42,13 +42,16 @@ Opcja --no-update pomija odświeżenie indeksu APT w trybie instalacji.
 - Podstawowy: Glances, Sysstat, strace, Smartmontools, NVMe CLI,
   lm-sensors, MTR, tcpdump, Nmap, GoAccess, HTTPie, Lynis, lnav.
 - Rozszerzony: podstawowy + bpftrace, FIO, iperf3, testssl.sh,
-  AIDE, OpenSCAP, pg_activity, pgBadger.
+  AIDE, OpenSCAP, pg_activity, pgBadger, ssh-audit, MySQLTuner i ClamAV.
 
 Jeśli pakiet nie jest dostępny w aktywnych repozytoriach APT, instalator
 pomija go i podaje powód w raporcie. Nie dodaje zewnętrznych repozytoriów,
 nie pobiera ani nie uruchamia skryptów instalacyjnych GitHub, nie uruchamia
-skanów sieci, obciążenia ani usług. Pakiety APT mogą wykonywać standardowe
-kroki postinstalacyjne, więc uruchamiaj --apply na własnym hoście.
+skanów sieci ani testów obciążenia. **Przed instalacją każdego pakietu** uruchamia
+symulację APT i pomija pakiet, jeśli symulacja się nie powiedzie albo wskazuje
+usuwanie pakietów. Pakiety APT mogą wykonywać standardowe kroki postinstalacyjne,
+**w tym uruchamiać usługi**, dlatego --apply uruchamiaj świadomie na własnym hoście.
+Programy z profilu rozszerzonego mogą wymagać dodatkowej konfiguracji i zasobów.
 
 ## Integracja z Bastillą i agentami
 
@@ -70,3 +73,19 @@ Nie są automatycznie włączane bez decyzji operatora.
     npm test
 
 Testy nie instalują żadnych pakietów.
+
+## Kontrola bezpieczeństwa i ograniczenia
+
+- Instalator nie uruchamia skanów ani nie sprawdza zewnętrznych hostów.
+- Wykonanie --apply aktualizuje indeks APT, jeśli ma zainstalować nowe pakiety.
+- Weryfikacja apt-get --simulate blokuje operacje Remv/Purg i błędy zależności;
+  to nie jest pełny audyt bezpieczeństwa skryptów postinstalacyjnych APT.
+- Każde wykonanie --apply zapisuje raport z sukcesami i błędami w folderze data/.
+- W Codespaces narzędzia instalują się w kontenerze, nie na hoście GitHub ani
+  na komputerze użytkownika. Po odbudowaniu kontenera instalację może trzeba
+  powtórzyć albo dodać do własnego obrazu kontenera.
+
+Pakiety ssh-audit, mysqltuner i clamav są dostępne dla Debiana 13 Trixie:
+https://packages.debian.org/trixie/ssh-audit
+https://packages.debian.org/trixie/mysqltuner
+https://packages.debian.org/trixie/clamav
