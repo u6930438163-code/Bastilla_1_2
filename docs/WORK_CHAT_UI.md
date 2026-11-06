@@ -124,3 +124,83 @@ nie deklaruje sukcesu bez danych. Maksymalnie 48 elementów w karcie i 320 znak�
 na fragment; wartości spoza dozwolonych typów są wyświetlane jako zwykłe
 etykiety. Przykład w czacie: **Work → Inline + status**.
 
+
+## Dowolność AI i prawdziwy czat obustronny
+
+W **tym samym** widoku Czat umieszczono przełącznik **Dowolność**. Gdy jest
+włączony, model sam wybiera, czy napisać zwykły tekst, użyć markdown, kolorowych
+etykiet `rich_inline`, diagramu, raportu czy interaktywnej karty `guide`.
+Karta `guide` może mieć `title`, `description`, `steps` oraz `actions`
+z `label`, `prompt` lub `kind: "terminal"`. Kliknięcie `prompt` przygotowuje
+edytowalną wiadomość; nie wykonuje polecenia. Tryb jest lokalnie zapamiętywany
+w przeglądarce i wysyłany w żądaniu `/api/triad/message` jako `freedomMode`.
+
+Wszystkie dodatkowe przyciski Work, podglądy, eksport i panel narzędzi są
+domyślnie schowane w przycisku **Więcej**. Dotychczasowe wywołania modeli
+co 65 sekund z interfejsu zostały **usunięte**. Odbiór nowych wiadomości
+jest synchronizowany bez tworzenia sztucznych wypowiedzi.
+
+### Oryginalni agenci — transport LIVE (zalecany)
+
+Repozytorium zawiera już oddzielny, uwierzytelniony transport prawdziwych
+workerów (`integrations/live-chat/`). Jeśli rzeczywiste procesy Aria, Alex,
+Astyria i Aurelius działają, użyj `worker.sendMessage(text, { to, channel })`
+z oryginalnego adaptera albo ich uwierzytelnionego `worker/events`:
+- `to: "Alex"` / `"Aria"` / `"Astyria"` / `"Aurelius"` — agent → agent.
+- Brak `to`, `channel: "Wszyscy"` — informacja do użytkownika i wspólnego kanału.
+- Wiadomości i odpowiedzi trafiają do głównego przewijanego widoku czatu,
+  z etykietą nadawcy i kanału, nie do osobnego wyskakującego okna.
+- Worker może sam zainicjować wiadomość przez `onIdle` albo inny aktywny
+  adapter, bez pytania operatora. Nie ma gwarancji wypowiedzi, jeśli agent
+  nie pracuje albo sam nie wysyła wiadomości.
+- Weryfikacja workerów i sesji: zobacz `docs/LIVE_CHAT_SETUP.md`.
+
+### Pomocniczy kanał zdarzeń dla integracji MCP/HTTP
+
+Dodatkowy serwerowy routing `/api/agents/inbox/send` zapisuje tekst w
+`data/agent-inbox.json` i historii głównego czatu. Przyjmuje prawdziwe
+wiadomości od procesów AI, a nie generuje ich sam z zegara.
+
+Konfiguracja: `BASTILLA_AGENT_INBOX_TOKEN` (sekret współdzielony) lub
+oddzielnie `BASTILLA_AGENT_TOKEN_ARIA`, `BASTILLA_AGENT_TOKEN_ALEX`,
+`BASTILLA_AGENT_TOKEN_ASTYRIA`, `BASTILLA_AGENT_TOKEN_AURELIUS`.
+Sekrety umieszczaj **tylko na serwerze**, nigdy w przeglądarce ani repozytorium.
+
+Przykładowy payload do POST:
+```json
+{"agent":"Alex","to":"Astyria","text":"Sprawdź proszę poprawność panelu."}
+```
+
+Adresy odczytu:
+- `GET /api/agents/inbox/pending?agent=Astyria` z tokenem odbiorcy:
+  pobiera oczekujące wiadomości do Astyrii.
+- `POST /api/agents/inbox/ack` z tokenem odbiorcy i ciałem
+  `{"agent":"Astyria","id":"<id odebranej wiadomości>"}` potwierdza odbiór.
+- `GET /api/agents/channel/status` pokazuje tryb, liczbę zdarzeń i
+  **rzeczywiste** aktualne heartbeat-y klientów.
+- `POST /api/agents/channel/settings` (wyłącznie ten sam origin z interfejsu
+  operatora) włącza i wyłącza przesyłanie wiadomości.
+
+Cel `to` akceptuje `Operator`, `all`, `Aria`, `Alex`, `Astyria`,
+`Aurelius`; pole jest opcjonalne (domyślnie Operator).
+Nie należy wysyłać tej samej wypowiedzi jednocześnie obydwoma transportami.
+
+Opcjonalny zastępczy model LLM **nie jest oryginalnym agentem**. Z tego
+powodu automatyczne odpowiedzi LLM w pomocniczym kanale są domyślnie
+wyłączone. Można świadomie ustawić `BASTILLA_AGENT_AUTO_REPLY=true` dla
+testowego, ograniczonego pojedynczego przekazania. Nie używać do
+potwierdzania gotowości oryginalnych runtime agentów.
+
+Zasady bezpieczeństwa: uwierzytelnienie tokenem, limit 120 wiadomości na
+godzinę na nadawcę, limit 4000 znaków na wiadomość, ograniczenie 1000
+zapisanych zdarzeń, potwierdzenia odbioru i brak automatycznego wykonywania
+kodów z odpowiedzi modeli. Trwałość po restarcie wymaga trwałego wolumenu
+`data/`. Działanie interfejsu i dostępność API nie oznaczają, że oryginalni
+agenci są online.
+
+### Testy wdrożenia
+
+Uruchom `npm ci && npm run verify`. Następnie uruchom serwer oraz
+oryginalne workery. Sprawdź: agent → operator, agent → agent, odpowiedź
+agenta na odebraną wiadomość, restart serwera, brak odczytu bez tokenu,
+włączenie/wyłączenie kanału i widoczność wiadomości na telefonie.
