@@ -3,9 +3,9 @@ import { ArrowRight, ClipboardCheck, ExternalLink, Sparkles, Terminal } from 'lu
 
 /**
  * A strictly declarative AI-selected guidance card.
- * Clicking "prompt" creates an editable draft; "terminal" only opens the
- * terminal view. No commands, links, shell, JavaScript or backend operations
- * can be executed by untrusted model-supplied widget data.
+ * Clicking a prompt delegates it to the main chat dispatcher; "terminal" opens the
+ * terminal view. No untrusted data can directly execute commands or scripts;
+ * the dispatcher restricts actions to read-only routes or AI requests.
  */
 type Action = Record<string, unknown>;
 type Props = {
@@ -57,7 +57,7 @@ export function AgentChoiceWidget({ block, onPrompt, onOpenTerminal }: Props) {
             const terminal = action.kind === 'terminal';
             return <button key={i} type="button"
               onClick={() => terminal ? onOpenTerminal?.() : onPrompt(action.prompt)}
-              title={terminal ? 'Otwórz istniejący terminal' : 'Wstaw szkic do czatu — zatwierdzisz wysłanie'}
+              title={terminal ? 'Otwórz istniejący terminal' : 'Uruchom akcję jednym kliknięciem'}
               className={'inline-flex max-w-full items-center gap-2 rounded-lg border px-3 py-2 text-xs font-semibold ' +
                 (i === 0 ? 'bg-cyan-800/60 border-cyan-500 text-white hover:bg-cyan-700/60' :
                   'bg-slate-900 border-slate-600 text-cyan-100 hover:bg-cyan-950')}>
@@ -69,8 +69,7 @@ export function AgentChoiceWidget({ block, onPrompt, onOpenTerminal }: Props) {
         </div>
       )}
       <p className="mt-3 text-[10px] leading-relaxed text-slate-400">
-        Propozycje AI. Przyciski tworzą szkic do zatwierdzenia lub otwierają terminal;
-        nie wykonują automatycznie poleceń.
+        Propozycje AI. Odczyty wykonują się bez wpisywania wiadomości; zmiany systemowe wymagają zgody.
       </p>
     </section>
   );
