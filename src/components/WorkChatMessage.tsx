@@ -13,7 +13,7 @@ import { ProgressWorkWidget, StepsWorkWidget, FileExplorerWorkWidget, ModelSetti
 
 type WorkBlock = Record<string, unknown>;
 type WorkPayload = { title?: string; blocks?: WorkBlock[] };
-type WorkChatMessageProps = { content: string; onPrompt: (prompt: string) => void; onOpenTerminal?: () => void };
+type WorkChatMessageProps = { content: string; onPrompt: (prompt: string) => void; onPreparePrompt?: (prompt: string) => void; onOpenTerminal?: () => void };
 
 const MAX_BLOCKS = 12;
 
@@ -102,15 +102,15 @@ function VideoPlayer({ src, title }: { src: string; title: string }) {
   </div>;
 }
 
-function Widget({ block, onPrompt, onOpenTerminal }: { block: WorkBlock; onPrompt: (prompt: string) => void; onOpenTerminal?: () => void }) {
+function Widget({ block, onPrompt, onPreparePrompt, onOpenTerminal }: { block: WorkBlock; onPrompt: (prompt: string) => void; onPreparePrompt?: (prompt: string) => void; onOpenTerminal?: () => void }) {
   const kind = block.type;
-  if (kind === 'live_status') return <LiveStatusWorkWidget block={block} onPrompt={onPrompt}/>;
-  if (kind === 'live_logs') return <LiveLogsWorkWidget onPrompt={onPrompt}/>;
-  if (kind === 'live_processes') return <LiveProcessesWorkWidget onPrompt={onPrompt}/>;
+  if (kind === 'live_status') return <LiveStatusWorkWidget block={block} onPrompt={onPreparePrompt ?? onPrompt}/>;
+  if (kind === 'live_logs') return <LiveLogsWorkWidget onPrompt={onPreparePrompt ?? onPrompt}/>;
+  if (kind === 'live_processes') return <LiveProcessesWorkWidget onPrompt={onPreparePrompt ?? onPrompt}/>;
   // Only allowlisted, read-only data bindings can become live; all other cards stay static.
   if (block.__bastillaLiveApplied !== true && getLiveWorkSpec(block)) {
     return <DynamicWorkWidget block={block} render={updated =>
-      <Widget block={{ ...updated, __bastillaLiveApplied: true }} onPrompt={onPrompt} onOpenTerminal={onOpenTerminal}/>}/>;
+      <Widget block={{ ...updated, __bastillaLiveApplied: true }} onPrompt={onPrompt} onPreparePrompt={onPreparePrompt} onOpenTerminal={onOpenTerminal}/>}/>;
   }
   if (kind === 'rich_inline') return <RichInlineWidget block={block}/>;
   if (kind === 'guide') return <AgentChoiceWidget block={block} onPrompt={onPrompt} onOpenTerminal={onOpenTerminal}/>;
@@ -181,7 +181,7 @@ function Widget({ block, onPrompt, onOpenTerminal }: { block: WorkBlock; onPromp
   return null;
 }
 
-function RichCard({ raw, onPrompt, onOpenTerminal }: { raw: string; onPrompt: (prompt: string) => void; onOpenTerminal?: () => void }) {
+function RichCard({ raw, onPrompt, onPreparePrompt, onOpenTerminal }: { raw: string; onPrompt: (prompt: string) => void; onPreparePrompt?: (prompt: string) => void; onOpenTerminal?: () => void }) {
   let payload: WorkPayload;
   try {
     payload = JSON.parse(raw) as WorkPayload;
@@ -192,7 +192,7 @@ function RichCard({ raw, onPrompt, onOpenTerminal }: { raw: string; onPrompt: (p
   return <section className="my-3 rounded-2xl border border-sky-800/80 bg-[#0b1c2f] p-3 sm:p-4 space-y-3" aria-label="Interaktywna odpowiedź agenta">
     <div className="flex items-center gap-2 text-sky-200 font-bold text-sm"><Sparkles size={16}/>{text(payload.title, 120) || 'Bastilla · Work Card'}</div>
     {payload.blocks.slice(0, MAX_BLOCKS).filter((block) => block && typeof block === 'object').map((block, index) =>
-      <Widget key={index} block={block} onPrompt={onPrompt} onOpenTerminal={onOpenTerminal}/>)}
+      <Widget key={index} block={block} onPrompt={onPrompt} onPreparePrompt={onPreparePrompt} onOpenTerminal={onOpenTerminal}/>)}
   </section>;
 }
 
@@ -200,13 +200,13 @@ function RichCard({ raw, onPrompt, onOpenTerminal }: { raw: string; onPrompt: (p
  * Renders normal agent messages with the existing Markdown/media renderer,
  * and optional fenced bastilla-ui JSON cards. No code executes from JSON.
  */
-export function WorkChatMessage({ content, onPrompt, onOpenTerminal }: WorkChatMessageProps) {
+export function WorkChatMessage({ content, onPrompt, onPreparePrompt, onOpenTerminal }: WorkChatMessageProps) {
   const segments: React.ReactNode[] = [];
   const regex = /```bastilla-ui\s*\n([\s\S]*?)```/gi;
   let last = 0, match: RegExpExecArray | null, i = 0;
   while ((match = regex.exec(content)) !== null) {
     if (match.index > last) segments.push(<FormattedMessage key={'text-' + i} content={content.slice(last, match.index)}/>);
-    segments.push(<RichCard key={'widget-' + i} raw={match[1]} onPrompt={onPrompt} onOpenTerminal={onOpenTerminal}/>);
+    segments.push(<RichCard key={'widget-' + i} raw={match[1]} onPrompt={onPrompt} onPreparePrompt={onPreparePrompt} onOpenTerminal={onOpenTerminal}/>);
     last = regex.lastIndex; i++;
     if (i >= 10) break;
   }
@@ -363,7 +363,7 @@ const examples = {
   },
 } as const;
 
-export function WorkChatDemo({ onPrompt, onOpenTerminal }: { onPrompt: (prompt: string) => void; onOpenTerminal?: () => void }) {
+export function WorkChatDemo({ onPrompt, onPreparePrompt, onOpenTerminal }: { onPrompt: (prompt: string) => void; onPreparePrompt?: (prompt: string) => void; onOpenTerminal?: () => void }) {
   const [open, setOpen] = useState(true);
   const [tab, setTab] = useState<keyof typeof examples>('freedom');
   return <div className="border-b border-sky-900 bg-[#091827] px-3 py-2">
@@ -391,7 +391,7 @@ export function WorkChatDemo({ onPrompt, onOpenTerminal }: { onPrompt: (prompt: 
         ] as const).map(([key, Icon, label]) =>
           <button key={key} type="button" onClick={() => setTab(key)} aria-pressed={tab === key} className={'px-3 py-2 rounded-lg text-xs flex gap-1.5 items-center border ' + (tab === key ? 'bg-cyan-900/70 border-cyan-500 text-white' : 'bg-slate-900 border-slate-700 text-slate-300')}><Icon size={14}/>{label}</button>)}
       </div>
-      <RichCard raw={JSON.stringify(examples[tab])} onPrompt={onPrompt} onOpenTerminal={onOpenTerminal}/>
+      <RichCard raw={JSON.stringify(examples[tab])} onPrompt={onPrompt} onPreparePrompt={onPreparePrompt} onOpenTerminal={onOpenTerminal}/>
       <p className="text-[11px] text-slate-400">Podgląd możliwości: statyczne przykłady są oznaczone jako DEMO. W zakładce Dynamiczne LIVE pomiary pobierane są z działającego backendu Bastilla; brak połączenia jest wyraźnie sygnalizowany.</p>
     </div>}
   </div>;
