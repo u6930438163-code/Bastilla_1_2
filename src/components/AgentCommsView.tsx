@@ -3,6 +3,7 @@ import { DataStore, OPERATOR_NAME } from '../kernel/svlKernel';
 import { SYSTEM_AGENTS, AgentProfile } from '../kernel/agents';
 import { Sparkles, ShieldCheck, RefreshCw, Image as ImageIcon, FileText, MessagesSquare, Paperclip, Send, X, SlidersHorizontal, Maximize2, Minimize2, BarChart3, Clapperboard, Code2, Copy } from 'lucide-react';
 import { WorkChatMessage, WorkChatDemo } from './WorkChatMessage';
+import { TerminalWorkCard, type TerminalCardEntry, type TerminalCardStatus } from './TerminalWorkCard';
 import {
   ASTYRIA_MISSION_ACTIONS,
   ASTYRIA_MISSION_LABELS,
@@ -34,6 +35,8 @@ interface AgentCommsViewProps {
   isLoading: boolean;
   sendError?: string | null;
   onClearHistory: () => void;
+  onRunKernelCommand?: (command: string) => Promise<{ output: string; state?: unknown }>;
+  onOpenTerminal?: () => void;
   preparedDraft?: { id: number; text: string; agent: 'triad' | 'Alex' | 'Astyria' | 'Aurelius' | 'si_1' } | null;
   onForceSync?: () => void;
   onTriggerFreeVoice?: (
@@ -62,6 +65,8 @@ export const AgentCommsView: React.FC<AgentCommsViewProps> = ({
   isLoading,
   sendError,
   onClearHistory,
+  onRunKernelCommand,
+  onOpenTerminal,
   preparedDraft,
   onForceSync,
   onTriggerFreeVoice,
@@ -78,6 +83,10 @@ export const AgentCommsView: React.FC<AgentCommsViewProps> = ({
   const [attachmentError, setAttachmentError] = useState<string | null>(null);
   const [showProtocolTools, setShowProtocolTools] = useState(false);
   const [showWorkPreview, setShowWorkPreview] = useState(false);
+  const [terminalCardVisible, setTerminalCardVisible] = useState(false);
+  const [terminalCardCommand, setTerminalCardCommand] = useState('');
+  const [terminalCardStatus, setTerminalCardStatus] = useState<TerminalCardStatus>('idle');
+  const [terminalCardEntries, setTerminalCardEntries] = useState<TerminalCardEntry[]>([]);
   const [workNotice, setWorkNotice] = useState<string | null>(null);
   const [isFullViewport, setIsFullViewport] = useState(false);
   const [twoWayEnabled, setTwoWayEnabled] = useState<boolean>(() => {
@@ -92,6 +101,38 @@ export const AgentCommsView: React.FC<AgentCommsViewProps> = ({
   const chatScrollRef = useRef<HTMLDivElement>(null);
   const chatInputRef = useRef<HTMLTextAreaElement>(null);
   const followLatestMessagesRef = useRef(true);
+  const handleTerminalCommand = async (rawCommand: string) => {
+    const command = rawCommand.trim();
+    // Embedded card only accepts known read-only commands. Advanced commands remain
+    // accessible in the separate full terminal with the backend's own restrictions.
+    const allowed = /^(status|report|agents|config|history|root status|infra status)$/i.test(command);
+    if (!allowed) {
+      setWorkNotice('W karcie czatu dostępne są tylko polecenia odczytu: status, report, agents, config, history, root status, infra status. Inne wykonaj w pełnym terminalu.');
+      return;
+    }
+    if (!onRunKernelCommand || terminalCardStatus === 'running') {
+      setWorkNotice('Brak dostępnego połączenia z jądrem lub terminal jest zajęty.');
+      return;
+    }
+    setTerminalCardCommand(command);
+    setTerminalCardStatus('running');
+    setTerminalCardEntries(old => [...old, { type: 'input', text: '$ ' + command, time: new Date().toLocaleTimeString('pl-PL') }].slice(-100));
+    try {
+      const response = await onRunKernelCommand(command);
+      if (!response || typeof response.output !== 'string') throw new Error('Serwer nie zwrócił wyniku polecenia.');
+      setTerminalCardEntries(old => [...old, {
+        type: 'output', text: response.output, time: new Date().toLocaleTimeString('pl-PL'),
+      }].slice(-100));
+      setTerminalCardStatus('success');
+    } catch (cause) {
+      setTerminalCardEntries(old => [...old, {
+        type: 'error', text: cause instanceof Error ? cause.message : 'Błąd backendu terminala.',
+        time: new Date().toLocaleTimeString('pl-PL'),
+      }].slice(-100));
+      setTerminalCardStatus('error');
+    }
+  };
+
   const prepareWorkPrompt = (text: string) => {
     const prompt = text.slice(0, 20_500);
     setMessageText(prompt);
@@ -562,7 +603,7 @@ export const AgentCommsView: React.FC<AgentCommsViewProps> = ({
         }}
         className="min-h-0 min-w-0 flex-1 overflow-y-auto px-2.5 py-3 sm:px-6 sm:py-5 space-y-2.5 sm:space-y-3.5 scrollbar-thin w-full max-w-6xl mx-auto"
       >
-        {showWorkPreview && <WorkChatDemo onPrompt={prepareWorkPrompt} />}
+        {showWorkPreview && <WorkChatDemo onPrompt={prepareWorkPrompt} onOpenTerminal={onOpenTerminal} />}
         {sendError && (
           <div role="alert" aria-live="assertive" className="rounded-lg border border-rose-500/40 bg-rose-950/40 p-3 text-xs text-rose-200">
             Nie udało się wysłać żądania: {sendError}
@@ -619,7 +660,7 @@ export const AgentCommsView: React.FC<AgentCommsViewProps> = ({
                 </div>
 
                 {/* Message Body with KaTeX LaTeX formulas and Markdown */}
-                <WorkChatMessage content={msg.tekst} onPrompt={prepareWorkPrompt} />
+                <WorkChatMessage content={msg.tekst} onPrompt={prepareWorkPrompt} onOpenTerminal={onOpenTerminal} />
                 <div className="mt-2 flex items-center justify-end gap-1">
                   <button type="button" className="rounded-lg px-2 py-1 text-[10px] text-slate-400 hover:text-cyan-200 hover:bg-slate-800 flex items-center gap-1"
                     onClick={() => void navigator.clipboard?.writeText(msg.tekst).then(() => setWorkNotice('Skopiowano wiadomość.')).catch(() => setWorkNotice('Nie można skopiować.'))}
@@ -690,6 +731,18 @@ export const AgentCommsView: React.FC<AgentCommsViewProps> = ({
         )}
       </div>
 
+      {terminalCardVisible && <div className="shrink-0 border-t border-cyan-900/70 bg-slate-950 px-2.5 py-2 sm:px-4" aria-label="Terminal w głównym czacie">
+        <div className="mx-auto max-w-6xl space-y-2">
+          <TerminalWorkCard title="BASTILLA / TERMINAL · GŁÓWNY CZAT"
+            command={terminalCardCommand} status={terminalCardStatus}
+            entries={terminalCardEntries} source="Rzeczywista odpowiedź z API jądra SVL"
+            onOpenTerminal={onOpenTerminal} onCommandRequested={handleTerminalCommand} compact />
+          <div className="flex flex-wrap items-center gap-2 text-[10px] text-slate-400">
+            <span>Bezpośrednie wykonanie tylko bezpiecznych poleceń odczytu i po dwukrotnym zatwierdzeniu.</span>
+            <button type="button" onClick={()=>setTerminalCardVisible(false)} className="rounded border border-slate-700 px-2 py-1 text-slate-200 hover:bg-slate-800">Zamknij kartę</button>
+          </div>
+        </div>
+      </div>}
       {/* Work actions in the original chat, with explicit operator confirmation before sending */}
       <div className="flex w-full shrink-0 gap-1.5 overflow-x-auto border-t border-cyan-900/60 bg-[#071625] px-3 py-2" aria-label="Akcje AI Work">
         {([
@@ -702,6 +755,11 @@ export const AgentCommsView: React.FC<AgentCommsViewProps> = ({
           className="flex shrink-0 items-center gap-1.5 rounded-lg border border-cyan-800/70 bg-slate-900/90 px-3 py-1.5 text-[11px] font-semibold text-cyan-100 hover:bg-cyan-950 disabled:opacity-40 transition">
           <item.icon className="w-3.5 h-3.5" />{item.label}
         </button>)}
+        <button type="button" aria-pressed={terminalCardVisible} onClick={()=>setTerminalCardVisible(v=>!v)}
+          className={'flex shrink-0 items-center gap-1.5 rounded-lg border px-3 py-1.5 text-[11px] font-semibold transition ' +
+            (terminalCardVisible ? 'border-cyan-400 bg-cyan-950 text-white' : 'border-cyan-800/70 bg-slate-900/90 text-cyan-100 hover:bg-cyan-950')}>
+          <Code2 className="w-3.5 h-3.5" />Terminal
+        </button>
       </div>
       {workNotice && <div role="status" className="flex items-center justify-between gap-2 bg-slate-900/90 px-3 py-1.5 text-[11px] text-cyan-200">
         <span>{workNotice}</span>
