@@ -263,7 +263,6 @@ export const AgentCommsView: React.FC<AgentCommsViewProps> = ({
       : /(?:sprawdź|pokaż|odczytaj).{0,55}(?:stan ollamy|status ollamy|status ollama)/.test(normalized) ? 'ollama'
       : /(?:sprawdź|pokaż|odczytaj).{0,55}(?:status workerów|stan workerów)/.test(normalized) ? 'workers'
       : /(?:sprawdź|pokaż|odczytaj).{0,55}(?:narzędzia diagnostyczne|dostępność narzędzi)/.test(normalized) ? 'tools' : null;
-    if (!readOnly && (isLoading || liveBusy)) { setWorkNotice('Agent jest zajęty. Ponów akcję po zakończeniu odpowiedzi.'); return; }
     const endpoints: Record<string, string> = {
       logs: '/api/operations/logs?filter=all',
       processes: '/api/operations/processes',
@@ -1149,7 +1148,7 @@ export const AgentCommsView: React.FC<AgentCommsViewProps> = ({
         </button>
         {liveBusy && <span role="status" className="animate-pulse text-[10px] text-cyan-300">Kolejkowanie…</span>}
       </div>}
-      {/* Single-click Work actions: read-only data in panel, AI requests sent directly. */}
+      {/* Single-click Work actions: read-only diagnostics or isolated AI analysis in the results panel. */}
       {showMoreMenu && <div className="bastilla-chat-actions flex w-full shrink-0 gap-1.5 overflow-x-auto border-t border-cyan-900/60 bg-[#071625] px-3 py-2" aria-label="Akcje AI Work">
         {([
           { label: 'Wykres', icon: BarChart3, prompt: 'Pokaż wykres oparty wyłącznie na rzeczywistych danych systemowych. Jeśli brak pomiarów, wyjaśnij to. Gdy dane są dostępne użyj bloku bastilla-ui z blocks type chart, labels, values, unit oraz caption.' },
