@@ -82,6 +82,7 @@ export default function App() {
   const [activeTab, setActiveTab] = useState<TabId>(initialTabFromLocation);
   const [isAgentLoading, setIsAgentLoading] = useState(false);
   const [terminalBusy, setTerminalBusy] = useState(false);
+  const [workspaceLive, setWorkspaceLive] = useState(false);
   const terminalPendingRef = useRef(0);
   const [agentError, setAgentError] = useState<string | null>(null);
   const [chatSystemChange, setChatSystemChange] = useState<ChatSystemChange | null>(null);
@@ -98,18 +99,27 @@ export default function App() {
     isAgentLoadingRef.current = isAgentLoading;
   }, [isAgentLoading]);
 
-  // Poll only while visible, prevent overlapping requests, and cancel on unmount.
-  // This reduces CPU/network use on mobile and prevents stale responses after navigation.
+  // One cross-device SSE stream, plus browser-tab notifications and a 4s fallback.
+  // The server sends change metadata only; /api/kernel/state is authoritative.
   useEffect(() => {
     let disposed = false;
     let inFlight = false;
+    let queuedFresh = false;
     let controller: AbortController | null = null;
-    const fetchState = async () => {
-      if (disposed || inFlight || document.hidden || isAgentLoadingRef.current) return;
+    let stream: EventSource | null = null;
+    let connecting = false;
+    let lastEventId = '';
+    const tabChannel = typeof BroadcastChannel !== 'undefined'
+      ? new BroadcastChannel('bastilla-workspace-v1') : null;
+
+    const fetchState = async (forceFresh = false) => {
+      if (disposed || document.hidden || isAgentLoadingRef.current) return;
+      if (inFlight) { if (forceFresh) queuedFresh = true; return; }
       inFlight = true;
       controller = new AbortController();
       try {
-        const res = await fetch('/api/kernel/state', { signal: controller.signal });
+        const url = forceFresh ? '/api/kernel/state?fresh=1' : '/api/kernel/state';
+        const res = await fetch(url, { signal: controller.signal, cache: 'no-store' });
         if (!res.ok || disposed || isAgentLoadingRef.current) return;
         const data = await res.json();
         if (!disposed && data?.store && !isAgentLoadingRef.current) {
@@ -120,22 +130,90 @@ export default function App() {
         }
       } catch (err) {
         if (!(err instanceof Error && err.name === 'AbortError')) {
-          console.warn('Kernel state polling failed:', err);
+          console.warn('Kernel state refresh failed:', err);
         }
       } finally {
         inFlight = false;
         controller = null;
+        if (queuedFresh) { queuedFresh = false; void fetchState(true); }
       }
     };
 
-    void fetchState();
-    const interval = setInterval(() => { void fetchState(); }, 4000);
-    const onVisible = () => { if (!document.hidden) void fetchState(); };
+    const emitWorkspaceEvent = (raw: unknown, forward: boolean) => {
+      const item = raw as { id?: unknown; topic?: unknown; at?: unknown };
+      if (!item || !['terminal', 'kernel', 'chat', 'agents', 'workspace'].includes(String(item.topic))) return;
+      const event = {
+        id: String(item.id || ''),
+        topic: String(item.topic),
+        at: typeof item.at === 'string' ? item.at : new Date().toISOString(),
+      };
+      window.dispatchEvent(new CustomEvent('bastilla:workspace-event', { detail: event }));
+      if (forward) tabChannel?.postMessage(event);
+      void fetchState(true);
+    };
+
+    const connect = async () => {
+      if (disposed || stream || connecting) return;
+      connecting = true;
+      try {
+        const session = await fetch('/api/live-chat/session', {
+          credentials: 'same-origin', cache: 'no-store',
+        });
+        if (!session.ok || disposed) return; // Not logged in: keep 4s polling.
+        const suffix = lastEventId ? '?after=' + encodeURIComponent(lastEventId) : '';
+        stream = new EventSource('/api/workspace/events' + suffix, { withCredentials: true });
+        stream.onopen = () => {
+          if (!disposed) { setWorkspaceLive(true); void fetchState(true); }
+        };
+        stream.onerror = () => {
+          if (disposed) return;
+          setWorkspaceLive(false);
+          stream?.close();
+          stream = null; // Periodic check reconnects without a busy 401 loop.
+        };
+        stream.addEventListener('change', (message) => {
+          try {
+            const event = JSON.parse((message as MessageEvent).data);
+            if (event.id) lastEventId = String(event.id);
+            emitWorkspaceEvent(event, true);
+          } catch { /* malformed notification cannot replace authoritative state */ }
+        });
+      } catch {
+        if (!disposed) setWorkspaceLive(false);
+      } finally {
+        connecting = false;
+      }
+    };
+
+    const refreshLocal = (event: Event) => {
+      const detail = (event as CustomEvent).detail;
+      emitWorkspaceEvent({ topic: detail?.topic || 'workspace', at: new Date().toISOString() }, true);
+    };
+    const resetSession = () => {
+      stream?.close(); stream = null;
+      setWorkspaceLive(false);
+      void connect();
+    };
+    if (tabChannel) tabChannel.onmessage = (event) => emitWorkspaceEvent(event.data, false);
+    window.addEventListener('bastilla:workspace-local', refreshLocal);
+    window.addEventListener('bastilla:live-chat-auth', resetSession);
+    void fetchState(true);
+    void connect();
+    const interval = window.setInterval(() => { void fetchState(); }, 4000);
+    const reconnect = window.setInterval(() => { if (!stream) void connect(); }, 20000);
+    const onVisible = () => {
+      if (!document.hidden) { void fetchState(true); if (!stream) void connect(); }
+    };
     document.addEventListener('visibilitychange', onVisible);
     return () => {
       disposed = true;
       controller?.abort();
-      clearInterval(interval);
+      stream?.close();
+      tabChannel?.close();
+      window.clearInterval(interval);
+      window.clearInterval(reconnect);
+      window.removeEventListener('bastilla:workspace-local', refreshLocal);
+      window.removeEventListener('bastilla:live-chat-auth', resetSession);
       document.removeEventListener('visibilitychange', onVisible);
     };
   }, [setDataStore]);
@@ -598,6 +676,7 @@ export default function App() {
               onSendMessage={handleSendMessage}
               onTriggerFreeVoice={handleTriggerFreeVoice}
               onExecutePythonCommand={handleExecutePythonCommand}
+              workspaceLive={workspaceLive}
             />
           )}
 
