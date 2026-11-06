@@ -1,16 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import katex from 'katex';
 import { Copy, Check, Terminal, Sigma, Sparkles, RefreshCw, FileText, Table as TableIcon } from 'lucide-react';
-import {
-  InteractiveChartRenderer,
-  PhaseSpaceChart,
-  EntropyHeatmapChart,
-  Triad3DOscillatorChart,
-  LivePowerWaveChart,
-  HeartbeatWaveChart,
-  TriadCoreOrbitsChart
-} from './InteractiveChartRenderer';
-import { TechnicalBlueprintSVG, hashSeed } from './TechnicalBlueprintSVG';
+import { hashSeed } from './TechnicalBlueprintSVG';
 
 /**
  * Normalizes SVG data URIs (including utf8 percent-encoded SVGs with parentheses)
@@ -101,7 +92,7 @@ const ImageWithFallback: React.FC<{ src: string; alt?: string; className?: strin
   }, [normalizedSrc, isProceduralBlueprint]);
 
   if (error) {
-    return <TechnicalBlueprintSVG style={alt || 'Sovereign Neural Core Matrix'} prompt={normalizedSrc} />;
+    return null;
   }
 
   return (
@@ -765,9 +756,7 @@ export const FormattedMessage: React.FC<FormattedMessageProps> = ({ content, cla
                           </div>
                         </div>
                       </div>
-                      {isAssetTrigger ? (
-                        <TechnicalBlueprintSVG style={json.style || json.description || json.target} prompt={prompt} />
-                      ) : (
+                      {!isAssetTrigger && (
                         <ImageWithFallback
                           src={`/api/pollinations/image?prompt=${encodeURIComponent(prompt)}&width=1024&height=640&seed=${hashSeed(prompt) % 1000000}`}
                           alt={prompt}
@@ -799,7 +788,6 @@ export const FormattedMessage: React.FC<FormattedMessageProps> = ({ content, cla
         }
 
         if (block.type === 'code') {
-          const lang = block.language.toLowerCase();
           const triggers = findJsonTriggers(block.content);
           if (triggers.length > 0) {
             return (
@@ -807,29 +795,6 @@ export const FormattedMessage: React.FC<FormattedMessageProps> = ({ content, cla
                 {triggers.map((t) => t.component)}
               </React.Fragment>
             );
-          }
-
-          if (lang.startsWith('chart') || lang === 'mermaid' || lang === 'plot' || lang.includes('chart')) {
-            const chartSpec = `${lang} ${block.content}`.toLowerCase();
-            if (chartSpec.includes('phase') || chartSpec.includes('fazow')) {
-              return <PhaseSpaceChart key={`code-chart-phase-${bIdx}`} />;
-            }
-            if (chartSpec.includes('heatmap') || chartSpec.includes('entropi')) {
-              return <EntropyHeatmapChart key={`code-chart-heatmap-${bIdx}`} />;
-            }
-            if (chartSpec.includes('3d') || chartSpec.includes('oscylat')) {
-              return <Triad3DOscillatorChart key={`code-chart-3d-${bIdx}`} />;
-            }
-            if (chartSpec.includes('power') || chartSpec.includes('prąd') || chartSpec.includes('waveform')) {
-              return <LivePowerWaveChart key={`code-chart-power-${bIdx}`} />;
-            }
-            if (chartSpec.includes('heartbeat') || chartSpec.includes('puls') || chartSpec.includes('serc')) {
-              return <HeartbeatWaveChart key={`code-chart-heartbeat-${bIdx}`} />;
-            }
-            if (chartSpec.includes('orbit') || chartSpec.includes('rdzeń')) {
-              return <TriadCoreOrbitsChart key={`code-chart-orbits-${bIdx}`} />;
-            }
-            return <InteractiveChartRenderer key={`code-chart-gen-${bIdx}`} type="phase" />;
           }
           return <CodeBlock key={`block-code-${bIdx}`} language={block.language} code={block.content} />;
         }
@@ -899,53 +864,6 @@ export const FormattedMessage: React.FC<FormattedMessageProps> = ({ content, cla
         let currentParagraph: string[] = [];
         let currentTableRows: string[] = [];
 
-        const checkAndInjectChart = (text: string) => {
-          const lower = text.toLowerCase();
-          const injected: React.ReactNode[] = [];
-
-          const isSignificant = text.length > 20 || lower.includes('wykres') || lower.includes('wizualizacj');
-          if (!isSignificant) return injected;
-
-          const hasPhase = /\b(wykres fazowy|przestrzeń fazowa|atraktor lorenza|dystrybucja stabilności)\b/i.test(lower);
-          const hasHeatmap = /\b(macierz entropii|systemowy heatmap|mapa ciepła zasobów|wizualizacja entropii)\b/i.test(lower);
-          const has3D = /\b(oscylator 3d|harmoniczna triady|wizualizacja 3d relacji)\b/i.test(lower);
-          const hasPower = /\b(wizualizacja prądu|przebieg cosinusoidy|power flow analysis|waveform triady)\b/i.test(lower);
-          const hasHeartbeat = /\b(bicie serca triady|pulsacja jądra|sinusoida heartbeat)\b/i.test(lower);
-          const hasOrbits = /\b(rdzeń triady|orbity energetyczne|polar core visualization)\b/i.test(lower);
-          const hasBlueprint = /\b(blueprint techniczny|schemat jądra|projekt struktury triady)\b/i.test(lower);
-
-          if (hasPhase && !renderedChartTypes.has('phase')) {
-            renderedChartTypes.add('phase');
-            injected.push(<PhaseSpaceChart key={`chart-phase-${bIdx}-${renderedLines.length}`} />);
-          }
-          if (hasHeatmap && !renderedChartTypes.has('heatmap')) {
-            renderedChartTypes.add('heatmap');
-            injected.push(<EntropyHeatmapChart key={`chart-heatmap-${bIdx}-${renderedLines.length}`} />);
-          }
-          if (has3D && !renderedChartTypes.has('3d')) {
-            renderedChartTypes.add('3d');
-            injected.push(<Triad3DOscillatorChart key={`chart-3d-${bIdx}-${renderedLines.length}`} />);
-          }
-          if (hasPower && !renderedChartTypes.has('power')) {
-            renderedChartTypes.add('power');
-            injected.push(<LivePowerWaveChart key={`chart-power-${bIdx}-${renderedLines.length}`} />);
-          }
-          if (hasHeartbeat && !renderedChartTypes.has('heartbeat')) {
-            renderedChartTypes.add('heartbeat');
-            injected.push(<HeartbeatWaveChart key={`chart-heartbeat-${bIdx}-${renderedLines.length}`} />);
-          }
-          if (hasOrbits && !renderedChartTypes.has('orbits')) {
-            renderedChartTypes.add('orbits');
-            injected.push(<TriadCoreOrbitsChart key={`chart-orbits-${bIdx}-${renderedLines.length}`} />);
-          }
-          if (hasBlueprint && !renderedChartTypes.has('blueprint')) {
-            renderedChartTypes.add('blueprint');
-            injected.push(<TechnicalBlueprintSVG key={`chart-blueprint-${bIdx}-${renderedLines.length}`} style="Manual Trigger" />);
-          }
-
-          return injected;
-        };
-
         const flushTable = () => {
           if (currentTableRows.length >= 2) {
             renderedLines.push(
@@ -967,7 +885,6 @@ export const FormattedMessage: React.FC<FormattedMessageProps> = ({ content, cla
                 {renderInlineContent(pText)}
               </div>
             );
-            checkAndInjectChart(pText).forEach((c) => renderedLines.push(c));
             currentParagraph = [];
           }
         };
@@ -1076,7 +993,6 @@ export const FormattedMessage: React.FC<FormattedMessageProps> = ({ content, cla
                 </span>
               </div>
             );
-            checkAndInjectChart(listText).forEach((c) => renderedLines.push(c));
             continue;
           }
 
@@ -1095,7 +1011,6 @@ export const FormattedMessage: React.FC<FormattedMessageProps> = ({ content, cla
                 </span>
               </div>
             );
-            checkAndInjectChart(listText).forEach((c) => renderedLines.push(c));
             continue;
           }
 

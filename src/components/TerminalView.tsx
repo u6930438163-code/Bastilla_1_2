@@ -2,6 +2,8 @@ import React, { useState, useRef, useEffect, useCallback, useMemo } from 'react'
 import { DataStore, OPERATOR_NAME, SYS_VERSION, generateTextReport, generatePythonMonolith } from '../kernel/svlKernel';
 import { SYSTEM_AGENTS } from '../kernel/agents';
 import type { AgentProtocolCommand, AgentProtocolReply, AgentProtocolRequest } from '../kernel/agentProtocol';
+import { TerminalWorkCard, type TerminalCardEntry } from './TerminalWorkCard';
+import { TerminalAnalyticsPanel } from './TerminalAnalyticsPanel';
 import {
   Play,
   CornerDownLeft,
@@ -20,7 +22,11 @@ import {
   X,
   Zap,
   RefreshCw,
-  ArrowLeftRight
+  ArrowLeftRight,
+  Radio,
+  Activity,
+  PanelRightClose,
+  PanelRightOpen,
 } from 'lucide-react';
 
 interface TerminalViewProps {
@@ -28,6 +34,7 @@ interface TerminalViewProps {
   onUpdateDataStore: (updater: (prev: DataStore) => DataStore) => void;
   onSendProtocol: (request: AgentProtocolRequest) => Promise<AgentProtocolReply | undefined>;
   onExecutePythonCommand?: (command: string) => Promise<{ output: string; state?: any }>;
+  workspaceLive?: boolean;
 }
 
 interface LogEntry {
@@ -39,14 +46,14 @@ interface LogEntry {
 
 const LogEntryItem = React.memo(({ entry }: { entry: LogEntry }) => {
   let colorClass = 'text-slate-300';
-  if (entry.type === 'input') colorClass = 'text-emerald-400 font-bold';
+  if (entry.type === 'input') colorClass = 'text-cyan-300 font-semibold';
   else if (entry.type === 'error') colorClass = 'text-rose-400';
   else if (entry.type === 'success') colorClass = 'text-emerald-300';
   else if (entry.type === 'system') colorClass = 'text-cyan-300';
   else if (entry.type === 'banner') colorClass = 'text-slate-200 bg-slate-900/80 p-3 rounded border border-slate-800 leading-relaxed';
 
   return (
-    <div className={`${colorClass} break-words font-mono whitespace-pre-wrap leading-relaxed select-text`}>
+    <div className={`${colorClass} bastilla-terminal-line break-words font-mono whitespace-pre-wrap leading-relaxed select-text`}>
       {entry.type === 'input' && <span className="text-slate-600 mr-2">[{entry.timestamp}]</span>}
       {entry.content}
     </div>
@@ -120,9 +127,10 @@ interface TerminalInputBarProps {
   history: string[];
   antiMirrorActive: boolean;
   onToggleAntiMirror: () => void;
+  busy?: boolean;
 }
 
-const TerminalInputBar = React.memo(({ onExecute, history, antiMirrorActive, onToggleAntiMirror }: TerminalInputBarProps) => {
+const TerminalInputBar = React.memo(({ onExecute, history, antiMirrorActive, onToggleAntiMirror, busy }: TerminalInputBarProps) => {
   const [cmdText, setCmdText] = useState('');
   const inputRef = useRef<HTMLInputElement>(null);
   const histIdxRef = useRef<number>(-1);
@@ -141,7 +149,7 @@ const TerminalInputBar = React.memo(({ onExecute, history, antiMirrorActive, onT
 
   const handleSend = () => {
     const trimmed = cmdText.trim();
-    if (!trimmed) return;
+    if (!trimmed || busy) return;
 
     let finalCmd = trimmed;
     if (antiMirrorActive) {
@@ -213,7 +221,7 @@ const TerminalInputBar = React.memo(({ onExecute, history, antiMirrorActive, onT
   };
 
   return (
-    <div className="bg-slate-900 border-t border-slate-800 flex flex-col shrink-0">
+    <div className="bastilla-terminal-composer flex flex-col shrink-0">
       {/* Live Mirror Detection Banner */}
       {mirrorCheck.isMirrored && (
         <div className="bg-amber-950/80 border-b border-amber-800/60 px-3 py-1.5 flex items-center justify-between gap-2 text-[11px] text-amber-300">
@@ -253,6 +261,7 @@ const TerminalInputBar = React.memo(({ onExecute, history, antiMirrorActive, onT
         <div className="flex-1 min-w-0 relative flex items-center">
           <input
             ref={inputRef}
+            disabled={busy}
             type="text"
             value={cmdText}
             onChange={(e) => setCmdText(e.target.value)}
@@ -323,10 +332,11 @@ const TerminalInputBar = React.memo(({ onExecute, history, antiMirrorActive, onT
         {/* Przycisk Wykonaj przesunięty w prawo, zoptymalizowany dla małych i dużych ekranów */}
         <button
           type="submit"
+          disabled={busy || !cmdText.trim()}
           className="ml-auto h-9 sm:h-10 px-2.5 sm:px-3.5 rounded-lg bg-emerald-500 hover:bg-emerald-400 active:bg-emerald-600 text-slate-950 font-black transition flex items-center justify-center gap-1 cursor-pointer shrink-0 touch-manipulation text-xs shadow-md shadow-emerald-950/40"
           title="Wykonaj polecenie w terminalu"
         >
-          <span className="hidden sm:inline">Wykonaj</span>
+          <span className="hidden sm:inline">{busy ? 'Pracuje…' : 'Wykonaj'}</span>
           <CornerDownLeft className="w-3.5 sm:w-4 h-3.5 sm:h-4 shrink-0" />
         </button>
       </form>
@@ -339,8 +349,18 @@ export const TerminalView: React.FC<TerminalViewProps> = ({
   onUpdateDataStore,
   onSendProtocol,
   onExecutePythonCommand,
+  workspaceLive = false,
 }) => {
   const [history, setHistory] = useState<string[]>([]);
+  const [running, setRunning] = useState(false);
+  const runningRef = useRef(false);
+  const [viewFilter, setViewFilter] = useState<'all' | 'errors' | 'sync'>('all');
+  const [inspectorOpen, setInspectorOpen] = useState(true);
+  const [advancedView, setAdvancedView] = useState<'console' | 'cards' | 'monitoring'>('console');
+  const [activity, setActivity] = useState<Array<{ topic: string; at: string }>>([]);
+  const [lastSyncAt, setLastSyncAt] = useState('');
+  const [copyStatus, setCopyStatus] = useState('');
+
   const [antiMirrorActive, setAntiMirrorActive] = useState<boolean>(() => {
     try {
       const stored = localStorage.getItem('svl_antimirror_active');
@@ -433,10 +453,48 @@ Wpisz 'help' lub 'root status', aby zobaczyć listę instrukcji jądra.
     setLogs((prev) => [...prev, { id: Math.random().toString(), type, content, timestamp: timeStr }].slice(-150));
   };
 
+  useEffect(() => {
+    const listener = (raw: Event) => {
+      const detail = (raw as CustomEvent).detail as { topic?: string; at?: string } | undefined;
+      if (!detail || !['chat', 'terminal', 'kernel', 'agents', 'workspace'].includes(String(detail.topic))) return;
+      const topic = String(detail.topic);
+      const at = detail.at && !Number.isNaN(Date.parse(detail.at)) ? detail.at : new Date().toISOString();
+      setActivity((prev) => [{ topic, at }, ...prev].slice(0, 18));
+      setLastSyncAt(at);
+      addLog('[SYNC] Zmiana z ' + ({ chat: 'czatu', terminal: 'terminala', kernel: 'jądra', agents: 'agentów', workspace: 'systemu' } as Record<string, string>)[topic] +
+        ' — dane odświeżone z serwera.', 'system');
+    };
+    window.addEventListener('bastilla:workspace-event', listener);
+    return () => window.removeEventListener('bastilla:workspace-event', listener);
+  }, []);
+
+  const exportLogs = () => {
+    const text = logs.map((entry) => '[' + entry.timestamp + '] ' + entry.content).join('\\n\\n');
+    const url = URL.createObjectURL(new Blob([text], { type: 'text/plain;charset=utf-8' }));
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'bastilla-terminal-session.txt';
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+  const copyLogs = async () => {
+    try {
+      await navigator.clipboard.writeText(logs.map((entry) => '[' + entry.timestamp + '] ' + entry.content).join('\\n\\n'));
+      setCopyStatus('Skopiowano bieżącą sesję');
+    } catch {
+      setCopyStatus('Schowek niedostępny w tej przeglądarce');
+    }
+  };
+  const filteredLogs = logs.filter((entry) => viewFilter === 'all' ||
+    (viewFilter === 'errors' ? entry.type === 'error' : entry.type === 'system'));
+
   const handleExecute = useCallback(async (cmdToRun?: string) => {
     const rawCmd = (cmdToRun || '').trim();
-    if (!rawCmd) return;
+    if (!rawCmd || runningRef.current) return;
+    runningRef.current = true;
+    setRunning(true);
 
+    try {
     // Save history
     setHistory((prev) => [...prev, rawCmd]);
 
@@ -657,124 +715,150 @@ Integralność tagów:  ZGODNA (<<<DATA_STORE_START>>> ... <<<DATA_STORE_END>>>)
         break;
       }
     }
+    } finally {
+      runningRef.current = false;
+      setRunning(false);
+    }
   }, []);
 
   return (
-    <div
-      dir="ltr"
-      style={{ direction: 'ltr', textAlign: 'left' }}
-      className="flex-1 min-h-0 min-w-0 flex flex-col bg-slate-950 font-mono text-xs relative overflow-hidden"
-    >
-      {/* Quick Action Ribbon */}
-      <div className="bg-slate-900 border-b border-slate-800 px-2 sm:px-3 py-1.5 flex items-center justify-between gap-1.5 overflow-x-auto scrollbar-none text-[11px] shrink-0 w-full">
-        <div className="flex items-center gap-1 sm:gap-1.5 text-slate-400 shrink-0">
-          <Sparkles className="w-3.5 h-3.5 text-emerald-400" />
-          <span className="hidden xs:inline">Polecenia:</span>
-          {dataStore.config?.root_privileges && (
-            <span className="flex items-center gap-1 px-1.5 py-0.5 rounded bg-red-950/80 border border-red-800/60 text-red-300 font-bold text-[10px]">
-              <span className="w-1.5 h-1.5 rounded-full bg-red-500 animate-ping" />
-              <span className="hidden sm:inline">
-                {dataStore.config?.operator_privilege_level ? 'ROOT: RING-−1 ABSOLUTE (OPERATOR)' : 'ROOT: RING-0 (TRIADA)'}
-              </span>
-              <span className="sm:hidden">ROOT</span>
-            </span>
-          )}
+    <div dir="ltr" className="bastilla-terminal-shell flex-1 min-w-0 min-h-0 flex flex-col font-mono">
+      <header className="bastilla-terminal-topbar">
+        <div className="bastilla-terminal-window-dots" aria-hidden="true"><i /><i /><i /></div>
+        <div className="bastilla-terminal-heading">
+          <div className="flex items-center gap-2">
+            <Terminal className="w-5 h-5 text-cyan-300" />
+            <h1>COMMAND CENTER <span className="text-cyan-300">/ BASTILLA</span></h1>
+          </div>
+          <p>Interaktywna konsola · rzeczywisty backend jądra SVL</p>
         </div>
-
-        <div className="flex items-center gap-1 sm:gap-1.5 flex-nowrap overflow-x-auto shrink-0">
-          {quickCmds.map((cmd, i) => (
-            <div
-              key={i}
-              className="flex items-center gap-1 px-1.5 sm:px-2 py-0.5 rounded bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 text-[10px] sm:text-[11px] group transition shrink-0"
-            >
-              <button
-                onClick={() => handleExecute(cmd)}
-                className="cursor-pointer hover:text-emerald-300 whitespace-nowrap"
-              >
-                {cmd}
-              </button>
-              <button
-                onClick={(e) => handleRemoveCmd(i, e)}
-                className="text-slate-500 hover:text-rose-400 opacity-60 group-hover:opacity-100 cursor-pointer ml-0.5 text-[10px]"
-                title="Usuń polecenie"
-              >
-                ×
-              </button>
-            </div>
-          ))}
-
-          {isAddingCmd ? (
-            <div className="flex items-center gap-1 shrink-0">
-              <input
-                type="text"
-                placeholder="polecenie..."
-                value={newCmdText}
-                dir="ltr"
-                autoComplete="off"
-                autoCorrect="off"
-                autoCapitalize="none"
-                spellCheck={false}
-                inputMode="text"
-                style={{ direction: 'ltr', textAlign: 'left', unicodeBidi: 'normal' }}
-                onChange={(e) => setNewCmdText(e.target.value)}
-                onKeyDown={(e) => e.key === 'Enter' && handleAddCmd()}
-                className="bg-slate-950 border border-slate-700 rounded px-1.5 py-0.5 text-[10px] text-slate-200 focus:outline-none focus:border-emerald-500 w-24 text-left"
-                autoFocus
-              />
-              <button
-                onClick={handleAddCmd}
-                className="px-1.5 py-0.5 rounded bg-emerald-600 hover:bg-emerald-500 text-slate-950 font-bold text-[10px] cursor-pointer"
-              >
-                Dodaj
-              </button>
-              <button
-                onClick={() => setIsAddingCmd(false)}
-                className="px-1.5 py-0.5 rounded bg-slate-800 hover:bg-slate-700 text-slate-400 text-[10px] cursor-pointer"
-              >
-                ✕
-              </button>
-            </div>
-          ) : (
-            <button
-              onClick={() => setIsAddingCmd(true)}
-              className="px-1.5 py-0.5 rounded bg-slate-900 hover:bg-slate-800 text-emerald-400 border border-emerald-900/40 text-[10px] cursor-pointer flex items-center gap-1 shrink-0"
-              title="Dodaj własne szybkie polecenie"
-            >
-              +
-            </button>
-          )}
-
-          <button
-            onClick={() => handleExecute('clear')}
-            className="px-1.5 sm:px-2 py-0.5 rounded hover:bg-red-950/40 text-slate-400 hover:text-red-400 cursor-pointer shrink-0"
-            title="Wyczyść konsolę"
-          >
-            <Trash2 className="w-3 h-3" />
+        <div className="bastilla-terminal-top-actions">
+          <span className={workspaceLive ? 'bastilla-terminal-live is-live' : 'bastilla-terminal-live'}>
+            <Radio className="w-3.5 h-3.5" />
+            {workspaceLive ? 'SYNCHRONIZACJA LIVE' : 'ODŚWIEŻANIE 4s'}
+          </span>
+          <button type="button" className="bastilla-terminal-icon-btn" onClick={() => setInspectorOpen((value) => !value)}
+            title={inspectorOpen ? 'Ukryj panel aktywności' : 'Pokaż panel aktywności'}
+            aria-label={inspectorOpen ? 'Ukryj panel aktywności' : 'Pokaż panel aktywności'}
+            aria-pressed={inspectorOpen}>
+            {inspectorOpen ? <PanelRightClose className="w-4 h-4" /> : <PanelRightOpen className="w-4 h-4" />}
           </button>
         </div>
+      </header>
+
+      <div className="bastilla-terminal-metrics" aria-label="Statystyki sesji terminala">
+        <div><span className="metric-label">SESJA</span><strong><span className="bastilla-terminal-metric-dot" /> {running ? 'WYKONYWANIE' : 'GOTOWA'}</strong></div>
+        <div><span className="metric-label">KOMENDY</span><strong>{history.length}</strong></div>
+        <div><span className="metric-label">LOGI</span><strong>{logs.length}</strong></div>
+        <div><span className="metric-label">ZMIANY LIVE</span><strong>{activity.length}</strong></div>
       </div>
 
-      {/* Terminal Output Area */}
-      <div
-        dir="ltr"
-        style={{ direction: 'ltr', textAlign: 'left' }}
-        className="flex-1 min-h-0 min-w-0 overflow-y-auto p-4 space-y-2 select-text"
-      >
-        {logs.slice(-150).map((entry) => (
-          <LogEntryItem key={entry.id} entry={entry} />
-        ))}
-        <div ref={terminalEndRef} />
+      <nav className="flex shrink-0 gap-1.5 border-y border-cyan-900/60 bg-[#081827] px-3 py-2" aria-label="Widoki terminala">
+        {([
+          ['console','Konsola'],
+          ['cards','Karta terminala'],
+          ['monitoring','Wykresy i monitoring'],
+        ] as const).map(([id,label]) => <button key={id} type="button" aria-pressed={advancedView===id}
+          onClick={()=>setAdvancedView(id)} className={'shrink-0 rounded-lg border px-3 py-2 text-[11px] font-semibold transition ' +
+            (advancedView===id ? 'border-cyan-500 bg-cyan-900/60 text-white' : 'border-slate-700 bg-slate-900 text-slate-300 hover:text-white')}>
+          {label}
+        </button>)}
+      </nav>
+
+      {advancedView==='cards' && <div className="min-h-0 flex-1 overflow-y-auto p-2.5 sm:p-4 space-y-3">
+        <TerminalWorkCard title="BASTILLA / COMMAND CENTER · KARTA SESJI"
+          command={history[history.length-1] || ''}
+          status={running ? 'running' : logs.some(l=>l.type==='error') ? 'error' : history.length ? 'success' : 'idle'}
+          source="Lokalna historia poleceń i wyników; backend SVL tylko dla obsługiwanych komend"
+          entries={logs.map(l=>({type:l.type,text:l.content,time:l.timestamp} as TerminalCardEntry))}
+          onCommandRequested={command=>void handleExecute(command)} />
+        <p className="text-xs text-slate-400">W karcie pełnego terminala wykonanie wymaga dwóch kliknięć. Polecenia podlegają mechanizmom istniejącej konsoli i uprawnieniom serwera.</p>
+      </div>}
+      {advancedView==='monitoring' && <div className="min-h-0 flex-1 overflow-y-auto p-2.5 sm:p-4">
+        <TerminalAnalyticsPanel />
+      </div>}
+      <div className="bastilla-terminal-body" style={{ display: advancedView==='console' ? undefined : 'none' }}>
+        <section className="bastilla-terminal-console" aria-label="Konsola poleceń">
+          <div className="bastilla-terminal-quickbar">
+            <span className="bastilla-terminal-quicklabel"><Sparkles className="w-3.5 h-3.5" /> SZYBKIE AKCJE</span>
+            <div className="bastilla-terminal-quicklist">
+              {quickCmds.map((cmd, i) => (
+                <div key={i} className="bastilla-terminal-quickchip">
+                  <button type="button" disabled={running} onClick={() => void handleExecute(cmd)} title={'Wykonaj: ' + cmd}>{cmd}</button>
+                  <button type="button" aria-label={'Usuń skrót ' + cmd} title="Usuń skrót" onClick={(event) => handleRemoveCmd(i, event)}><X className="w-3 h-3" /></button>
+                </div>
+              ))}
+              {isAddingCmd ? (
+                <div className="flex items-center gap-1">
+                  <input type="text" value={newCmdText} onChange={(event) => setNewCmdText(event.target.value)}
+                    onKeyDown={(event) => { if (event.key === 'Enter') handleAddCmd(); }}
+                    placeholder="Nowy skrót" aria-label="Nowe szybkie polecenie" className="bastilla-terminal-quickinput" />
+                  <button type="button" onClick={handleAddCmd} className="bastilla-terminal-action">Dodaj</button>
+                  <button type="button" onClick={() => setIsAddingCmd(false)} aria-label="Anuluj dodawanie" className="bastilla-terminal-icon-btn"><X className="w-3 h-3" /></button>
+                </div>
+              ) : (
+                <button type="button" onClick={() => setIsAddingCmd(true)} className="bastilla-terminal-addchip">+ skrót</button>
+              )}
+            </div>
+          </div>
+
+          <div className="bastilla-terminal-console-toolbar">
+            <div className="bastilla-terminal-filters" role="group" aria-label="Filtr konsoli">
+              <button type="button" aria-pressed={viewFilter === 'all'} onClick={() => setViewFilter('all')}>Wszystko</button>
+              <button type="button" aria-pressed={viewFilter === 'sync'} onClick={() => setViewFilter('sync')}>System</button>
+              <button type="button" aria-pressed={viewFilter === 'errors'} onClick={() => setViewFilter('errors')}>Błędy</button>
+            </div>
+            <div className="flex gap-1.5 items-center">
+              <button type="button" className="bastilla-terminal-icon-btn" onClick={() => void copyLogs()} title="Kopiuj log tej sesji" aria-label="Kopiuj log sesji"><Copy className="w-4 h-4" /></button>
+              <button type="button" className="bastilla-terminal-icon-btn" onClick={exportLogs} title="Pobierz lokalny log sesji" aria-label="Pobierz log sesji"><Download className="w-4 h-4" /></button>
+              <button type="button" className="bastilla-terminal-icon-btn" onClick={() => setLogs([])} title="Wyczyść widok terminala" aria-label="Wyczyść widok terminala"><Trash2 className="w-4 h-4" /></button>
+            </div>
+          </div>
+
+          <div className="bastilla-terminal-output" role="log" aria-label="Wyniki poleceń i zdarzenia synchronizacji" aria-live="polite">
+            {filteredLogs.length ? filteredLogs.map((entry) => <LogEntryItem key={entry.id} entry={entry} />)
+              : <div className="bastilla-terminal-placeholder">Brak wpisów dla wybranego filtra. Wybierz Wszystko albo wykonaj polecenie.</div>}
+            {running && <div className="bastilla-terminal-processing" role="status"><RefreshCw className="w-3.5 h-3.5 animate-spin" /> Czekam na odpowiedź serwera…</div>}
+            <div ref={terminalEndRef} />
+          </div>
+          {copyStatus && <div className="bastilla-terminal-copy-status" role="status">{copyStatus}</div>}
+          <TerminalInputBar
+            onExecute={handleExecute}
+            history={history}
+            antiMirrorActive={antiMirrorActive}
+            onToggleAntiMirror={handleToggleAntiMirror}
+            busy={running}
+          />
+        </section>
+
+        {inspectorOpen && <aside className="bastilla-terminal-inspector" aria-label="Panel aktywności i synchronizacji">
+          <div className="bastilla-terminal-inspector-title"><Activity className="w-4 h-4 text-cyan-300" /> AKTYWNOŚĆ SYSTEMU</div>
+          <div className="bastilla-terminal-info-card">
+            <div className="flex items-center justify-between"><span>Stan synchronizacji</span><span className={workspaceLive ? 'text-emerald-300' : 'text-amber-300'}>{workspaceLive ? 'LIVE' : 'POLLING'}</span></div>
+            <p>{workspaceLive ? 'Zmiany czatu i terminala są przekazywane przez prywatny strumień zdarzeń SSE.' : 'Dane jądra odświeżają się co 4 sekundy. Zaloguj się jako operator w Menedżerze zadań, aby włączyć strumień między urządzeniami.'}</p>
+          </div>
+          <div className="bastilla-terminal-inspector-subtitle">OSTATNIE ZDARZENIA</div>
+          <div className="bastilla-terminal-activity-list">
+            {activity.length ? activity.slice(0, 8).map((item, i) => (
+              <div key={item.at + '-' + i} className="bastilla-terminal-activity-row">
+                <span className="bastilla-terminal-activity-dot" />
+                <div><strong>{({ chat: 'Czat', terminal: 'Terminal', kernel: 'Jądro', agents: 'Agenci', workspace: 'Aplikacje' } as Record<string, string>)[item.topic] || 'System'}</strong>
+                  <time dateTime={item.at}>{new Date(item.at).toLocaleTimeString('pl-PL')}</time>
+                </div>
+              </div>
+            )) : <p className="bastilla-terminal-activity-empty">Brak nowych zdarzeń z backendu w tej sesji.</p>}
+          </div>
+          <div className="bastilla-terminal-info-card">
+            <div className="flex items-center gap-2"><ShieldCheck className="w-4 h-4 text-emerald-300" /> METADANE, NIE SEKRETY</div>
+            <p>Między urządzeniami wysyłany jest wyłącznie sygnał zmiany. Wyniki poleceń pozostają w lokalnej sesji terminala. Pamięć czatu i DATA_STORE są pobierane z serwera.</p>
+            {lastSyncAt && <small>Ostatni sygnał: {new Date(lastSyncAt).toLocaleTimeString('pl-PL')}</small>}
+          </div>
+        </aside>}
       </div>
-
-      {/* Terminal Input Bar */}
-      <TerminalInputBar
-        onExecute={handleExecute}
-        history={history}
-        antiMirrorActive={antiMirrorActive}
-        onToggleAntiMirror={handleToggleAntiMirror}
-      />
-
+      <footer className="bastilla-terminal-footer">
+        <span><span className="bastilla-terminal-metric-dot" /> BASTILLA / KERNEL</span>
+        <span>Historia klawiszami ↑ ↓ · Enter wykonuje · dotknij skrótu</span>
+      </footer>
     </div>
   );
 };
-

@@ -13,7 +13,7 @@ Misja obejmuje audyt, finalizację, stabilizację i wdrożenie projektów w nast
 
 | Repozytorium / Projekt | Ścieżka / URL | Rola w systemie | Zadania do dokończenia |
 | :--- | :--- | :--- | :--- |
-| **Bastilla OS 2** (Główne) | `mmitek515-netizen/Bastilla_OS_2` | Główny system operacyjny i pulpit webowy | Pełny interfejs, wielomodelowy czat Triady, terminal, API, zarządzanie agentami, 100/100 testów, CI/CD Actions. |
+| **Bastilla OS 2** (Główne) | `u6930438163-code/Bastilla_1_2` | Główny system operacyjny i pulpit webowy | Pełny interfejs, wielomodelowy czat Triady, terminal, API, zarządzanie agentami, 100/100 testów, CI/CD Actions. |
 | **AI Studio BastillaOS** | `u6930438163-code/AI_Studio_BastillaOS` | Źródła bazowe i synchronizacja z AI Studio | Ciągły eksport zmian, eliminacja konfliktów, stabilność integracji Google AI Studio. |
 | **Aplikacje BastillaOS** | `mmitek515-netizen/aplikacje` (`apps/*`) | Rejestr aplikacji użytkowych i narzędzi | Wdrażanie artefaktów z `exports/` do `apps/`, automatyczna rejestracja w pulpicie. |
 | **Nowy_system & Kernel** | `Nowy_system/` oraz `svl_kernel.py` | Jądro SVL Kernel i hiperwizor VM | Pętla samoleczenia, optymalizacja pamięci RAM (<70% Idle), telemetria i snapshoty. |

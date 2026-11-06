@@ -10,6 +10,8 @@
     "maintenance": "node scripts/maintenance.mjs",
     "check:gemini": "node scripts/check-gemini.mjs",
     "check:api": "node scripts/check-bastilla-api.mjs",
+    "check:workers": "node scripts/check-live-chat-workers.mjs",
+    "check:librechat": "node scripts/check-librechat.mjs",
     "setup:ollama": "bash scripts/setup-ollama.sh",
     "setup:codex": "bash scripts/setup-codex.sh",
     "codex": "bash scripts/run-codex.sh",
@@ -21,7 +23,8 @@
     "lint": "tsc --noEmit",
     "start:mcp": "bash scripts/start-bastilla-mcp.sh",
     "mcp:client": "python integrations/mcp/client.py",
-    "verify": "node scripts/verify.mjs"
+    "verify": "node scripts/verify.mjs",
+    "setup:diagnostics": "node scripts/setup-diagnostics.mjs"
   },
   "dependencies": {
     "@google/genai": "^2.30.0",

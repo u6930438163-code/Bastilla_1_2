@@ -1,6 +1,6 @@
 # Bastilla OS 2
 
-Canonical repository: `mmitek515-netizen/Bastilla_OS_2`. Product name: **Bastilla OS 2**.
+Canonical repository: `u6930438163-code/Bastilla_1_2`. Product name: **Bastilla OS 2**.
 Package identifier: `bastilla-os-2`. Preserve existing API paths, app IDs and Debian
 package names until their consumers are migrated together.
 

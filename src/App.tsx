@@ -2,10 +2,8 @@ import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react'
 import {
   DataStore,
   INITIAL_DATA_STORE,
-  SYS_VERSION,
   normalizeDataStore,
 } from './kernel/svlKernel';
-import { Header } from './components/Header';
 import { LiveProgressBar } from './components/LiveProgressBar';
 import { SystemResourceMeters } from './components/SystemResourceMeters';
 import { OllamaModelManager } from './components/OllamaModelManager';
@@ -18,8 +16,7 @@ import { MonolithView } from './components/MonolithView';
 import { DataStoreView } from './components/DataStoreView';
 import { ChronolithView } from './components/ChronolithView';
 import { DiagnosticsView } from './components/DiagnosticsView';
-import { ReportModal } from './components/ReportModal';
-import { TaskProcessMatrix } from './components/TaskProcessMatrix';
+import { TaskManagerView } from './components/TaskManagerView';
 import { MemorySchemaGraph } from './components/MemorySchemaGraph';
 import { TemporalMatrix } from './components/TemporalMatrix';
 import { AstyriaMissionView } from './components/AstyriaMissionView';
@@ -32,6 +29,7 @@ import { WithoutNlpView } from './components/WithoutNlpView';
 import { GitHubExportView } from './components/GitHubExportView';
 import { CloudLibraryView } from './components/CloudLibraryView';
 import { IntegrationsView } from './components/IntegrationsView';
+import { LibreChatView } from './components/LibreChatView';
 import { BastillaDashboard } from './components/BastillaDashboard';
 import { BastillaOS2View } from './components/BastillaOS2View';
 import {
@@ -50,6 +48,7 @@ import type { ChatSystemChange } from './kernel/chatChanges';
 const LOCAL_STORAGE_KEY = 'svl_kernel_datastore_v9_0_0_chat_sync';
 
 export default function App() {
+  const [preparedChatDraft, setPreparedChatDraft] = useState<{ id: number; text: string; agent: 'triad' | 'Alex' | 'Astyria' | 'Aurelius' | 'si_1' } | null>(null);
   const [rawDataStore, setRawDataStore] = useState<DataStore>(() => {
     try {
       localStorage.removeItem('svl_kernel_datastore_v8_5_1_desktop_ready');
@@ -78,11 +77,15 @@ export default function App() {
 
   const [activeTab, setActiveTab] = useState<TabId>(initialTabFromLocation);
   const [isAgentLoading, setIsAgentLoading] = useState(false);
+  const [streamingChat, setStreamingChat] = useState<{
+    prompt: string;
+    agents: Array<{ agent: string; text: string; status: 'writing' | 'done' | 'error' }>;
+  } | null>(null);
   const [terminalBusy, setTerminalBusy] = useState(false);
+  const [workspaceLive, setWorkspaceLive] = useState(false);
   const terminalPendingRef = useRef(0);
   const [agentError, setAgentError] = useState<string | null>(null);
   const [chatSystemChange, setChatSystemChange] = useState<ChatSystemChange | null>(null);
-  const [showReportModal, setShowReportModal] = useState(false);
 
   // Expose navigation to window for internal component linking
   useEffect(() => {
@@ -95,18 +98,27 @@ export default function App() {
     isAgentLoadingRef.current = isAgentLoading;
   }, [isAgentLoading]);
 
-  // Poll only while visible, prevent overlapping requests, and cancel on unmount.
-  // This reduces CPU/network use on mobile and prevents stale responses after navigation.
+  // One cross-device SSE stream, plus browser-tab notifications and a 4s fallback.
+  // The server sends change metadata only; /api/kernel/state is authoritative.
   useEffect(() => {
     let disposed = false;
     let inFlight = false;
+    let queuedFresh = false;
     let controller: AbortController | null = null;
-    const fetchState = async () => {
-      if (disposed || inFlight || document.hidden || isAgentLoadingRef.current) return;
+    let stream: EventSource | null = null;
+    let connecting = false;
+    let lastEventId = '';
+    const tabChannel = typeof BroadcastChannel !== 'undefined'
+      ? new BroadcastChannel('bastilla-workspace-v1') : null;
+
+    const fetchState = async (forceFresh = false) => {
+      if (disposed || document.hidden || isAgentLoadingRef.current) return;
+      if (inFlight) { if (forceFresh) queuedFresh = true; return; }
       inFlight = true;
       controller = new AbortController();
       try {
-        const res = await fetch('/api/kernel/state', { signal: controller.signal });
+        const url = forceFresh ? '/api/kernel/state?fresh=1' : '/api/kernel/state';
+        const res = await fetch(url, { signal: controller.signal, cache: 'no-store' });
         if (!res.ok || disposed || isAgentLoadingRef.current) return;
         const data = await res.json();
         if (!disposed && data?.store && !isAgentLoadingRef.current) {
@@ -117,22 +129,90 @@ export default function App() {
         }
       } catch (err) {
         if (!(err instanceof Error && err.name === 'AbortError')) {
-          console.warn('Kernel state polling failed:', err);
+          console.warn('Kernel state refresh failed:', err);
         }
       } finally {
         inFlight = false;
         controller = null;
+        if (queuedFresh) { queuedFresh = false; void fetchState(true); }
       }
     };
 
-    void fetchState();
-    const interval = setInterval(() => { void fetchState(); }, 4000);
-    const onVisible = () => { if (!document.hidden) void fetchState(); };
+    const emitWorkspaceEvent = (raw: unknown, forward: boolean) => {
+      const item = raw as { id?: unknown; topic?: unknown; at?: unknown };
+      if (!item || !['terminal', 'kernel', 'chat', 'agents', 'workspace'].includes(String(item.topic))) return;
+      const event = {
+        id: String(item.id || ''),
+        topic: String(item.topic),
+        at: typeof item.at === 'string' ? item.at : new Date().toISOString(),
+      };
+      window.dispatchEvent(new CustomEvent('bastilla:workspace-event', { detail: event }));
+      if (forward) tabChannel?.postMessage(event);
+      void fetchState(true);
+    };
+
+    const connect = async () => {
+      if (disposed || stream || connecting) return;
+      connecting = true;
+      try {
+        const session = await fetch('/api/live-chat/session', {
+          credentials: 'same-origin', cache: 'no-store',
+        });
+        if (!session.ok || disposed) return; // Not logged in: keep 4s polling.
+        const suffix = lastEventId ? '?after=' + encodeURIComponent(lastEventId) : '';
+        stream = new EventSource('/api/workspace/events' + suffix, { withCredentials: true });
+        stream.onopen = () => {
+          if (!disposed) { setWorkspaceLive(true); void fetchState(true); }
+        };
+        stream.onerror = () => {
+          if (disposed) return;
+          setWorkspaceLive(false);
+          stream?.close();
+          stream = null; // Periodic check reconnects without a busy 401 loop.
+        };
+        stream.addEventListener('change', (message) => {
+          try {
+            const event = JSON.parse((message as MessageEvent).data);
+            if (event.id) lastEventId = String(event.id);
+            emitWorkspaceEvent(event, true);
+          } catch { /* malformed notification cannot replace authoritative state */ }
+        });
+      } catch {
+        if (!disposed) setWorkspaceLive(false);
+      } finally {
+        connecting = false;
+      }
+    };
+
+    const refreshLocal = (event: Event) => {
+      const detail = (event as CustomEvent).detail;
+      emitWorkspaceEvent({ topic: detail?.topic || 'workspace', at: new Date().toISOString() }, true);
+    };
+    const resetSession = () => {
+      stream?.close(); stream = null;
+      setWorkspaceLive(false);
+      void connect();
+    };
+    if (tabChannel) tabChannel.onmessage = (event) => emitWorkspaceEvent(event.data, false);
+    window.addEventListener('bastilla:workspace-local', refreshLocal);
+    window.addEventListener('bastilla:live-chat-auth', resetSession);
+    void fetchState(true);
+    void connect();
+    const interval = window.setInterval(() => { void fetchState(); }, 4000);
+    const reconnect = window.setInterval(() => { if (!stream) void connect(); }, 20000);
+    const onVisible = () => {
+      if (!document.hidden) { void fetchState(true); if (!stream) void connect(); }
+    };
     document.addEventListener('visibilitychange', onVisible);
     return () => {
       disposed = true;
       controller?.abort();
-      clearInterval(interval);
+      stream?.close();
+      tabChannel?.close();
+      window.clearInterval(interval);
+      window.clearInterval(reconnect);
+      window.removeEventListener('bastilla:workspace-local', refreshLocal);
+      window.removeEventListener('bastilla:live-chat-auth', resetSession);
       document.removeEventListener('visibilitychange', onVisible);
     };
   }, [setDataStore]);
@@ -163,6 +243,7 @@ export default function App() {
     if (data.state?.store) {
       setDataStore(normalizeDataStore(data.state.store));
     }
+    window.dispatchEvent(new CustomEvent('bastilla:workspace-local', { detail: { topic: 'terminal' } }));
     return data;
     } finally {
       terminalPendingRef.current = Math.max(0, terminalPendingRef.current - 1);
@@ -351,6 +432,8 @@ export default function App() {
     message: string,
     chatAgent: AgentProtocolRequest['agent'] = 'triad',
     attachments: ChatAttachment[] = [],
+    freedomMode = true,
+    providerMode: 'api' | 'ollama' = 'api',
   ) => {
     const protocolCommand = attachments.length === 0
       ? parseChatProtocolCommand(message, chatAgent)
@@ -375,14 +458,59 @@ export default function App() {
         'pelna naprawa czatu',
         'odpowiedz pelna naprawa czatu',
       ].includes(normalizedCommand);
+      setStreamingChat({ prompt: message.trim(), agents: [] });
       const response = await fetch(isFullChatRepair ? '/api/astyria/mission' : '/api/triad/message', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', 'Accept': 'text/event-stream, application/json' },
         body: JSON.stringify(isFullChatRepair
           ? { action: 'full_system_app_chat_repair', userMessage: message.trim() }
-          : { message, agent: chatAgent, attachments }),
+          : { message, agent: chatAgent, attachments, freedomMode, providerMode }),
       });
-      const result = await response.json();
+      let result: any;
+      if (response.ok && response.headers.get('content-type')?.includes('text/event-stream') && response.body) {
+        const reader = response.body.getReader();
+        const decoder = new TextDecoder();
+        let buffer = '';
+        const handleEvent = (raw: string) => {
+          const lines = raw.split('\n');
+          const event = lines.find(line => line.startsWith('event:'))?.slice(6).trim();
+          const rawData = lines.filter(line => line.startsWith('data:')).map(line => line.slice(5).trimStart()).join('\n');
+          if (!event || !rawData) return;
+          const data = JSON.parse(rawData) as any;
+          if (event === 'failure') throw new Error(String(data.error || 'Błąd strumienia agentów.'));
+          if (event === 'complete') { result = data; return; }
+          const agent = String(data.agent || '');
+          if (!agent) return;
+          if (event === 'agent_start') {
+            setStreamingChat(old => old ? {
+              ...old, agents: [...old.agents.filter(item => item.agent !== agent), { agent, text: '', status: 'writing' }],
+            } : old);
+          }
+          if (event === 'agent_delta' || event === 'agent_done' || event === 'agent_error') {
+            setStreamingChat(old => old ? { ...old, agents: old.agents.map(item => item.agent === agent ? {
+              ...item, text: event === 'agent_done' ? String(data.text || '') :
+                event === 'agent_error' ? String(data.error || 'Błąd') :
+                item.text + String(data.text || ''),
+              status: event === 'agent_done' ? 'done' : event === 'agent_error' ? 'error' : 'writing',
+            } : item) } : old);
+          }
+        };
+        try {
+          while (true) {
+            const next = await reader.read();
+            if (next.done) break;
+            buffer += decoder.decode(next.value, { stream: true }).replace(/\r\n/g, '\n');
+            const events = buffer.split('\n\n');
+            buffer = events.pop() || '';
+            for (const event of events) handleEvent(event);
+          }
+          buffer += decoder.decode();
+          if (buffer.trim()) handleEvent(buffer);
+        } finally { reader.releaseLock(); }
+        if (!result) throw new Error('Nie otrzymano końcowego potwierdzenia zapisu rozmowy.');
+      } else {
+        result = await response.json();
+      }
       if (!response.ok || result.success !== true || typeof result.reply !== 'string') {
         throw new Error(result.error || `Nie udało się wysłać wiadomości (HTTP ${response.status}).`);
       }
@@ -422,11 +550,13 @@ export default function App() {
       setDataStore(normalized);
       localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(normalized));
       setChatSystemChange(isChatSystemChange(result.change) ? result.change : null);
+      window.dispatchEvent(new CustomEvent('bastilla:workspace-local', { detail: { topic: 'chat' } }));
     } catch (error) {
       const messageText = error instanceof Error ? error.message : 'Nie udało się wysłać wiadomości.';
       setAgentError(messageText);
       throw error;
     } finally {
+      setStreamingChat(null);
       setIsAgentLoading(false);
     }
   };
@@ -441,6 +571,7 @@ export default function App() {
     spokenCount: number;
     silentAgents: string[];
     messages: Array<{ agent: string; tekst: string }>;
+    engines: Record<string, string>;
   }> => {
     setIsAgentLoading(true);
     setAgentError(null);
@@ -463,6 +594,14 @@ export default function App() {
       }
 
       const spokenAgents: string[] = Array.isArray(result.spokenAgents) ? result.spokenAgents : [];
+      const engines: Record<string, string> = {};
+      if (result.engines && typeof result.engines === 'object' && !Array.isArray(result.engines)) {
+        for (const [name, engine] of Object.entries(result.engines)) {
+          if (['Alex', 'Astyria', 'Aurelius', 'si_1'].includes(name) && typeof engine === 'string') {
+            engines[name] = engine.slice(0, 120);
+          }
+        }
+      }
       const messages: Array<{ agent: string; tekst: string }> =
         result.replies && typeof result.replies === 'object'
           ? Object.entries(result.replies as Record<string, unknown>)
@@ -479,6 +618,7 @@ export default function App() {
         spokenCount: spokenAgents.length,
         silentAgents,
         messages,
+        engines,
       };
     } catch (error) {
       const messageText = error instanceof Error ? error.message : 'Nie udało się otworzyć swobodnego głosu AI.';
@@ -525,40 +665,36 @@ export default function App() {
     }));
 
     try {
-      await fetch('/api/kernel/command', {
+      const cleared = await fetch('/api/kernel/command', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ command: 'clear_chat' })
       });
+      if (!cleared.ok) throw new Error('Backend nie potwierdził czyszczenia historii.');
+      const reactionsCleared = await fetch('/api/chat/reactions', {
+        method: 'DELETE',
+        credentials: 'same-origin',
+      });
+      if (!reactionsCleared.ok) {
+        console.warn('Historia czatu wyczyszczona, lecz oceny wymagają ponownego czyszczenia.');
+      }
     } catch (e) {
       console.warn('Backend clear_chat failed:', e);
-    }
-  };
-
-  const handleResetToDefault = () => {
-    if (confirm(`Czy na pewno chcesz przywrócić stan bazowy jądra SVL v${SYS_VERSION}?`)) {
-      setDataStore(INITIAL_DATA_STORE);
-      try {
-        localStorage.removeItem(LOCAL_STORAGE_KEY);
-      } catch (e) {
-        console.error(e);
-      }
     }
   };
 
   return (
     <ErrorBoundary>
       <div className="app-shell flex h-dvh max-h-dvh min-w-0 max-w-full flex-col overflow-hidden bg-[#050b18] font-sans text-slate-100 selection:bg-cyan-400/30 selection:text-cyan-100">
-        {activeTab !== 'comms' && (
-          <Header
-            dataStore={dataStore}
-            activeTab={activeTab}
-            onSelectTab={setActiveTab}
-            onReset={handleResetToDefault}
-            onShowReport={() => setShowReportModal(true)}
-            onSyncSystem={handleSyncSystem}
-          />
-        )}
+        {/* Jeden kompaktowy nagłówek Workspace na wszystkich kartach — bez dużego bannera systemu. */}
+        <div className="bastilla-workspace-sync-strip" role="status" aria-live="polite">
+          <span className={workspaceLive ? 'bastilla-workspace-sync-dot is-live' : 'bastilla-workspace-sync-dot'} />
+          <span className="font-semibold">{workspaceLive ? 'WORKSPACE · SSE' : 'WORKSPACE · ODSWIEZANIE 4s'}</span>
+          <span className="bastilla-workspace-sync-detail">{workspaceLive ? 'Czat · terminal · jądro: synchronizacja zdarzeń' : 'Czat · terminal · jądro: automatyczne odświeżanie'}</span>
+          <button type="button" onClick={() => setActiveTab(activeTab === 'comms' ? 'terminal' : 'comms')}>
+            {activeTab === 'comms' ? 'Otwórz terminal' : 'Otwórz czat'}
+          </button>
+        </div>
 
         {(isAgentLoading || terminalBusy) && activeTab !== 'comms' && (
           <div className="px-3 py-2 shrink-0">
@@ -601,6 +737,7 @@ export default function App() {
           {activeTab === 'comms' && (
             <AgentCommsView
               dataStore={dataStore}
+              streamingChat={streamingChat}
               onSendProtocol={handleSendProtocol}
               onSendMessage={handleSendMessage}
               onRunAstyriaMission={handleRunAstyriaMission}
@@ -609,6 +746,9 @@ export default function App() {
               onClearHistory={handleClearHistory}
               onForceSync={handleForceSync}
               onTriggerFreeVoice={handleTriggerFreeVoice}
+              preparedDraft={preparedChatDraft}
+              onRunKernelCommand={handleExecutePythonCommand}
+              onOpenTerminal={() => setActiveTab('terminal')}
             />
           )}
 
@@ -619,8 +759,14 @@ export default function App() {
             />
           )}
 
-          {activeTab === 'process_matrix' && (
-            <TaskProcessMatrix />
+          {(activeTab === 'process_matrix' || activeTab === 'task_manager' || activeTab === 'ollama_manager') && (
+            <TaskManagerView
+              initialSection={activeTab === 'ollama_manager' ? 'ollama' : 'processes'}
+              onPrepareMainChat={(text, agent) => {
+                setPreparedChatDraft({ id: Date.now(), text, agent: agent === 'Aria' ? 'si_1' : agent });
+                setActiveTab('comms');
+              }}
+            />
           )}
 
           {activeTab === 'astyria_mission' && (
@@ -644,14 +790,16 @@ export default function App() {
             />
           )}
 
-          {activeTab === 'terminal' && (
+          {/* Keep the terminal mounted so local command history and live events survive navigation. */}
+          <div className={activeTab === 'terminal' ? 'flex min-h-0 min-w-0 flex-1' : 'hidden'}>
             <TerminalView
               dataStore={dataStore}
               onUpdateDataStore={setDataStore}
               onSendProtocol={handleSendProtocol}
               onExecutePythonCommand={handleExecutePythonCommand}
+              workspaceLive={workspaceLive}
             />
-          )}
+          </div>
 
           {activeTab === 'monolith' && (
             <MonolithView
@@ -712,7 +860,8 @@ export default function App() {
             <WithoutNlpView onSendProtocol={handleSendProtocol} />
           )}
 
-          {activeTab === 'integrations' && <IntegrationsView onOpenLibrary={() => setActiveTab('cloud_library')} />}
+          {activeTab === 'integrations' && <IntegrationsView onOpenLibrary={() => setActiveTab('cloud_library')} onOpenLibreChat={() => setActiveTab('librechat')} />}
+          {activeTab === 'librechat' && <LibreChatView />}
 
           {activeTab === 'cloud_library' && <CloudLibraryView />}
           {activeTab === 'project_progress' && (
@@ -730,12 +879,6 @@ export default function App() {
           )}
         </main>
         </div>
-
-        <ReportModal
-          isOpen={showReportModal}
-          onClose={() => setShowReportModal(false)}
-          dataStore={dataStore}
-        />
 
         <SystemHealthDock />
       </div>

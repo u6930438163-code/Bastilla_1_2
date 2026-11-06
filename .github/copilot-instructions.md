@@ -1,7 +1,7 @@
 # Bastilla OS 2 in Codespaces & GitHub
 
 Read AGENTS.md, docs/DEVELOPMENT.md and docs/GITHUB_AGENT_ADMIN_SETUP.md.
-Repository: mmitek515-netizen/Bastilla_OS_2.
+Repository: u6930438163-code/Bastilla_1_2.
 
 ## Administrator Uprawnień AI (Agent Administrative Mandate)
 Właściciel repozytorium nadał agentom Triady pełne uprawnienia administracyjne do GitHub (FULL_ADMINISTRATIVE_ACCESS):

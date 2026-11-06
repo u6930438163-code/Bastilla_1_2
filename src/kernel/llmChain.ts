@@ -12,7 +12,7 @@
 import { parseGeminiModelChain, runWithGeminiFallback } from './geminiVm.ts';
 
 export type LlmRole = 'user' | 'assistant';
-export type LlmProvider = 'gemini' | 'xai' | 'ollama';
+export type LlmProvider = 'gemini' | 'xai' | 'openai' | 'ollama';
 
 export interface LlmTurn {
   role: LlmRole;
@@ -43,6 +43,9 @@ export interface LlmChainConfig {
   xaiApiKey?: string;
   xaiModel?: string;
   xaiBaseUrl?: string;
+  /** Separate server-side secret for OpenAI chat (not the OpenAI image API key). */
+  openaiChatApiKey?: string;
+  openaiChatModel?: string;
   /** Pusty lub "auto" = pierwszy pobrany model z /api/tags. */
   ollamaModel?: string;
   ollamaBaseUrl?: string;
@@ -85,7 +88,7 @@ export class LlmChainError extends Error {
   constructor(failures: string[]) {
     super(failures.length
       ? `Żaden model nie odpowiedział: ${failures.join(' | ')}`
-      : 'Brak skonfigurowanych modeli (GEMINI_API_KEY, XAI_API_KEY, OLLAMA_MODEL).');
+      : 'Brak skonfigurowanych modeli (GEMINI_API_KEY, XAI_API_KEY, OPENAI_CHAT_API_KEY, OLLAMA_MODEL).');
     this.name = 'LlmChainError';
     this.failures = failures;
   }
@@ -93,6 +96,8 @@ export class LlmChainError extends Error {
 
 export const DEFAULT_GEMINI_BASE_URL = 'https://generativelanguage.googleapis.com/v1beta';
 export const DEFAULT_XAI_BASE_URL = 'https://api.x.ai/v1';
+export const OPENAI_CHAT_COMPLETIONS_URL = 'https://api.openai.com/v1/chat/completions';
+export const DEFAULT_OPENAI_CHAT_MODEL = 'gpt-4o';
 export const DEFAULT_XAI_MODEL = 'grok-3-mini';
 export const DEFAULT_OLLAMA_BASE_URL = 'http://127.0.0.1:11434';
 /** Domyślny limit pozwala na długie odpowiedzi w oknie kontekstu 4096 tokenów. */
@@ -125,7 +130,7 @@ function trimBase(url: string): string {
 }
 
 function describeStatus(provider: LlmProvider, status: number): string {
-  const name = provider === 'gemini' ? 'Google Gemini' : provider === 'xai' ? 'xAI' : 'Ollama';
+  const name = provider === 'gemini' ? 'Google Gemini' : provider === 'xai' ? 'xAI' : provider === 'openai' ? 'OpenAI' : 'Ollama';
   if (status === 401 || status === 403) return `${name}: klucz API odrzucony (HTTP ${status}).`;
   if (status === 402) return `${name}: brak środków na koncie (HTTP 402).`;
   if (status === 429) return `${name}: limit żądań wyczerpany (HTTP 429).`;
@@ -256,6 +261,62 @@ async function discoverXaiModel(
   const picked = pickXaiChatModel(ids);
   if (picked) discoveredXaiModels.set(base, picked);
   return picked;
+}
+
+/**
+ * First-party OpenAI chat. The key is supplied by the server environment only.
+ * A fixed HTTPS endpoint prevents AI-supplied URLs or accidental cross-provider use.
+ * No automatic retries: each call may incur costs.
+ */
+export async function generateOpenai(
+  config: LlmChainConfig,
+  request: LlmRequest,
+  signal?: AbortSignal,
+): Promise<{ text: string; model: string }> {
+  const apiKey = (config.openaiChatApiKey || '').trim();
+  if (!apiKey) throw new Error('Brak OPENAI_CHAT_API_KEY.');
+  const model = (config.openaiChatModel || DEFAULT_OPENAI_CHAT_MODEL).trim();
+  const doFetch = config.fetchImpl ?? fetch;
+  const images = (request.attachments ?? [])
+    .filter(item => item.mimeType.startsWith('image/'))
+    .map(item => ({
+      type: 'image_url',
+      image_url: { url: `data:${item.mimeType};base64,${item.content}` },
+    }));
+  const messages = [
+    { role: 'system', content: request.system },
+    ...request.history.map(turn => ({ role: turn.role, content: turn.text })),
+    { role: 'user', content: images.length
+      ? [{ type: 'text', text: request.message }, ...images] : request.message },
+  ];
+  let response: Response;
+  try {
+    response = await doFetch(OPENAI_CHAT_COMPLETIONS_URL, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        model, messages,
+        temperature: request.temperature ?? 0.7,
+        max_tokens: Math.min(request.maxOutputTokens ?? OLLAMA_MAX_OUTPUT_TOKENS, OLLAMA_MAX_OUTPUT_TOKENS),
+        stream: false,
+      }),
+      signal,
+    });
+  } catch (error: any) {
+    if (error?.name === 'AbortError') throw error;
+    throw new LlmProviderError('openai', 503, 'OpenAI: brak połączenia z api.openai.com.');
+  }
+  if (!response.ok) {
+    // Never include raw provider responses; they could contain sensitive user data.
+    throw new LlmProviderError('openai', response.status, `${describeStatus('openai', response.status)} [${model}]`);
+  }
+  const data: any = await response.json();
+  const content = data?.choices?.[0]?.message?.content;
+  const text = (typeof content === 'string' ? content
+    : Array.isArray(content) ? content.map((part: any) => typeof part?.text === 'string' ? part.text : '').join('')
+    : '').trim();
+  if (!text) throw new LlmProviderError('openai', 502, `OpenAI: pusta odpowiedź [${model}]`);
+  return { text, model };
 }
 
 export async function generateXai(
@@ -410,6 +471,7 @@ export async function generateOllama(
   config: LlmChainConfig,
   request: LlmRequest,
   signal?: AbortSignal,
+  onDelta?: (text: string) => void,
 ): Promise<{ text: string; model: string }> {
   const doFetch = config.fetchImpl ?? fetch;
   const base = trimBase(config.ollamaBaseUrl || DEFAULT_OLLAMA_BASE_URL);
@@ -439,7 +501,7 @@ export async function generateOllama(
         body: JSON.stringify({
           model,
           messages,
-          stream: false,
+          stream: Boolean(onDelta && disableThinking),
           keep_alive: parseKeepAlive(config.ollamaKeepAlive),
           ...(disableThinking ? { think: false } : {}),
           options: ollamaOptions(config, request),
@@ -458,8 +520,50 @@ export async function generateOllama(
       const detailText = details ? ` Szczegóły: ${details}` : '';
       throw new LlmProviderError('ollama', response.status, `${describeStatus('ollama', response.status)} [${model}]${hint}${detailText}`);
     }
-    const data: any = await response.json();
-    const text = stripThinking(typeof data?.message?.content === 'string' ? data.message.content : '');
+    let raw = '';
+    if (onDelta && disableThinking && response.body) {
+      // Ollama emits newline-delimited JSON; send real model deltas without delays.
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = '';
+      let emitted = '';
+      const consume = (line: string) => {
+        if (!line.trim()) return;
+        const item = JSON.parse(line) as { message?: { content?: unknown }; error?: string };
+        if (item.error) throw new LlmProviderError('ollama', 502, item.error);
+        const fragment = typeof item.message?.content === 'string' ? item.message.content : '';
+        if (fragment) {
+          raw += fragment;
+          // Never stream thought blocks or incomplete markup tags into chat.
+          const visible = raw.replace(/<think>[\s\S]*?<\/think>/gi, '')
+            .replace(/<think>[\s\S]*$/gi, '')
+            .replace(/^[\s\S]*?<\/think>/i, '')
+            .replace(/<[^>]*$/, '');
+          if (visible.startsWith(emitted)) {
+            const delta = visible.slice(emitted.length);
+            if (delta) onDelta(delta);
+            emitted = visible;
+          }
+        }
+      };
+      try {
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          buffer += decoder.decode(value, { stream: true });
+          const parts = buffer.split('\n');
+          buffer = parts.pop() ?? '';
+          for (const part of parts) consume(part);
+        }
+        buffer += decoder.decode();
+        if (buffer.trim()) consume(buffer);
+      } finally { reader.releaseLock(); }
+    } else {
+      const data: any = await response.json();
+      raw = typeof data?.message?.content === 'string' ? data.message.content : '';
+      if (raw && onDelta) onDelta(stripThinking(raw));
+    }
+    const text = stripThinking(raw);
     if (!text) throw new LlmProviderError('ollama', 502, `Ollama: pusta odpowiedź [${model}]`);
     return text;
   };
@@ -504,16 +608,20 @@ export async function warmupOllama(
 }
 
 export function configuredProviders(config: LlmChainConfig): Array<LlmProvider> {
-  if (config.providers && config.providers.length > 0) {
+  // An explicitly empty list means NO providers; do not fall through to
+  // auto-discovery (that could silently cross an operator's API/Ollama choice).
+  if (Array.isArray(config.providers)) {
     // Jawny wybór: Ollama nie wymaga klucza (model może być wykryty automatycznie).
     return config.providers.filter((provider, index, list) => list.indexOf(provider) === index
       && (provider === 'ollama'
         || (provider === 'gemini' && Boolean((config.geminiApiKey || '').trim()))
-        || (provider === 'xai' && Boolean((config.xaiApiKey || '').trim()))));
+        || (provider === 'xai' && Boolean((config.xaiApiKey || '').trim()))
+        || (provider === 'openai' && Boolean((config.openaiChatApiKey || '').trim()))));
   }
   const providers: Array<LlmProvider> = [];
   if ((config.geminiApiKey || '').trim()) providers.push('gemini');
   if ((config.xaiApiKey || '').trim()) providers.push('xai');
+  if ((config.openaiChatApiKey || '').trim()) providers.push('openai');
   if ((config.ollamaModel || '').trim()) providers.push('ollama');
   return providers;
 }
@@ -523,16 +631,20 @@ export async function generateWithChain(
   config: LlmChainConfig,
   request: LlmRequest,
   signal?: AbortSignal,
+  onDelta?: (text: string) => void,
 ): Promise<LlmResult> {
   const failures: string[] = [];
-  for (const provider of configuredProviders(config)) {
+  const providers = configuredProviders(config);
+  for (const provider of providers) {
     if (signal?.aborted) break;
     try {
       const { text, model } = provider === 'gemini'
         ? await generateGemini(config, request, signal)
         : provider === 'xai'
         ? await generateXai(config, request, signal)
-        : await generateOllama(config, request, signal);
+        : provider === 'openai'
+        ? await generateOpenai(config, request, signal)
+        : await generateOllama(config, request, signal, providers.length === 1 ? onDelta : undefined);
       return { text, provider, model, failures };
     } catch (error: any) {
       failures.push(error?.name === 'AbortError'

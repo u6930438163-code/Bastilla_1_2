@@ -21,6 +21,8 @@ import { DataStore } from '../kernel/svlKernel';
 import { TabId } from './Navigation';
 import { AgentProtocolRequest } from '../kernel/agentProtocol';
 import { ChatAttachment } from '../kernel/chatAttachments';
+import { OllamaModelManager } from './OllamaModelManager';
+import { summarizeFreeVoiceEngines } from '../lib/freeVoiceEngine.mjs';
 
 interface AgentTaskArtifact {
   path: string;
@@ -69,6 +71,7 @@ interface BastillaOS2ViewProps {
     spokenCount: number;
     silentAgents: string[];
     messages: Array<{ agent: string; tekst: string }>;
+    engines?: Record<string, string>;
   }>;
   onExecutePythonCommand?: (command: string) => Promise<any>;
 }
@@ -77,6 +80,7 @@ interface SystemIntegrationStatus {
   aiProvider: string;
   aiChain: string[];
   ollamaConnected: boolean;
+  ollamaConfiguredModel: string;
   ollamaModelsCount: number;
   ollamaDetail: string;
   mcpReachable: boolean;
@@ -115,11 +119,12 @@ export const BastillaOS2View: React.FC<BastillaOS2ViewProps> = ({
 
   // Live integrations status (Gemini, Ollama, MCP)
   const [integrationStatus, setIntegrationStatus] = useState<SystemIntegrationStatus>({
-    aiProvider: 'Google Gemini → Ollama (fallback)',
+    aiProvider: 'Google Gemini → Ollama (dolphin-mixtral:8x7b)',
     aiChain: ['Google Gemini'],
     ollamaConnected: false,
+    ollamaConfiguredModel: 'dolphin-mixtral:8x7b',
     ollamaModelsCount: 0,
-    ollamaDetail: 'Sprawdzanie dostępności lokalnego serwera…',
+    ollamaDetail: 'Model docelowy: dolphin-mixtral:8x7b · sprawdzanie lokalnego serwera…',
     mcpReachable: false,
     mcpToolsCount: 0,
   });
@@ -191,15 +196,19 @@ export const BastillaOS2View: React.FC<BastillaOS2ViewProps> = ({
       }
 
       let ollamaConnected = false;
+      let ollamaConfiguredModel = 'dolphin-mixtral:8x7b';
       let ollamaModelsCount = 0;
-      let ollamaDetail = 'Lokalny serwer Ollama niedostępny w chmurze (aktywny Gemini API)';
+      let ollamaDetail = 'Model docelowy: dolphin-mixtral:8x7b (uruchom lokalnie: npm run setup:ollama)';
       if (ollamaRes.status === 'fulfilled') {
         const ollamaData = await ollamaRes.value.json().catch(() => ({}));
         ollamaConnected = Boolean(ollamaData.connected);
+        if (typeof ollamaData.configuredModel === 'string' && ollamaData.configuredModel.trim()) {
+          ollamaConfiguredModel = ollamaData.configuredModel.trim();
+        }
         ollamaModelsCount = Array.isArray(ollamaData.models) ? ollamaData.models.length : 0;
         ollamaDetail = ollamaConnected
-          ? `Połączono lokalnie (${ollamaModelsCount} modeli)`
-          : 'Tryb chmurowy: lokalny demon :11434 wyłączony (aktywny Gemini)';
+          ? `Aktywny model: ${ollamaConfiguredModel} (${ollamaModelsCount} w Ollama)`
+          : `Skonfigurowany model: ${ollamaConfiguredModel} · demon :11434 offline w chmurze`;
       }
 
       let mcpReachable = false;
@@ -215,6 +224,7 @@ export const BastillaOS2View: React.FC<BastillaOS2ViewProps> = ({
         aiProvider,
         aiChain,
         ollamaConnected,
+        ollamaConfiguredModel,
         ollamaModelsCount,
         ollamaDetail,
         mcpReachable,
@@ -269,9 +279,11 @@ export const BastillaOS2View: React.FC<BastillaOS2ViewProps> = ({
       const res = await onTriggerFreeVoice(chatAgent);
       if (res.spokenCount > 0) {
         const names = res.messages.map((m) => (m.agent === 'si_1' ? 'Aria' : m.agent)).join(', ');
-        setChatFeedback(`Swobodny głos zabrał(a): ${names}`);
+        const engineInfo = summarizeFreeVoiceEngines(res.engines, res.messages.map(m => m.agent));
+        setChatFeedback(`Swobodny głos: ${names}. Źródło: ${engineInfo || 'niepotwierdzone'}.`);
       } else {
-        setChatFeedback('Agenci skorzystali z prawa do ciszy (brak przymusu odpowiedzi).');
+        const attempted = summarizeFreeVoiceEngines(res.engines, Object.keys(res.engines || {}));
+        setChatFeedback('Brak wypowiedzi. ' + (attempted || 'Źródło niepotwierdzone.'));
       }
     } catch (err) {
       setChatFeedback(err instanceof Error ? err.message : 'Błąd wywołania swobodnego głosu AI.');
@@ -473,7 +485,7 @@ export const BastillaOS2View: React.FC<BastillaOS2ViewProps> = ({
                   ? 'bg-emerald-50 text-emerald-800 border-emerald-200'
                   : 'bg-amber-50 text-amber-800 border-amber-200'
               }`}>
-                {integrationStatus.ollamaConnected ? 'Ollama Online' : 'Chmura / Gemini'}
+                {integrationStatus.ollamaConnected ? `Ollama · ${integrationStatus.ollamaConfiguredModel}` : `Cel: ${integrationStatus.ollamaConfiguredModel}`}
               </span>
             </div>
             <div className="mt-3">
@@ -481,7 +493,7 @@ export const BastillaOS2View: React.FC<BastillaOS2ViewProps> = ({
               <div className="text-[11px] text-[#736758] mt-0.5 truncate">{integrationStatus.ollamaDetail}</div>
             </div>
             <div className="text-[11px] text-[#8C7E6D] mt-2 border-t border-[#F0EAE1] pt-2">
-              Bez zakładania lokalnego serwera Ollamy w chmurze.
+              Wyłączny model lokalny: <code className="font-mono font-bold text-[#7A5B18]">{integrationStatus.ollamaConfiguredModel}</code> (pozostałe modele usuwane).
             </div>
           </div>
 
@@ -523,6 +535,11 @@ export const BastillaOS2View: React.FC<BastillaOS2ViewProps> = ({
             </div>
           </div>
         </section>
+
+        {/* Ollama Model Manager (dolphin-mixtral:8x7b exclusive setup & pruning) */}
+        <div className="rounded-xl overflow-hidden border border-slate-800 shadow-sm">
+          <OllamaModelManager />
+        </div>
 
         {/* 4 Agents Architecture Strip */}
         <section className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3" aria-label="Zespół agentów Bastilla OS 2">
