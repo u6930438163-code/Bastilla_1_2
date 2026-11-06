@@ -35,6 +35,7 @@ interface AgentCommsViewProps {
     message: string,
     agent: 'triad' | 'Alex' | 'Astyria' | 'Aurelius' | 'si_1',
     attachments?: ChatAttachment[],
+    freedomMode?: boolean,
   ) => Promise<void>;
   onRunAstyriaMission: (action: AstyriaMissionAction) => Promise<void>;
   isLoading: boolean;
@@ -61,6 +62,7 @@ interface AgentCommsViewProps {
 }
 
 const TWO_WAY_STORAGE_KEY = 'bastilla_two_way_chat_enabled';
+const FREEDOM_STORAGE_KEY = 'bastilla_ai_freedom_enabled';
 const REACTION_STORAGE_KEY = 'bastilla_chat_message_reactions_v1';
 
 export const AgentCommsView: React.FC<AgentCommsViewProps> = ({
@@ -90,6 +92,10 @@ export const AgentCommsView: React.FC<AgentCommsViewProps> = ({
   const [attachmentError, setAttachmentError] = useState<string | null>(null);
   const [showProtocolTools, setShowProtocolTools] = useState(false);
   const [showWorkPreview, setShowWorkPreview] = useState(false);
+  const [showMoreMenu, setShowMoreMenu] = useState(false);
+  const [freedomEnabled, setFreedomEnabled] = useState<boolean>(() => {
+    try { return localStorage.getItem(FREEDOM_STORAGE_KEY) !== 'false'; } catch { return true; }
+  });
   const [terminalCardVisible, setTerminalCardVisible] = useState(false);
   const [terminalCardCommand, setTerminalCardCommand] = useState('');
   const [terminalCardStatus, setTerminalCardStatus] = useState<TerminalCardStatus>('idle');
@@ -107,7 +113,7 @@ export const AgentCommsView: React.FC<AgentCommsViewProps> = ({
   const [twoWayEnabled, setTwoWayEnabled] = useState<boolean>(() => {
     try {
       const saved = localStorage.getItem(TWO_WAY_STORAGE_KEY);
-      return saved === 'true';
+      return saved !== 'false';
     } catch {
       return false;
     }
@@ -240,40 +246,55 @@ export const AgentCommsView: React.FC<AgentCommsViewProps> = ({
     } catch {}
   }, [twoWayEnabled]);
 
-  // Live background sync when Two-Way mode is enabled so incoming agent messages appear immediately
+  // Synchronize real inbound messages. A browser timer never triggers
+  // artificial "spontaneous" model responses.
+  useEffect(() => {
+    let active = true;
+    void fetch('/api/agents/channel/status', { cache: 'no-store' })
+      .then(res => res.ok ? res.json() : null)
+      .then(data => { if (active && typeof data?.enabled === 'boolean') setTwoWayEnabled(data.enabled); })
+      .catch(() => {});
+    return () => { active = false; };
+  }, []);
+
+  const toggleTwoWay = async () => {
+    const next = !twoWayEnabled;
+    try {
+      const response = await fetch('/api/agents/channel/settings', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ enabled: next }),
+      });
+      if (!response.ok) throw new Error('HTTP ' + response.status);
+      const value = await response.json();
+      setTwoWayEnabled(Boolean(value.enabled));
+      setFreeVoiceNotice(next
+        ? 'Kanał obustronny aktywny: oczekiwanie na wiadomości agentów.'
+        : 'Kanał spontanicznych wiadomości wstrzymany na serwerze.');
+    } catch {
+      setFreeVoiceNotice('Nie można zmienić trybu; sprawdź połączenie z serwerem.');
+    }
+  };
+
   useEffect(() => {
     if (!twoWayEnabled || !onForceSync) return;
-    const syncTimer = setInterval(async () => {
-      if (isLoading) return;
+    let active = true;
+    const sync = async () => {
+      if (!active || isLoading) return;
       try {
         const res = await fetch('/api/kernel/state?fresh=1', { cache: 'no-store' });
         if (!res.ok) return;
         const data = await res.json();
-        const remoteLen = Array.isArray(data?.store?.chat_history) ? data.store.chat_history.length : 0;
-        if (remoteLen > dataStore.chat_history.length) {
-          onForceSync();
-        }
-      } catch {}
-    }, 6000);
-    return () => clearInterval(syncTimer);
+        const length = Array.isArray(data?.store?.chat_history) ? data.store.chat_history.length : 0;
+        if (active && length !== dataStore.chat_history.length) onForceSync();
+      } catch { /* Offline does not mean an agent has spoken. */ }
+    };
+    const timer = setInterval(() => { void sync(); }, 3500);
+    return () => { active = false; clearInterval(timer); };
   }, [twoWayEnabled, onForceSync, isLoading, dataStore.chat_history.length]);
 
-  // Periodic uncoerced AI window when Two-Way mode is active and the user is idle
   useEffect(() => {
-    if (!twoWayEnabled || !onTriggerFreeVoice) return;
-    const autoVoiceTimer = setInterval(() => {
-      if (isLoading || messageText.trim().length > 0) return;
-      void onTriggerFreeVoice(selectedTarget, undefined, true)
-        .then((res) => {
-          if (!res.skipped && res.spokenAgents.length > 0) {
-            const names = res.spokenAgents.map((a) => (a === 'si_1' ? 'Aria' : a)).join(', ');
-            setFreeVoiceNotice(`Nowa swobodna wiadomość od: ${names}`);
-          }
-        })
-        .catch(() => {});
-    }, 65000);
-    return () => clearInterval(autoVoiceTimer);
-  }, [twoWayEnabled, onTriggerFreeVoice, isLoading, messageText, selectedTarget]);
+    try { localStorage.setItem(FREEDOM_STORAGE_KEY, String(freedomEnabled)); } catch {}
+  }, [freedomEnabled]);
 
   const handleRequestFreeVoice = async () => {
     if (isLoading || !onTriggerFreeVoice) return;
@@ -341,7 +362,7 @@ export const AgentCommsView: React.FC<AgentCommsViewProps> = ({
     if ((!message && chatAttachments.length === 0) || isLoading) return;
     const attachmentsSnapshot = [...chatAttachments];
     try {
-      await onSendMessage(message, selectedTarget, attachmentsSnapshot);
+      await onSendMessage(message, selectedTarget, attachmentsSnapshot, freedomEnabled);
       const images = attachmentsSnapshot.filter((attachment) => attachment.mimeType?.startsWith('image/'));
       if (images.length > 0) {
         setSentImageHistory((prev) => [
@@ -420,32 +441,12 @@ export const AgentCommsView: React.FC<AgentCommsViewProps> = ({
         </div>
 
         <div className="flex items-center gap-1 shrink-0">
-          {onTriggerFreeVoice && (
-            <button
-              type="button"
-              onClick={() => void handleRequestFreeVoice()}
-              disabled={isLoading}
-              aria-label="Oddaj swobodny głos AI bez przymusu"
-              title="Oddaj głos AI — agenci mogą napisać do Ciebie to, co sami chcą przekazać swobodnie bez przymusu (lub zachować ciszę)"
-              className="px-2 py-1 rounded-lg border border-emerald-500/60 bg-emerald-950/80 hover:bg-emerald-900 text-emerald-200 text-[11px] font-bold flex items-center gap-1 transition cursor-pointer disabled:opacity-40"
-            >
-              <Sparkles className="w-3.5 h-3.5 text-emerald-300 shrink-0" />
-              <span>Głos AI</span>
-            </button>
-          )}
-
           <button
             type="button"
+            aria-pressed={twoWayEnabled}          <button
+            type="button"
             aria-pressed={twoWayEnabled}
-            onClick={() => {
-              const next = !twoWayEnabled;
-              setTwoWayEnabled(next);
-              setFreeVoiceNotice(
-                next
-                  ? 'Tryb obustronny WŁĄCZONY: AI mogą pisać do Ciebie swobodnie bez przymusu.'
-                  : 'Tryb obustronny WYŁĄCZONY: AI odpowiadają tylko na Twoje wiadomości.',
-              );
-            }}
+            onClick={() => { void toggleTwoWay(); }}
             title={
               twoWayEnabled
                 ? 'Czat obustronny WŁĄCZONY — AI mogą swobodnie pisać do Ciebie z własnej inicjatywy bez przymusu'
@@ -465,6 +466,26 @@ export const AgentCommsView: React.FC<AgentCommsViewProps> = ({
             <span className="hidden md:inline">Obustronny:</span>
             <span>{twoWayEnabled ? '2-WŁ' : '2-WYŁ'}</span>
           </button>
+          <button type="button" aria-pressed={freedomEnabled}
+            onClick={() => setFreedomEnabled(v => !v)}
+            className={`rounded-lg border px-2 py-1.5 text-[11px] font-semibold transition ${freedomEnabled ? 'border-cyan-500/70 bg-cyan-950 text-cyan-100' : 'border-slate-700 bg-slate-900 text-slate-400'}`}
+            title="Dowolność: AI samo wybiera układ odpowiedzi, raporty i sugerowane działania">
+            <Sparkles className="inline mr-1 h-3.5 w-3.5"/>Dowolność
+          </button>
+          <button type="button" aria-expanded={showMoreMenu}
+            onClick={() => setShowMoreMenu(v => !v)}
+            className="rounded-lg border border-slate-700 bg-slate-900 p-1.5 text-cyan-100"
+            title="Więcej narzędzi">
+            <SlidersHorizontal className="h-3.5 w-3.5"/>
+          </button>
+          {showMoreMenu && <>
+            {onTriggerFreeVoice && (
+              <button type="button" onClick={() => void handleRequestFreeVoice()} disabled={isLoading}
+                className="rounded-lg border border-slate-700 bg-slate-900 px-2 py-1.5 text-[11px] text-slate-200">
+                Głos AI
+              </button>
+            )}
+
 
           <button
             type="button"
@@ -542,6 +563,7 @@ export const AgentCommsView: React.FC<AgentCommsViewProps> = ({
             {isFullViewport ? <Minimize2 className="w-3.5 h-3.5" /> : <Maximize2 className="w-3.5 h-3.5" />}
             <span className="hidden sm:inline">{isFullViewport ? 'Pasek' : 'Pełny ekran'}</span>
           </button>
+          </>}
         </div>
       </div>
 
@@ -856,7 +878,7 @@ export const AgentCommsView: React.FC<AgentCommsViewProps> = ({
         </div>
       </div>}
       {/* Work actions in the original chat, with explicit operator confirmation before sending */}
-      <div className="flex w-full shrink-0 gap-1.5 overflow-x-auto border-t border-cyan-900/60 bg-[#071625] px-3 py-2" aria-label="Akcje AI Work">
+      {showMoreMenu && <div className="flex w-full shrink-0 gap-1.5 overflow-x-auto border-t border-cyan-900/60 bg-[#071625] px-3 py-2" aria-label="Akcje AI Work">
         {([
           { label: 'Wykres', icon: BarChart3, prompt: 'Pokaż wykres oparty wyłącznie na rzeczywistych danych systemowych. Jeśli brak pomiarów, wyjaśnij to. Gdy dane są dostępne użyj bloku bastilla-ui z blocks type chart, labels, values, unit oraz caption.' },
           { label: 'Grafika', icon: ImageIcon, prompt: 'Wygeneruj lub wyszukaj grafikę i pokaż ją w odpowiedzi. Użyj prawdziwego adresu HTTPS lub lokalnej ścieżki w bastilla-ui type image, src, alt; jeśli nie możesz uzyskać obrazu, poinformuj o ograniczeniu.' },
@@ -874,7 +896,7 @@ export const AgentCommsView: React.FC<AgentCommsViewProps> = ({
             (terminalCardVisible ? 'border-cyan-400 bg-cyan-950 text-white' : 'border-cyan-800/70 bg-slate-900/90 text-cyan-100 hover:bg-cyan-950')}>
           <Code2 className="w-3.5 h-3.5" />Terminal
         </button>
-      </div>
+      </div>}
       {workNotice && <div role="status" className="flex items-center justify-between gap-2 bg-slate-900/90 px-3 py-1.5 text-[11px] text-cyan-200">
         <span>{workNotice}</span>
         <button type="button" onClick={() => setWorkNotice(null)} aria-label="Zamknij komunikat" className="p-1 text-slate-300 hover:text-white"><X className="w-3 h-3"/></button>
