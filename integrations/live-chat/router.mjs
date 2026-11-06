@@ -127,6 +127,7 @@ export function createLiveChatRouter(options = {}) {
     const type = req.body?.type;
     const text = req.body?.text;
     const taskId = req.body?.taskId;
+    const taskAttempt = req.body?.taskAttempt;
     const to = req.body?.to;
     const status = req.body?.status;
     const exitCode = req.body?.exitCode;
@@ -140,8 +141,11 @@ export function createLiveChatRouter(options = {}) {
     if (type === 'task' && status !== undefined && !['running', 'completed', 'failed'].includes(status)) {
       return res.status(400).json({ error: 'Invalid task status' });
     }
-    if (taskId !== undefined && (typeof taskId !== 'string' || taskId.length > 100)) {
+    if (taskId !== undefined && (typeof taskId !== 'string' || !taskId || taskId.length > 100)) {
       return res.status(400).json({ error: 'Invalid task id' });
+    }
+    if (taskId !== undefined && (!Number.isSafeInteger(taskAttempt) || taskAttempt < 1)) {
+      return res.status(400).json({ error: 'Job-scoped events require the claimed attempt number' });
     }
     if (to !== undefined && to !== 'Wszyscy' && !LIVE_CHAT_AGENTS.includes(to)) {
       return res.status(400).json({ error: 'Invalid recipient' });
@@ -151,7 +155,8 @@ export function createLiveChatRouter(options = {}) {
       return res.status(400).json({ error: 'Invalid exit code' });
     }
     try {
-      const result = await store.createAgentEvent({ agent, channel, type, text, taskId, to, status, exitCode });
+      const workerId = String(req.get('X-Worker-Id') || agent).slice(0, 128);
+      const result = await store.createAgentEvent({ agent, workerId, taskAttempt, channel, type, text, taskId, to, status, exitCode });
       broadcast(result.event);
       return res.status(202).json({
         event: result.event,
@@ -168,6 +173,7 @@ export function createLiveChatRouter(options = {}) {
         id: req.params.id,
         agent: req.agentIdentity,
         workerId: String(req.get('X-Worker-Id') || req.agentIdentity).slice(0, 128),
+        attempt: req.body?.attempt,
         leaseMs,
       });
       return res.json({ success: true, leaseUntil: job.leaseUntil });
@@ -182,6 +188,8 @@ export function createLiveChatRouter(options = {}) {
       const job = await store.failJob({
         id: req.params.id,
         agent: req.agentIdentity,
+        workerId: String(req.get('X-Worker-Id') || req.agentIdentity).slice(0, 128),
+        attempt: req.body?.attempt,
         error: errorText,
       });
       return res.status(202).json({ success: true, job });

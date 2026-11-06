@@ -90,3 +90,11 @@ BASTILLA_WORKER_MODE=asymmetric
 Ustaw `BASTILLA_WORKER_MODE=uniform` aby powrócić do równych profili po 2 zadania; ręczne nadpisanie co najmniej jednego parametru pokazuje tryb `custom`. Ustawienie `BASTILLA_AGENT_CONCURRENCY=1` jest właściwe, jeśli dany endpoint agenta nie obsługuje współbieżnych wywołań. Wartości spoza dopuszczalnego zakresu zatrzymują start workera, zamiast uruchamiać go z niekontrolowanymi parametrami.
 
 Panel Operacyjny pokazuje deklarowany tryb i limit **tylko podczas prawidłowo uwierzytelnionego heartbeat online**. Nie jest to dowód, że oryginalny model poprawnie odpowiada. Po wdrożeniu na serwerze zrestartuj usługi agentów, aby przyjęły nową konfigurację. Dane pracy `poll` i `idle` nie są wysyłane do UI ani przechowywane w kolejce.
+
+
+## Wersja z bezpiecznym odzyskiwaniem zadań (lease fencing)
+Każde zadanie ma numer podejścia `job.attempts` oraz losowy `workerId`. Zakończenie zadania, niepowodzenie i odnowienie lease są akceptowane wyłącznie wtedy, gdy zgadza się **agent, workerId, numer podejścia oraz nieprzeterminowany lease**. Starszy worker nie może ukończyć ani ponownie ustawić statusu zadania przejętego przez nowszy proces. Dzięki temu asynchroniczne wykonanie nie dopuszcza do „spóźnionych” wyników w kolejce.
+
+**Aktualizacja serwera i klientów workerów musi być skoordynowana:** nowe żądania muszą zawierać `taskAttempt` przy `/worker/events` lub `attempt` przy `/worker/jobs/:id/heartbeat` i `/fail`. Starsze wersje klientów bez tego pola będą odrzucane (HTTP 400/409). Najpierw przygotuj nowe pliki/obrazy uruchomieniowe, a następnie zrestartuj serwer i 4 procesy agentów razem; przejściowe zadania przetworzone przez starszych klientów mogą ponowić się po wygaśnięciu lease.
+
+Nadal obowiązuje semantyka **at-least-once**: jeśli oryginalny model wykonał operację zewnętrzną, ale odpowiedź nie dotarła, kolejka może zlecić ją ponownie. Działania zapisujące powinny korzystać z idempotency key = `job.id` lub wymagać zatwierdzenia przez operatora. Zabezpieczenie nie jest gwarancją „exactly once”.

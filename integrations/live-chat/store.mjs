@@ -151,7 +151,7 @@ export class LiveChatStore {
     });
   }
 
-  async createAgentEvent({ agent, channel, type, text, taskId, to, status, exitCode }) {
+  async createAgentEvent({ agent, workerId, taskAttempt, channel, type, text, taskId, to, status, exitCode }) {
     if (!LIVE_CHAT_AGENTS.includes(agent)) throw makeError('INVALID_AGENT');
     return this.mutate((state) => {
       const now = this.now();
@@ -163,7 +163,11 @@ export class LiveChatStore {
       let sourceJob = null;
       if (taskId) {
         sourceJob = state.jobs.find((job) => job.id === taskId && job.to === agent);
-        if (!sourceJob || sourceJob.status !== 'running') throw makeError('JOB_NOT_OWNED');
+        if (!sourceJob || sourceJob.status !== 'running' ||
+            sourceJob.workerId !== workerId || sourceJob.attempts !== taskAttempt ||
+            !Number.isFinite(sourceJob.leaseUntil) || sourceJob.leaseUntil <= now) {
+          throw makeError('JOB_NOT_OWNED');
+        }
       }
 
       const eventHop = sourceJob ? (Number(sourceJob.hop) || 0) + 1 : 0;
@@ -263,19 +267,21 @@ export class LiveChatStore {
     });
   }
 
-  async renewLease({ id, agent, workerId, leaseMs = 60000 }) {
+  async renewLease({ id, agent, workerId, attempt, leaseMs = 60000 }) {
     return this.mutate((state) => {
       const job = state.jobs.find((candidate) => candidate.id === id && candidate.to === agent);
-      if (!job || job.status !== 'running' || job.workerId !== workerId) throw makeError('JOB_NOT_OWNED');
+      if (!job || job.status !== 'running' || job.workerId !== workerId ||
+          job.attempts !== attempt || job.leaseUntil <= this.now()) throw makeError('JOB_NOT_OWNED');
       job.leaseUntil = this.now() + Math.max(10000, leaseMs);
       return job;
     });
   }
 
-  async failJob({ id, agent, error, retryDelayMs = 3000, maxAttempts = this.maxJobAttempts }) {
+  async failJob({ id, agent, workerId, attempt, error, retryDelayMs = 3000, maxAttempts = this.maxJobAttempts }) {
     return this.mutate((state) => {
       const job = state.jobs.find((candidate) => candidate.id === id && candidate.to === agent);
-      if (!job || job.status !== 'running') throw makeError('JOB_NOT_OWNED');
+      if (!job || job.status !== 'running' || job.workerId !== workerId ||
+          job.attempts !== attempt || job.leaseUntil <= this.now()) throw makeError('JOB_NOT_OWNED');
       job.error = String(error || 'Worker failed').slice(0, 1000);
       delete job.leaseUntil;
       delete job.workerId;

@@ -142,7 +142,7 @@ export function createAgentWorker(options = {}) {
     const heartbeat = setInterval(() => {
       Promise.all([
         sendHeartbeat(signal),
-        request('worker/jobs/' + encodeURIComponent(job.id) + '/heartbeat', { method: 'POST', body: {}, signal }),
+        request('worker/jobs/' + encodeURIComponent(job.id) + '/heartbeat', { method: 'POST', body: { attempt: job.attempts }, signal }),
       ]).catch(onError);
     }, heartbeatIntervalMs);
 
@@ -161,6 +161,7 @@ export function createAgentWorker(options = {}) {
           type: 'message',
           text: output.text.slice(0, 16000),
           taskId: job.id,
+          taskAttempt: job.attempts,
           ...(output.to ? { to: output.to } : {}),
         },
         signal,
@@ -168,7 +169,7 @@ export function createAgentWorker(options = {}) {
     } catch (error) {
       await request('worker/jobs/' + encodeURIComponent(job.id) + '/fail', {
         method: 'POST',
-        body: { error: String(error?.message || error).slice(0, 1000) },
+        body: { error: String(error?.message || error).slice(0, 1000), attempt: job.attempts },
         signal,
       }).catch(onError);
       throw error;
