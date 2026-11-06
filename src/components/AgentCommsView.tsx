@@ -5,6 +5,7 @@ import { Sparkles, ShieldCheck, RefreshCw, Image as ImageIcon, FileText, Message
 import { WorkChatMessage, WorkChatDemo } from './WorkChatMessage';
 import { ChatEngineSelector } from './ChatEngineSelector';
 import { ChatAttachmentMenu } from './ChatAttachmentMenu';
+import { AgentWorkspaceCard } from './AgentWorkspaceCard';
 import { TerminalWorkCard, type TerminalCardEntry, type TerminalCardStatus } from './TerminalWorkCard';
 import { WorkspaceCommandCenter } from './WorkspaceCommandCenter';
 import { ChatAvatar, ChatReactionBar, type ChatVotes } from './ChatReactionBar';
@@ -1181,6 +1182,7 @@ export const AgentCommsView: React.FC<AgentCommsViewProps> = ({
             <input type="checkbox" checked={analyzeAttachments} onChange={event=>setAnalyzeAttachments(event.target.checked)} className="accent-cyan-400"/>
             Automatycznie poproś wybranego agenta o analizę załączników po wysłaniu
           </label>
+          <AgentWorkspaceCard disabled={isLoading} onPrepare={(agent,prompt)=>{setSelectedTarget(agent);setMessageText(current=>[current,prompt].filter(Boolean).join('\n'));chatInputRef.current?.focus();}}/>
           {chatAttachments.length > 0 && <section aria-label="Załączniki" className="mb-2 rounded-2xl border border-slate-700 bg-slate-900 p-2.5">
             <div className="mb-2 flex items-center justify-between">
               <span className="text-xs font-semibold text-slate-200">Załączniki · {chatAttachments.length}/{MAX_CHAT_ATTACHMENTS}</span>
