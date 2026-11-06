@@ -2,7 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { REACTION_ACTORS } from '../../src/lib/chatReactionKeys.mjs';
 const VALID_VOTES = new Set(['up', 'down']);
-const keyPattern = /^m_[a-z0-9]{1,16}_[a-z0-9]{1,8}$/;
+const keyPattern = /^(?:m_[a-z0-9]{1,16}_[a-z0-9]{1,8}|l_[a-z0-9]{1,16})$/;
 export class ChatReactionStore {
   constructor(filePath = 'data/chat-reactions.json') {
     this.filePath = path.resolve(filePath);
