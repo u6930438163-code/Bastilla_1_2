@@ -224,6 +224,7 @@ app.use('/api/chat/reactions', createChatReactionsRouter({
     if (!state?.store) throw new Error('Historia czatu jest niedostępna.');
     return normalizeDataStore(state.store).chat_history;
   },
+  getLiveHistory: () => liveChatStore.getHistory('Wszyscy', 2000),
   sameOrigin: isSameOriginApprovalRequest,
   requireWorker: liveChatWorkerAuth,
   notify: () => workspaceSync.publish('chat'),
