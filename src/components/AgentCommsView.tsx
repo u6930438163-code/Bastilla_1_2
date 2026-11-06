@@ -541,10 +541,10 @@ export const AgentCommsView: React.FC<AgentCommsViewProps> = ({
     <div
       className={`${
         isFullViewport ? 'fixed inset-0 z-50 h-dvh w-screen' : 'relative h-full w-full flex-1'
-      } flex min-h-0 min-w-0 flex-col overflow-hidden bg-slate-950 font-mono text-xs cyber-grid`}
+      } bastilla-chat-shell flex min-h-0 min-w-0 flex-col overflow-hidden bg-slate-950 font-mono text-xs cyber-grid`}
     >
       {/* Ultra-compact Single-Line Top Bar */}
-      <div className="bg-slate-900/95 backdrop-blur-md border-b border-cyan-500/30 px-2 sm:px-4 py-1.5 flex items-center justify-between gap-1.5 shadow-sm shrink-0">
+      <div className="bastilla-chat-toolbar bg-slate-900/95 backdrop-blur-md border-b border-cyan-500/30 px-2 sm:px-4 py-1.5 flex items-center justify-between gap-1.5 shadow-sm shrink-0">
         <div className="flex min-w-0 flex-1 items-center gap-1.5">
           <span
             title={`Status: ${transmissionStatus.label}`}
@@ -816,7 +816,7 @@ export const AgentCommsView: React.FC<AgentCommsViewProps> = ({
           const { scrollTop, scrollHeight, clientHeight } = event.currentTarget;
           followLatestMessagesRef.current = scrollHeight - scrollTop - clientHeight < 120;
         }}
-        className="min-h-0 min-w-0 flex-1 overflow-y-auto px-2.5 py-3 sm:px-6 sm:py-5 space-y-2.5 sm:space-y-3.5 scrollbar-thin w-full max-w-6xl mx-auto"
+        className="bastilla-chat-scroller min-h-0 min-w-0 flex-1 overflow-y-auto px-2.5 py-3 sm:px-6 sm:py-5 space-y-2.5 sm:space-y-3.5 scrollbar-thin w-full max-w-6xl mx-auto"
       >
         {showWorkPreview && <WorkChatDemo onPrompt={prepareWorkPrompt} onOpenTerminal={onOpenTerminal} />}
         {sendError && (
@@ -844,7 +844,7 @@ export const AgentCommsView: React.FC<AgentCommsViewProps> = ({
             return (
               <div
                 key={idx}
-                className={`flex flex-col p-3 sm:p-4 rounded-xl border transition-all duration-200 backdrop-blur-md shadow-md ${
+                className={`bastilla-chat-card ${isOperator ? "bastilla-chat-card--user" : ""} flex flex-col p-3 sm:p-4 rounded-xl border transition-all duration-200 backdrop-blur-md shadow-md ${
                   isOperator
                     ? 'bg-purple-950/30 border-purple-500/50 ml-2 sm:ml-14'
                     : profile
@@ -853,7 +853,7 @@ export const AgentCommsView: React.FC<AgentCommsViewProps> = ({
                 }`}
               >
                 {/* Compact Message Header */}
-                <div className="flex items-center justify-between gap-2 mb-1.5 pb-1 border-b border-slate-800/70">
+                <div className="bastilla-chat-card__header flex items-center justify-between gap-2 mb-1.5 pb-1 border-b border-slate-800/70">
                   <div className="flex flex-wrap items-center gap-1.5">
                     <ChatAvatar actor={msg.agent} />
                     <span
@@ -885,7 +885,7 @@ export const AgentCommsView: React.FC<AgentCommsViewProps> = ({
                 {/* Message Body with KaTeX LaTeX formulas and Markdown */}
                 <WorkChatMessage content={destination ? msg.tekst.replace(/^\[Do: [^\]\n]+\]\n/, '') : msg.tekst}
                   onPrompt={prepareWorkPrompt} onOpenTerminal={onOpenTerminal} />
-                <div className="mt-2 flex flex-wrap items-center justify-end gap-1">
+                <div className="bastilla-chat-card__actions mt-2 flex flex-wrap items-center justify-end gap-1">
                   <ChatReactionBar
                     votes={reactionVotes[reactionKeys[idx]] || {}}
                     disabled={reactionPending === reactionKeys[idx]}
@@ -962,9 +962,9 @@ export const AgentCommsView: React.FC<AgentCommsViewProps> = ({
               <span className="font-normal text-slate-400">Odebrane zdarzenia serwera, nie symulacja</span>
             </div>
             {liveEvents.filter((item) => item.type === 'message').map((item) => (
-              <article key={item.id} className={'rounded-xl border p-3 sm:p-4 ' +
+              <article key={item.id} className={'bastilla-chat-card bastilla-chat-card--live rounded-xl border p-3 sm:p-4 ' +
                 (item.sender === 'user' ? 'ml-2 border-purple-500/40 bg-purple-950/25 sm:ml-14' : 'mr-2 border-cyan-800/65 bg-slate-900 sm:mr-14')}>
-                <div className="mb-2 flex flex-wrap items-center justify-between gap-2 border-b border-slate-800 pb-1.5">
+                <div className="bastilla-chat-card__header mb-2 flex flex-wrap items-center justify-between gap-2 border-b border-slate-800 pb-1.5">
                   <span className="inline-flex items-center gap-2 text-[11px] font-bold text-cyan-200"><ChatAvatar actor={item.sender === 'user' ? 'Operator' : item.sender} size="sm" />{item.sender === 'user' ? 'Operator · LIVE' : item.sender + ' · LIVE'}</span>
                   <span className="text-[10px] text-slate-400">
                     {item.channel} · {Number.isFinite(Date.parse(item.at)) ? new Date(item.at).toLocaleTimeString('pl-PL') : 'czas nieznany'}
@@ -985,7 +985,7 @@ export const AgentCommsView: React.FC<AgentCommsViewProps> = ({
 
         {streamingChat && (
           <section className="space-y-3" aria-label="Bieżąca rozmowa z agentami">
-            <div className="ml-2 rounded-xl border border-purple-500/50 bg-purple-950/30 p-3 sm:ml-14 sm:p-4">
+            <div className="bastilla-chat-card bastilla-chat-card--user ml-2 rounded-xl border border-purple-500/50 bg-purple-950/30 p-3 sm:ml-14 sm:p-4">
               <div className="mb-2 flex items-center gap-2 text-xs font-bold text-purple-200"><ChatAvatar actor="Operator" size="sm" /> Operator · wysłano</div>
               <div className="whitespace-pre-wrap break-words text-sm text-slate-200">{streamingChat.prompt}</div>
             </div>
@@ -994,7 +994,7 @@ export const AgentCommsView: React.FC<AgentCommsViewProps> = ({
             </div>}
             {streamingChat.agents.map(entry => {
               const profile = SYSTEM_AGENTS[entry.agent];
-              return <div key={entry.agent} className={'mr-2 rounded-xl border bg-slate-900/95 p-3 shadow-md sm:mr-14 sm:p-4 ' + (profile?.borderColor || 'border-cyan-900')}>
+              return <div key={entry.agent} className={'bastilla-chat-card bastilla-chat-card--stream mr-2 rounded-xl border bg-slate-900/95 p-3 shadow-md sm:mr-14 sm:p-4 ' + (profile?.borderColor || 'border-cyan-900')}>
                 <div className="mb-2 flex items-center justify-between border-b border-slate-800 pb-2 text-xs">
                   <div className="flex items-center gap-2"><ChatAvatar actor={entry.agent} size="sm" /><strong className="text-cyan-100">{entry.agent === 'si_1' ? 'Aria' : entry.agent}</strong></div>
                   <span className={entry.status === 'done' ? 'text-emerald-300' : entry.status === 'error' ? 'text-rose-300' : 'text-cyan-300'}>
@@ -1055,7 +1055,7 @@ export const AgentCommsView: React.FC<AgentCommsViewProps> = ({
         {liveBusy && <span role="status" className="animate-pulse text-[10px] text-cyan-300">Kolejkowanie…</span>}
       </div>}
       {/* Work actions in the original chat, with explicit operator confirmation before sending */}
-      {showMoreMenu && <div className="flex w-full shrink-0 gap-1.5 overflow-x-auto border-t border-cyan-900/60 bg-[#071625] px-3 py-2" aria-label="Akcje AI Work">
+      {showMoreMenu && <div className="bastilla-chat-actions flex w-full shrink-0 gap-1.5 overflow-x-auto border-t border-cyan-900/60 bg-[#071625] px-3 py-2" aria-label="Akcje AI Work">
         {([
           { label: 'Wykres', icon: BarChart3, prompt: 'Pokaż wykres oparty wyłącznie na rzeczywistych danych systemowych. Jeśli brak pomiarów, wyjaśnij to. Gdy dane są dostępne użyj bloku bastilla-ui z blocks type chart, labels, values, unit oraz caption.' },
           { label: 'Grafika', icon: ImageIcon, prompt: 'Wygeneruj lub wyszukaj grafikę i pokaż ją w odpowiedzi. Użyj prawdziwego adresu HTTPS lub lokalnej ścieżki w bastilla-ui type image, src, alt; jeśli nie możesz uzyskać obrazu, poinformuj o ograniczeniu.' },
@@ -1079,7 +1079,7 @@ export const AgentCommsView: React.FC<AgentCommsViewProps> = ({
         <button type="button" onClick={() => setWorkNotice(null)} aria-label="Zamknij komunikat" className="p-1 text-slate-300 hover:text-white"><X className="w-3 h-3"/></button>
       </div>}
       {/* Main chat composer — mobile-first, two-row layout */}
-      <form onSubmit={handleSendMessage} className="w-full shrink-0 border-t border-slate-800 bg-slate-950/95 px-3 py-2.5 sm:px-5 sm:py-3">
+      <form onSubmit={handleSendMessage} className="bastilla-chat-composer w-full shrink-0 border-t border-slate-800 bg-slate-950/95 px-3 py-2.5 sm:px-5 sm:py-3">
         <div className="mx-auto max-w-4xl">
           {chatAttachments.length > 0 && (
             <ul aria-label="Załączone pliki" className="mb-2 flex flex-wrap gap-1.5">
@@ -1102,7 +1102,7 @@ export const AgentCommsView: React.FC<AgentCommsViewProps> = ({
             </div>
           )}
           {(attachmentError || sendError) && <p role="alert" className="mb-2 text-xs text-rose-300">{attachmentError || sendError}</p>}
-          <div className="rounded-[24px] border border-slate-700 bg-[#202123] shadow-[0_4px_18px_rgba(0,0,0,.24)] transition focus-within:border-slate-500">
+          <div className="bastilla-chat-composer-panel rounded-[24px] border border-slate-700 bg-[#202123] shadow-[0_4px_18px_rgba(0,0,0,.24)] transition focus-within:border-slate-500">
             <textarea
               ref={chatInputRef}
               id="triad-chat-message"
