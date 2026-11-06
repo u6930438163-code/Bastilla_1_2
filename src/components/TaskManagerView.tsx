@@ -72,14 +72,25 @@ export function TaskManagerView({ initialSection = 'processes', onPrepareMainCha
         cache: 'no-store', credentials: 'same-origin', signal,
       })));
       if (signal?.aborted) return;
-      if (results.some(r => r.status === 401 || r.status === 503)) {
+      if (results.some(r => r.status === 401 || r.status === 403)) {
         setLocked(true); setError('Zaloguj operatora, aby odczytać prywatne dane diagnostyczne.');
         return;
       }
-      if (results.some(r => !r.ok)) {
-        throw new Error('Co najmniej jedna usługa diagnostyczna nie odpowiada. Sprawdź połączenie z Bastilla.');
+      const failedIndex = results.findIndex(r => !r.ok);
+      if (failedIndex !== -1) {
+        throw new Error(`Serwer diagnostyczny nie odpowiada: ${endpoints[failedIndex]} (HTTP ${results[failedIndex].status}).`);
       }
-      const [processes, logs, ollama, liveStatus] = await Promise.all(results.map(r => r.json()));
+      const [processes, logs, ollama, liveStatus] = await Promise.all(results.map(async (response, index) => {
+        const contentType = response.headers.get('content-type') || '';
+        if (!contentType.toLowerCase().includes('json')) {
+          throw new Error(`Endpoint ${endpoints[index]} zwrócił ${contentType || 'nieznany format'} zamiast JSON (HTTP ${response.status}). Sprawdź serwer API i routing podglądu.`);
+        }
+        try {
+          return await response.json();
+        } catch {
+          throw new Error(`Endpoint ${endpoints[index]} zwrócił nieprawidłowy JSON. Sprawdź logi backendu.`);
+        }
+      }));
       if (signal?.aborted) return;
       setProcessReport(processes as ProcessReport);
       setLogReport(logs as LogReport);
