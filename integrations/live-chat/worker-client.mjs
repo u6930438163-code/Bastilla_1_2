@@ -149,6 +149,10 @@ export function createAgentWorker(options = {}) {
         request('worker/jobs/' + encodeURIComponent(job.id) + '/heartbeat', { method: 'POST', body: { attempt: job.attempts }, signal }),
       ]).catch(onError);
     }, heartbeatIntervalMs);
+    // Do not leave a live interval behind if the original LLM adapter never settles.
+    const cancelHeartbeat = () => clearInterval(heartbeat);
+    if (signal.aborted) cancelHeartbeat();
+    else signal.addEventListener('abort', cancelHeartbeat, { once: true });
 
     try {
       let output = await runAgent(job, {
@@ -178,6 +182,7 @@ export function createAgentWorker(options = {}) {
       }).catch(onError);
       throw error;
     } finally {
+      signal.removeEventListener('abort', cancelHeartbeat);
       clearInterval(heartbeat);
     }
     return true;
