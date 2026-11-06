@@ -26,7 +26,7 @@ type OllamaReport = {
   note?: string;
   checkedAt?: string;
 };
-type WorkerStatus = { agents?: Record<string, { status?: string; queued?: number; running?: number; concurrency?: number | null; mode?: 'asymmetric' | 'uniform' | 'custom' | null; lastSeen?: string | null }>; queue?: { queued?: number; running?: number; failed?: number } };
+type WorkerStatus = { agents?: Record<string, { status?: string; queued?: number; running?: number; failed?: number; expiredLeases?: number; retrying?: number; concurrency?: number | null; mode?: 'asymmetric' | 'uniform' | 'custom' | null; lastSeen?: string | null }>; queue?: { queued?: number; running?: number; failed?: number; expiredLeases?: number; retrying?: number } };
 type ManagerProps = { initialSection?: ManagerSection; onPrepareMainChat: (text: string, agent: AgentName) => void };
 
 const AGENTS: AgentName[] = ['Aria', 'Alex', 'Astyria', 'Aurelius'];
@@ -252,6 +252,8 @@ export function TaskManagerView({ initialSection = 'processes', onPrepareMainCha
               <div><small>OCZEKUJĄCE</small><strong>{workers?.queue?.queued ?? '—'}</strong></div>
               <div><small>WYKONYWANE</small><strong>{workers?.queue?.running ?? '—'}</strong></div>
               <div><small>NIEUDANE</small><strong className={workers?.queue?.failed ? 'text-rose-300' : 'text-slate-100'}>{workers?.queue?.failed ?? '—'}</strong></div>
+              <div><small>PONAWIANE</small><strong className={workers?.queue?.retrying ? 'text-amber-300' : 'text-slate-100'}>{workers?.queue?.retrying ?? '—'}</strong></div>
+              <div><small>WYGASŁE LEASE</small><strong className={workers?.queue?.expiredLeases ? 'text-rose-300' : 'text-slate-100'}>{workers?.queue?.expiredLeases ?? '—'}</strong></div>
             </div>
             <div className="bastilla-ops-worker-list">
               {AGENTS.map(name => {
@@ -262,7 +264,7 @@ export function TaskManagerView({ initialSection = 'processes', onPrepareMainCha
                   <span className={worker?.status === 'online' ? 'text-emerald-300' : 'text-amber-300'}>
                     {worker ? (worker.status === 'online' ? 'ONLINE' : 'OFFLINE') : 'BRAK DANYCH'}
                   </span>
-                  <small>kolejka {worker?.queued ?? '—'} · wykonuje {worker?.running ?? '—'} / {worker?.concurrency ?? '—'} sloty{worker?.status === 'online' && worker.mode ? ' · ' + (worker.mode === 'asymmetric' ? 'asymetryczny' : worker.mode === 'uniform' ? 'jednolity' : 'indywidualny') : ''}</small>
+                  <small>kolejka {worker?.queued ?? '—'} · wykonuje {worker?.running ?? '—'} / {worker?.concurrency ?? '—'} sloty{worker?.status === 'online' && worker.mode ? ' · ' + (worker.mode === 'asymmetric' ? 'asymetryczny' : worker.mode === 'uniform' ? 'jednolity' : 'indywidualny') : ''}{worker?.retrying ? ' · ponawiane: ' + worker.retrying : ''}{worker?.expiredLeases ? ' · wygasłe: ' + worker.expiredLeases : ''}{worker?.failed ? ' · błędy: ' + worker.failed : ''}</small>
                 </div>;
               })}
             </div>

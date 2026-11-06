@@ -98,3 +98,10 @@ Każde zadanie ma numer podejścia `job.attempts` oraz losowy `workerId`. Zakoń
 **Aktualizacja serwera i klientów workerów musi być skoordynowana:** nowe żądania muszą zawierać `taskAttempt` przy `/worker/events` lub `attempt` przy `/worker/jobs/:id/heartbeat` i `/fail`. Starsze wersje klientów bez tego pola będą odrzucane (HTTP 400/409). Najpierw przygotuj nowe pliki/obrazy uruchomieniowe, a następnie zrestartuj serwer i 4 procesy agentów razem; przejściowe zadania przetworzone przez starszych klientów mogą ponowić się po wygaśnięciu lease.
 
 Nadal obowiązuje semantyka **at-least-once**: jeśli oryginalny model wykonał operację zewnętrzną, ale odpowiedź nie dotarła, kolejka może zlecić ją ponownie. Działania zapisujące powinny korzystać z idempotency key = `job.id` lub wymagać zatwierdzenia przez operatora. Zabezpieczenie nie jest gwarancją „exactly once”.
+
+## Liczniki odzyskiwania zadań w Operations Center
+`GET /api/live-chat/status` ma teraz dwa dodatkowe liczniki łączne i per agent:
+- `retrying`: zadania oczekujące w kolejce, które były już co najmniej raz podjęte (status `queued`, attempts > 0).
+- `expiredLeases`: zadania nadal w statusie `running`, których okres własności upłynął; kolejny worker może je przejąć.
+
+Panel pokazuje także istniejące liczniki `failed`. Są to dane z prawdziwej trwałej kolejki, **nie udawana aktywność agentów**. `expiredLeases > 0` nie musi oznaczać trwałej awarii: zadanie może czekać na najbliższe pobranie przez worker. Ponieważ odczyt `getStatus()` nie modyfikuje kolejki, samo otwarcie panelu nigdy nie naprawia ani nie przejmuje zadania.

@@ -336,25 +336,32 @@ export class LiveChatStore {
 
   getStatus() {
     const now = this.now();
+    const jobs = this.state.jobs;
     const agents = Object.fromEntries(LIVE_CHAT_AGENTS.map((agent) => {
       const heartbeat = this.state.heartbeats[agent] || null;
+      const agentJobs = jobs.filter(job => job.to === agent);
       const lastSeenMs = heartbeat ? Date.parse(heartbeat.lastSeen) : 0;
       return [agent, {
         status: lastSeenMs && now - lastSeenMs <= this.onlineTtlMs ? 'online' : 'offline',
         lastSeen: heartbeat?.lastSeen || null,
         concurrency: heartbeat?.concurrency || null,
         mode: heartbeat?.mode || null,
-        queued: this.state.jobs.filter((job) => job.to === agent && job.status === 'queued').length,
-        running: this.state.jobs.filter((job) => job.to === agent && job.status === 'running').length,
+        queued: agentJobs.filter(job => job.status === 'queued').length,
+        running: agentJobs.filter(job => job.status === 'running').length,
+        expiredLeases: agentJobs.filter(job => job.status === 'running' && Number(job.leaseUntil) <= now).length,
+        retrying: agentJobs.filter(job => job.status === 'queued' && job.attempts > 0).length,
+        failed: agentJobs.filter(job => job.status === 'failed').length,
       }];
     }));
     return {
       agents,
       unread: this.state.events.filter((event) => event.sender !== 'user' && !event.read).length,
       queue: {
-        queued: this.state.jobs.filter((job) => job.status === 'queued').length,
-        running: this.state.jobs.filter((job) => job.status === 'running').length,
-        failed: this.state.jobs.filter((job) => job.status === 'failed').length,
+        queued: jobs.filter(job => job.status === 'queued').length,
+        running: jobs.filter(job => job.status === 'running').length,
+        failed: jobs.filter(job => job.status === 'failed').length,
+        retrying: jobs.filter(job => job.status === 'queued' && job.attempts > 0).length,
+        expiredLeases: jobs.filter(job => job.status === 'running' && Number(job.leaseUntil) <= now).length,
       },
     };
   }
