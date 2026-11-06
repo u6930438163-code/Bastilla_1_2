@@ -202,7 +202,7 @@ app.use((err: any, _req: express.Request, res: express.Response, next: express.N
 
 // Push metadata-only invalidation after successful operations. Never stream payloads,
 // chat transcripts, terminal output or credentials to other devices.
-const workspaceSync = createWorkspaceSyncHub({ requireUser: liveChatAuth.requireUser });
+const workspaceSync = createWorkspaceSyncHub(liveChatAuth.requireUser);
 app.use('/api/workspace', workspaceSync.router);
 const workspaceTopics: Record<string, 'chat' | 'terminal' | 'kernel' | 'agents' | 'workspace'> = {
   '/api/kernel/command': 'terminal',
