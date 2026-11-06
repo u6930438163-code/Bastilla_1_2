@@ -29,6 +29,7 @@ test('LibreChat bridge uses only existing authenticated Bastilla worker response
   const key = 'k'.repeat(48);
   let originalOnline = true;
   let queued = false;
+  let deliveredText = '';
   const backend = http.createServer(async (req, res) => {
     const url = new URL(req.url || '/', 'http://localhost');
     if (req.method === 'POST' && url.pathname === '/api/live-chat/session') {
@@ -49,7 +50,9 @@ test('LibreChat bridge uses only existing authenticated Bastilla worker response
       const parts = [];
       for await (const part of req) parts.push(part);
       const body = JSON.parse(Buffer.concat(parts).toString());
-      assert.deepEqual(body, { channel: 'Aria', text: 'Hello original Aria' });
+      assert.equal(body.channel, 'Aria');
+      assert.equal(typeof body.text, 'string');
+      deliveredText = body.text;
       queued = true;
       return json(res, { event: { conversationId: 'test-conversation' }, queuedFor: ['Aria'] }, 202);
     }
@@ -101,6 +104,45 @@ test('LibreChat bridge uses only existing authenticated Bastilla worker response
   assert.equal(result.model, 'Aria');
   assert.equal(result.choices[0].message.content, 'Real worker response from test backend');
   assert.equal(queued, true);
+  assert.equal(deliveredText, 'Hello original Aria');
+
+  // User-owned memories are represented in system messages by LibreChat.
+  // Verify they now reach the EXISTING Bastilla worker, not a new AI.
+  const memoryRequest = {
+    model: 'Aria',
+    messages: [
+      { role: 'system', content: 'Saved LibreChat memory: user project is Bastilla_1_2; prefer Polish responses.' },
+      { role: 'user', content: 'What is my project?' },
+      { role: 'assistant', content: 'You were working on Bastilla.' },
+      { role: 'user', content: 'Hello original Aria' },
+    ],
+  };
+  const withMemory = await fetch(base + '/v1/chat/completions', {
+    ...options, body: JSON.stringify(memoryRequest),
+  });
+  assert.equal(withMemory.status, 200);
+  assert.match(deliveredText, /Saved LibreChat memory: user project is Bastilla_1_2/);
+  assert.match(deliveredText, /You were working on Bastilla/);
+  assert.match(deliveredText, /\[Nowa wiadomość użytkownika\]/);
+  assert.ok(deliveredText.endsWith('Hello original Aria'));
+  assert.ok(deliveredText.length <= 8000);
+
+  // Very long saved context must never exceed Bastilla's 8000-character
+  // message API ceiling; the user message stays intact.
+  const veryLongMemory = await fetch(base + '/v1/chat/completions', {
+    ...options,
+    body: JSON.stringify({
+      model: 'Aria',
+      messages: [
+        { role: 'system', content: 'Long memory: ' + 'x'.repeat(11000) },
+        { role: 'user', content: 'Hello original Aria' },
+      ],
+    }),
+  });
+  assert.equal(veryLongMemory.status, 200);
+  assert.ok(deliveredText.length <= 8000);
+  assert.ok(deliveredText.endsWith('Hello original Aria'));
+
 
   const streamed = await fetch(base + '/v1/chat/completions', {
     ...options,
