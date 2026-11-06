@@ -113,7 +113,7 @@ async function readJson(req) {
 async function completion(payload, res) {
   const agent = payload?.model;
   if (!AGENTS.includes(agent)) throw fail(400, 'Model must be Aria, Alex, Astyria or Aurelius');
-  if (payload.stream === true) throw fail(400, 'Streaming is not supported; configure LibreChat dropParams: [stream]');
+  if (payload.stream !== undefined && typeof payload.stream !== 'boolean') throw fail(400, 'stream must be boolean');
   if (!Array.isArray(payload.messages)) throw fail(400, 'messages must be an array');
   if (payload.tools || payload.functions || payload.response_format?.type === 'json_schema') {
     throw fail(400, 'Tools and structured outputs are not supported by this bridge');
@@ -171,7 +171,29 @@ const server = http.createServer(async (req, res) => {
       return reply(res, 200, { object: 'list', data: AGENTS.map(id => ({ id, object: 'model', owned_by: 'bastilla' })) });
     }
     if (req.method === 'POST' && pathname === '/v1/chat/completions') {
-      const result = await completion(await readJson(req), res);
+      const payload = await readJson(req);
+      const result = await completion(payload, res);
+      if (payload.stream === true) {
+        // LibreChat expects OpenAI-compatible SSE. Original workers return only
+        // finished text, so a single result chunk is emitted upon completion.
+        res.writeHead(200, {
+          'Content-Type': 'text/event-stream; charset=utf-8',
+          'Cache-Control': 'no-store, no-transform',
+          'Connection': 'keep-alive',
+          'X-Content-Type-Options': 'nosniff',
+        });
+        const base = { id: result.id, object: 'chat.completion.chunk', created: result.created, model: result.model };
+        res.write('data: ' + JSON.stringify({ ...base, choices: [{
+          index: 0,
+          delta: { role: 'assistant', content: result.choices[0].message.content },
+          finish_reason: null,
+        }] }) + '\n\n');
+        res.write('data: ' + JSON.stringify({ ...base, choices: [{
+          index: 0, delta: {}, finish_reason: 'stop',
+        }] }) + '\n\n');
+        res.end('data: [DONE]\n\n');
+        return;
+      }
       return reply(res, 200, result);
     }
     return reply(res, 404, { error: { message: 'Not found', type: 'not_found' } });
