@@ -196,9 +196,9 @@ function AgentHandoffWidget({ block, onPrompt }: Props) {
       </select>
     </label>
     <button type="button" disabled={!prompt} className={'mt-3 ' + buttonStyle} onClick={() => onPrompt('Do agenta ' + agent + ':\n' + prompt)}>
-      Przygotuj przekazanie
+      Zleć agentowi
     </button>
-    <p className="mt-1 text-[10px] text-slate-500">Wybór agenta jest treścią szkicu; przed wysłaniem wybierz go też w menu odbiorcy czatu.</p>
+    <p className="mt-1 text-[10px] text-slate-500">Wybór agenta trafia do zlecenia. Dalsze działania zmieniające system wymagają zgody.</p>
   </section>;
 }
 
