@@ -22,17 +22,22 @@ The LibreChat endpoint is named "Bastilla Agents", with four model names. The na
    - BASTILLA_LIVE_CHAT_ALLOWED_ORIGIN: the exact browser origin configured on the Bastilla server; NOT the LibreChat origin.
    - BASTILLA_LIVE_CHAT_USER_PASSWORD: same Bastilla operator password, minimum 16 characters.
    - BASTILLA_BRIDGE_API_KEY: unique randomly generated secret, minimum 32 bytes. Generate with 'openssl rand -hex 32'.
+   - BASTILLA_LIBRECHAT_OWNER_EMAIL: exact email address of the single LibreChat account authorized to reach original Bastilla workers. This value stays only in the private .env.local file. LibreChat passes its authenticated user email via the internal custom endpoint header; an absent or different address is rejected with HTTP 403.
 3. Run 'bash scripts/setup-librechat.sh config' to validate Docker configuration. WARNING: expanded Compose output can contain secrets; do not share it.
 4. Run 'bash scripts/setup-librechat.sh up -d --build'. The script clones the official LibreChat repository to the gitignored .bastilla-tools/librechat directory, preserves its .env, and uses the additive override from integrations/librechat.
-5. Run 'bash scripts/setup-librechat.sh ps'. In a private local deployment visit http://localhost:3080 and register the administrator account. Protect remote LibreChat with authentication, restricted registration and HTTPS BEFORE exposing it to the internet. This bridge is designed for a trusted SINGLE-USER deployment.
+5. Run 'bash scripts/setup-librechat.sh ps'. In a private local deployment visit http://localhost:3080 and register the administrator account **using the same email set in BASTILLA_LIBRECHAT_OWNER_EMAIL**. After registration, disable further signup (ALLOW_REGISTRATION=false and ALLOW_SOCIAL_REGISTRATION=false in the private upstream .env), restart the API service and configure HTTPS before any public exposure. Requests from another LibreChat account are rejected by the bridge. This bridge is designed for a trusted SINGLE-USER deployment.
 6. Choose the "Bastilla Agents" endpoint in LibreChat, select Aria/Alex/Astyria/Aurelius and send a short message. Check the original reply in Bastilla LIVE and inspect real worker heartbeats.
 7. Optionally set VITE_LIBRECHAT_URL to the HTTPS LibreChat address in Bastilla deployment variables and rebuild Bastilla. The "LibreChat · Bastilla" navigation module will link to it and report LIVE worker heartbeat status. On a phone, localhost refers to the phone itself, not the hosting server.
 
 The upstream LibreChat .env supports additional providers such as OpenAI, each requiring separate API keys; a ChatGPT subscription does not include OpenAI API credits.
 
+Account matching is a **defense-in-depth** condition, not a replacement for proper LibreChat authentication or private network isolation. Keep BASTILLA_BRIDGE_API_KEY server-side; do not expose it to the web frontend. Use the same LibreChat login email across restarts.
+
+
 ## Long-term memory (LibreChat and original Bastilla agents)
 
 - Native LibreChat User Memory is enabled in integrations/librechat/librechat.yaml. It is stored on the deployed LibreChat server, in its persistent database; it is NEVER committed to this GitHub repository.
+- Automatic extraction is explicitly disabled (`agent.enabled: false`) because it needs a separate model/API and would incur separate costs. This does not prevent manually saved memories from being referenced on later chats when the user has enabled memory.
 - The Memories panel in LibreChat lets the owner manually create, correct, disable and delete entries. The enabled keys are user_preferences, conversation_context, project_context and learned_facts. Overall storage cap: 8,000 tokens; per-entry cap: 10,000 characters. These values are guardrails, not a claim of unlimited context.
 - No automatic memory-extraction agent is enabled. This avoids extra model calls/charges and avoids asking the original workers for tool calling they do not support. Memory entries must be added through LibreChat's Memories UI.
 - The existing bridge now forwards a bounded portion of system context (including native LibreChat memory when injected into the request) together with the last few conversation turns to the **same original worker**. The Bastilla LIVE messages endpoint permits max 8,000 characters, so at most around 4,300 characters of system/memory context and a smaller amount of recent dialogue can fit. This is **not** whole-history semantic search; large memories must be edited/summarized to stay useful.
