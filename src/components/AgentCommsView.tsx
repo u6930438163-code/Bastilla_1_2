@@ -1132,10 +1132,6 @@ export const AgentCommsView: React.FC<AgentCommsViewProps> = ({
                   disabled={isLoading || chatAttachments.length >= MAX_CHAT_ATTACHMENTS}
                   onChange={event => void handleAttachmentSelection(event)} className="sr-only"
                   aria-label="Dołącz pliki tekstowe, DOCX, PDF lub zdjęcia"/>
-                <input type="file" accept="image/jpeg,image/png,image/webp" capture="environment"
-                  disabled={isLoading || chatAttachments.length >= MAX_CHAT_ATTACHMENTS}
-                  onChange={event => void handleAttachmentSelection(event)} className="sr-only"
-                  aria-label="Zrób zdjęcie aparatem"/>
               </div>
               <div className="min-w-0 flex-1"/>
               {!liveAuthenticated && (
