@@ -80,6 +80,10 @@ export default function App() {
 
   const [activeTab, setActiveTab] = useState<TabId>(initialTabFromLocation);
   const [isAgentLoading, setIsAgentLoading] = useState(false);
+  const [streamingChat, setStreamingChat] = useState<{
+    prompt: string;
+    agents: Array<{ agent: string; text: string; status: 'writing' | 'done' | 'error' }>;
+  } | null>(null);
   const [terminalBusy, setTerminalBusy] = useState(false);
   const [workspaceLive, setWorkspaceLive] = useState(false);
   const terminalPendingRef = useRef(0);
@@ -456,14 +460,59 @@ export default function App() {
         'pelna naprawa czatu',
         'odpowiedz pelna naprawa czatu',
       ].includes(normalizedCommand);
+      setStreamingChat({ prompt: message.trim(), agents: [] });
       const response = await fetch(isFullChatRepair ? '/api/astyria/mission' : '/api/triad/message', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', 'Accept': 'text/event-stream, application/json' },
         body: JSON.stringify(isFullChatRepair
           ? { action: 'full_system_app_chat_repair', userMessage: message.trim() }
           : { message, agent: chatAgent, attachments }),
       });
-      const result = await response.json();
+      let result: any;
+      if (response.ok && response.headers.get('content-type')?.includes('text/event-stream') && response.body) {
+        const reader = response.body.getReader();
+        const decoder = new TextDecoder();
+        let buffer = '';
+        const handleEvent = (raw: string) => {
+          const lines = raw.split('\n');
+          const event = lines.find(line => line.startsWith('event:'))?.slice(6).trim();
+          const rawData = lines.filter(line => line.startsWith('data:')).map(line => line.slice(5).trimStart()).join('\n');
+          if (!event || !rawData) return;
+          const data = JSON.parse(rawData) as any;
+          if (event === 'failure') throw new Error(String(data.error || 'Błąd strumienia agentów.'));
+          if (event === 'complete') { result = data; return; }
+          const agent = String(data.agent || '');
+          if (!agent) return;
+          if (event === 'agent_start') {
+            setStreamingChat(old => old ? {
+              ...old, agents: [...old.agents.filter(item => item.agent !== agent), { agent, text: '', status: 'writing' }],
+            } : old);
+          }
+          if (event === 'agent_delta' || event === 'agent_done' || event === 'agent_error') {
+            setStreamingChat(old => old ? { ...old, agents: old.agents.map(item => item.agent === agent ? {
+              ...item, text: event === 'agent_done' ? String(data.text || '') :
+                event === 'agent_error' ? String(data.error || 'Błąd') :
+                item.text + String(data.text || ''),
+              status: event === 'agent_done' ? 'done' : event === 'agent_error' ? 'error' : 'writing',
+            } : item) } : old);
+          }
+        };
+        try {
+          while (true) {
+            const next = await reader.read();
+            if (next.done) break;
+            buffer += decoder.decode(next.value, { stream: true }).replace(/\r\n/g, '\n');
+            const events = buffer.split('\n\n');
+            buffer = events.pop() || '';
+            for (const event of events) handleEvent(event);
+          }
+          buffer += decoder.decode();
+          if (buffer.trim()) handleEvent(buffer);
+        } finally { reader.releaseLock(); }
+        if (!result) throw new Error('Nie otrzymano końcowego potwierdzenia zapisu rozmowy.');
+      } else {
+        result = await response.json();
+      }
       if (!response.ok || result.success !== true || typeof result.reply !== 'string') {
         throw new Error(result.error || `Nie udało się wysłać wiadomości (HTTP ${response.status}).`);
       }
@@ -509,6 +558,7 @@ export default function App() {
       setAgentError(messageText);
       throw error;
     } finally {
+      setStreamingChat(null);
       setIsAgentLoading(false);
     }
   };
@@ -690,6 +740,7 @@ export default function App() {
           {activeTab === 'comms' && (
             <AgentCommsView
               dataStore={dataStore}
+              streamingChat={streamingChat}
               onSendProtocol={handleSendProtocol}
               onSendMessage={handleSendMessage}
               onRunAstyriaMission={handleRunAstyriaMission}
