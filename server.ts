@@ -416,7 +416,7 @@ app.get('/api/ollama/models', async (_req, res) => {
   }
 });
 
-// Pobierz i skonfiguruj wyłączny model w Ollamie (domyślnie dolphin-mixtral:8x7b), usuń pozostałe i uruchom w pamięci.
+// Pobierz i uruchom model Ollama. Nie usuwaj innych modeli bez świadomego wyboru operatora.
 app.post('/api/ollama/sync-exclusive', async (req, res) => {
   const requestedModel = typeof req.body?.model === 'string' && req.body.model.trim()
     ? req.body.model.trim()
@@ -424,7 +424,7 @@ app.post('/api/ollama/sync-exclusive', async (req, res) => {
   if (!/^[a-zA-Z0-9._:/-]{1,128}$/.test(requestedModel)) {
     return res.status(400).json({ ok: false, error: 'Nieprawidłowa nazwa modelu Ollama.' });
   }
-  const pruneOthers = req.body?.pruneOthers !== false;
+  const pruneOthers = req.body?.pruneOthers === true;
   const warmup = req.body?.warmup !== false;
 
   persistOllamaModelConfig(requestedModel);
