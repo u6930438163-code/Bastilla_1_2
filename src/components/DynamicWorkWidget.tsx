@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { Activity, Pause, Play, RefreshCw } from 'lucide-react';
+import { useLiveCardVisibility } from '../hooks/useLiveCardVisibility';
 
 /**
  * A deliberately allowlisted, read-only data binding for bastilla-ui cards.
@@ -76,6 +77,7 @@ export function DynamicWorkWidget({
   render: (data: RecordData) => React.ReactNode;
 }) {
   const spec = getLiveWorkSpec(block);
+  const { cardRef, cardVisible } = useLiveCardVisibility<HTMLElement>();
   const [enabled, setEnabled] = useState(true);
   const [field, setField] = useState<Field>(spec?.field ?? 'cpuPercent');
   const [samples, setSamples] = useState<Sample[]>([]);
@@ -85,18 +87,21 @@ export function DynamicWorkWidget({
   const intervalMs = spec?.intervalMs ?? 5000;
 
   useEffect(() => {
-    if (!enabled || !spec) return;
+    if (!enabled || !spec || !cardVisible) return;
     let disposed = false;
     let controller: AbortController | null = null;
     const poll = async () => {
       if (disposed || document.hidden || controller) return;
       const current = new AbortController();
       controller = current;
+      let timedOut = false;
+      const timeout = window.setTimeout(() => { timedOut = true; current.abort(); }, 8000);
       try {
         const response = await fetch('/api/system/metrics', {
           method: 'GET', credentials: 'same-origin', cache: 'no-store', signal: current.signal,
         });
         if (!response.ok) throw new Error('HTTP ' + response.status);
+        if (!(response.headers.get('content-type') || '').includes('application/json')) throw new Error('Brak odpowiedzi JSON');
         const payload: unknown = await response.json();
         const percent = readPercent(payload, field);
         if (percent === null) throw new Error('Brak wiarygodnego odczytu ' + (field === 'cpuPercent' ? 'CPU' : 'RAM'));
@@ -105,10 +110,11 @@ export function DynamicWorkWidget({
         setStatus('live');
         setError('');
       } catch (cause) {
-        if (disposed || current.signal.aborted) return;
+        if (disposed || (current.signal.aborted && !timedOut)) return;
         setStatus('error');
-        setError(cause instanceof Error ? cause.message.slice(0, 150) : 'Brak połączenia z serwerem');
+        setError(timedOut ? 'Serwer nie odpowiedział w ciągu 8 sekund.' : cause instanceof Error ? cause.message.slice(0, 150) : 'Brak połączenia z serwerem');
       } finally {
+        window.clearTimeout(timeout);
         if (controller === current) controller = null;
       }
     };
@@ -128,7 +134,7 @@ export function DynamicWorkWidget({
       document.removeEventListener('visibilitychange', onVisible);
       window.removeEventListener('bastilla:workspace-event', onWorkspace);
     };
-  }, [enabled, field, intervalMs, refreshIndex, spec?.source]);
+  }, [enabled, field, intervalMs, refreshIndex, spec?.source, cardVisible]);
 
   if (!spec) return <>{render(block)}</>;
   const hasData = samples.length > 0;
@@ -136,7 +142,7 @@ export function DynamicWorkWidget({
   const currentBlock = hasData ? applyLiveValue(block, samples, field) : block;
   const label = !enabled ? 'Wstrzymano · ostatni pomiar' : status === 'live' ? 'LIVE · dane serwera' :
     status === 'error' ? 'Offline / nieaktualne' : 'Łączenie…';
-  return <section className="min-w-0 space-y-2 rounded-xl border border-sky-800/60 bg-slate-950/30 p-2" aria-label="Dynamiczny element czatu">
+  return <section ref={cardRef} className="min-w-0 space-y-2 rounded-xl border border-sky-800/60 bg-slate-950/30 p-2" aria-label="Dynamiczny element czatu">
     <div className="flex flex-wrap items-center gap-2 text-[11px]">
       <span className={'inline-flex items-center gap-1 font-semibold ' + (enabled && status === 'live' ? 'text-emerald-300' : 'text-slate-300')}>
         <Activity size={13} /> {label}
