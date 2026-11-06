@@ -6,13 +6,13 @@ Każda zapisana wiadomość jądra ma kolorowy awatar nadawcy, przyciski 👍/�
 
 Kolory: Ty — fiolet; Aria — róż; Alex — zieleń; Astyria — cyjan; Aurelius — pomarańcz. Każdy uczestnik ma najwyżej jeden aktywny głos na wiadomość. Ponowne użycie tego samego kciuka cofa własną ocenę; drugi kciuk zastępuje ocenę.
 
-Głosy są zapisywane w pliku serwera (`BASTILLA_CHAT_REACTIONS_STORE_PATH`, domyślnie `data/chat-reactions.json`) przez atomowy zapis i odczytywane po odświeżeniu. Czat pobiera oceny przez zdarzenia `workspace`, a gdy sesja SSE nie działa — co 7 sekund podczas aktywnej karty. Wyczyszczenie historii czatu usuwa reakcje dopiero po potwierdzeniu usunięcia historii przez serwer.
+Głosy potwierdzone przez serwer są zapisywane w pliku (`BASTILLA_CHAT_REACTIONS_STORE_PATH`, domyślnie `data/chat-reactions.json`) przez atomowy zapis i odczytywane po odświeżeniu. Kliknięcie jest widoczne natychmiast. Gdy API nie działa (np. Preview AI Studio bez backendu), głos Operatora trafia do lokalnej kolejki `localStorage` i jest wyraźnie oznaczony jako **lokalny, niezsynchronizowany**. Po odzyskaniu API klient automatycznie wysyła kolejkę idempotentnymi żądaniami `mode: set`; lokalnie zapisany głos nie jest głosem współdzielonym do czasu potwierdzenia serwera. Czat pobiera oceny przez zdarzenia `workspace`, a gdy sesja SSE nie działa — co 7 sekund podczas aktywnej karty. Wyczyszczenie historii czatu usuwa reakcje dopiero po potwierdzeniu usunięcia historii przez serwer.
 
 ## API
 
 Dla głównego czatu:
 - `GET /api/chat/reactions` — mapa `messageKey → {Operator|Aria|Alex|Astyria|Aurelius: up|down}`
-- `POST /api/chat/reactions/vote` — ciało JSON `{"messageKey":"m_…_0","vote":"up"}` albo `"down"`; ponownie kliknięty kierunek wycofuje głos. Serwer ustawia głos jako **Operator**; pola `actor` w JSON są ignorowane
+- `POST /api/chat/reactions/vote` — ciało JSON `{"messageKey":"m_…_0","vote":"up"}` albo `"down"`; ponownie kliknięty kierunek wycofuje głos. Tryb `mode: "set"` ustawia głos bez efektu przełączenia, dzięki czemu ponawianie żądań z kolejki offline jest bezpieczne. Serwer ustawia głos jako **Operator**; pola `actor` w JSON są ignorowane
 - `DELETE /api/chat/reactions` — czyści oceny, tylko z tego samego origin; wykonywane po czyszczeniu czatu
 
 Dla oryginalnych uwierzytelnionych workerów:
