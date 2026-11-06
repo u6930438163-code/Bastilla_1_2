@@ -216,6 +216,7 @@ const workspaceTopics: Record<string, 'chat' | 'terminal' | 'kernel' | 'agents' 
   '/api/apps/command': 'terminal',
   '/api/apps/create': 'workspace',
   '/api/live-chat/messages': 'chat',
+  '/api/live-chat/worker/events': 'agents',
 };
 app.use((req, res, next) => {
   const topic = req.method === 'POST' ? workspaceTopics[req.path] : undefined;
