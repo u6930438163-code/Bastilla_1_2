@@ -9,15 +9,25 @@ export type ChatVotes = Record<string, ChatVote>;
 const AVATAR_INITIALS: Record<string, string> = {
   Operator: 'TY', Aria: 'AR', Alex: 'AX', Astyria: 'AS', Aurelius: 'AU',
 };
+// Solid, distinguishable hues remain visible against the nearly-black mobile chat.
+const AVATAR_BACKGROUND: Record<string, string> = {
+  Operator: '#6d28d9',
+  Aria: '#be185d',
+  Alex: '#047857',
+  Astyria: '#0e7490',
+  Aurelius: '#b45309',
+};
 
 export function ChatAvatar({ actor, size = 'md' }: { actor: string; size?: 'sm' | 'md' }) {
   const name = canonicalReactionActor(actor);
   const profile = SYSTEM_AGENTS[name === 'Aria' ? 'si_1' : name];
-  const classes = profile?.avatarColor ?? 'border-slate-600 bg-slate-700 text-slate-200';
+  const accent = AVATAR_BACKGROUND[name] ?? '#334155';
   return <span aria-label={'Awatar: ' + (name === 'Operator' ? 'Ty' : name)}
     title={name === 'Operator' ? 'Ty · Operator' : name}
-    className={'inline-flex shrink-0 items-center justify-center rounded-full border font-bold shadow-sm ' +
-      (size === 'sm' ? 'h-6 w-6 text-[9px]' : 'h-9 w-9 text-[10px]') + ' ' + classes}>
+    style={{ backgroundColor: accent, borderColor: profile?.accentHex ?? '#94a3b8',
+      boxShadow: '0 0 0 1px rgba(255,255,255,.12), 0 0 12px ' + accent + '55' }}
+    className={'inline-flex shrink-0 items-center justify-center rounded-full border-2 font-extrabold text-white ' +
+      (size === 'sm' ? 'h-6 w-6 text-[9px]' : 'h-9 w-9 text-[10px]')}>
     {AVATAR_INITIALS[name] || name.slice(0, 2).toUpperCase()}
   </span>;
 }
