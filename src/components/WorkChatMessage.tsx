@@ -7,6 +7,7 @@ import { AdvancedWorkWidget } from './AdvancedWorkWidget';
 import { DynamicWorkWidget, getLiveWorkSpec } from './DynamicWorkWidget';
 import { LiveStatusWorkWidget } from './LiveStatusWorkWidget';
 import { LiveLogsWorkWidget } from './LiveLogsWorkWidget';
+import { LiveProcessesWorkWidget } from './LiveProcessesWorkWidget';
 import { TerminalWorkCard, type TerminalCardEntry, type TerminalCardStatus } from './TerminalWorkCard';
 import { ProgressWorkWidget, StepsWorkWidget, FileExplorerWorkWidget, ModelSettingsWorkWidget, ThreeDWorkWidget, PdfWorkWidget } from './AdvancedWorkWidgets';
 
@@ -105,6 +106,7 @@ function Widget({ block, onPrompt, onOpenTerminal }: { block: WorkBlock; onPromp
   const kind = block.type;
   if (kind === 'live_status') return <LiveStatusWorkWidget block={block} onPrompt={onPrompt}/>;
   if (kind === 'live_logs') return <LiveLogsWorkWidget onPrompt={onPrompt}/>;
+  if (kind === 'live_processes') return <LiveProcessesWorkWidget onPrompt={onPrompt}/>;
   // Only allowlisted, read-only data bindings can become live; all other cards stay static.
   if (block.__bastillaLiveApplied !== true && getLiveWorkSpec(block)) {
     return <DynamicWorkWidget block={block} render={updated =>
@@ -276,6 +278,13 @@ const examples = {
       { type: 'progress', title: 'Użycie RAM', value: 0, live: { source: 'system_metrics', field: 'ramPercent', intervalMs: 5000 } },
     ],
   },
+  liveProcesses: {
+    title: 'Procesy systemowe · LIVE (wymagane logowanie)',
+    blocks: [
+      { type: 'text', content: 'Procesy odczytywane z prawdziwego **/api/operations/processes**. Wymaga sesji operatora. Sortowanie CPU/RAM/PID, wyszukiwanie i przygotowanie szkicu diagnostyki. Nie wykonuje poleceń ani zmian w procesach.' },
+      { type: 'live_processes' },
+    ],
+  },
   liveLogs: {
     title: 'Logi systemowe · LIVE (wymagane logowanie)',
     blocks: [
@@ -378,6 +387,7 @@ export function WorkChatDemo({ onPrompt, onOpenTerminal }: { onPrompt: (prompt: 
           ['live', BarChart3, 'Dynamiczne LIVE'],
           ['liveStatus', Sparkles, 'Ollama / Agenci LIVE'],
           ['liveLogs', Code2, 'Logi LIVE'],
+          ['liveProcesses', BarChart3, 'Procesy LIVE'],
         ] as const).map(([key, Icon, label]) =>
           <button key={key} type="button" onClick={() => setTab(key)} aria-pressed={tab === key} className={'px-3 py-2 rounded-lg text-xs flex gap-1.5 items-center border ' + (tab === key ? 'bg-cyan-900/70 border-cyan-500 text-white' : 'bg-slate-900 border-slate-700 text-slate-300')}><Icon size={14}/>{label}</button>)}
       </div>
