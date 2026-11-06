@@ -20,6 +20,10 @@ endpoints:
     - name: "Bastilla Agents"
       apiKey: "${BASTILLA_BRIDGE_API_KEY}"
       baseURL: "http://bastilla-agent-bridge:8085/v1"
+      # This is resolved by LibreChat on its backend from the logged-in user.
+      # The bridge checks it against BASTILLA_LIBRECHAT_OWNER_EMAIL.
+      headers:
+        X-Bastilla-Operator-Email: "{{LIBRECHAT_USER_EMAIL}}"
       models:
         default: ["Aria", "Alex", "Astyria", "Aurelius"]
         fetch: false
