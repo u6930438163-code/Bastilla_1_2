@@ -120,6 +120,7 @@ export const AgentCommsView: React.FC<AgentCommsViewProps> = ({
   const [attachmentError, setAttachmentError] = useState<string | null>(null);
   const [attachmentProgress, setAttachmentProgress] = useState<{done:number;total:number}|null>(null);
   const [dragOver, setDragOver] = useState(false);
+  const [previewAttachment, setPreviewAttachment] = useState<number | null>(null);
   const [analyzeAttachments, setAnalyzeAttachments] = useState(true);
   const [showProtocolTools, setShowProtocolTools] = useState(false);
   const [showWorkPreview, setShowWorkPreview] = useState(false);
@@ -590,7 +591,7 @@ export const AgentCommsView: React.FC<AgentCommsViewProps> = ({
     try {
       await onSendMessage(
         analyzeAttachments && attachmentsSnapshot.length > 0
-          ? (message ? message + '\\n\\nPrzeanalizuj dołączone materiały, podaj ustalenia i zaznacz niepewności.' : 'Przeanalizuj dołączone materiały, podaj ustalenia i zaznacz niepewności.')
+          ? (message ? message + '\n\nPrzeanalizuj dołączone materiały, podaj ustalenia i zaznacz niepewności.' : 'Przeanalizuj dołączone materiały, podaj ustalenia i zaznacz niepewności.')
           : message,
         selectedTarget, attachmentsSnapshot, freedomEnabled, providerMode
       );
@@ -1178,20 +1179,23 @@ export const AgentCommsView: React.FC<AgentCommsViewProps> = ({
             <input type="checkbox" checked={analyzeAttachments} onChange={event=>setAnalyzeAttachments(event.target.checked)} className="accent-cyan-400"/>
             Automatycznie poproś wybranego agenta o analizę załączników po wysłaniu
           </label>
-          {chatAttachments.length > 0 && (
-            <ul aria-label="Załączone pliki" className="mb-2 flex flex-wrap gap-1.5">
-              {chatAttachments.map((file, index) => (
-                <li key={`${file.name}-${index}`} className="flex max-w-full items-center gap-2 rounded-xl border border-slate-700 bg-slate-900 px-2.5 py-1.5 text-xs text-slate-200">
-                  {file.mimeType?.startsWith('image/') ? (
-                    <img src={`data:${file.mimeType};base64,${file.content}`} alt={`Podgląd: ${file.name}`} className="h-9 w-9 shrink-0 rounded-lg object-cover"/>
-                  ) : <FileText className="h-4 w-4 shrink-0 text-slate-400"/>}
-                  <span className="max-w-[60vw] truncate">{file.name}</span>
-                  <button type="button" onClick={() => setChatAttachments(current => current.filter((_, fileIndex) => fileIndex !== index))}
-                    aria-label={`Usuń załącznik ${file.name}`} className="rounded-md p-1 text-slate-400 hover:bg-slate-800 hover:text-white"><X className="h-4 w-4"/></button>
-                </li>
-              ))}
-            </ul>
-          )}
+          {chatAttachments.length > 0 && <section aria-label="Załączniki" className="mb-2 rounded-2xl border border-slate-700 bg-slate-900 p-2.5">
+            <div className="mb-2 flex items-center justify-between">
+              <span className="text-xs font-semibold text-slate-200">Załączniki · {chatAttachments.length}/{MAX_CHAT_ATTACHMENTS}</span>
+              <button type="button" onClick={()=>{setChatAttachments([]);setPreviewAttachment(null);}} className="rounded-lg border border-slate-600 px-2 py-1 text-xs text-slate-300 hover:border-rose-400">Wyczyść wszystkie</button>
+            </div>
+            <ul className="flex flex-wrap gap-2">{chatAttachments.map((file,index)=><li key={`${file.name}-${index}`} className="flex max-w-full items-center gap-2 rounded-xl border border-slate-700 bg-[#19374b] p-2">
+              {file.mimeType?.startsWith('image/')?<img alt="" src={`data:${file.mimeType};base64,${file.content}`} className="h-9 w-9 rounded-lg object-cover"/>:<FileText className="h-5 w-5 text-cyan-300"/>}
+              <button type="button" aria-expanded={previewAttachment===index} onClick={()=>setPreviewAttachment(previewAttachment===index?null:index)} className="max-w-[42vw] truncate text-xs text-slate-100 hover:underline">{file.name}</button>
+              <button type="button" aria-label={`Usuń załącznik ${file.name}`} onClick={()=>{setChatAttachments(current=>current.filter((_,i)=>i!==index));setPreviewAttachment(null);}} className="rounded-lg p-1 text-slate-300 hover:bg-rose-900/40"><X className="h-4 w-4"/></button>
+            </li>)}</ul>
+            {previewAttachment!==null&&chatAttachments[previewAttachment]&&<div className="mt-2 rounded-xl bg-[#102638] p-3">
+              <div className="mb-2 flex items-center justify-between"><span className="truncate text-xs text-cyan-100">{chatAttachments[previewAttachment].name}</span><button type="button" aria-label="Zamknij podgląd" onClick={()=>setPreviewAttachment(null)}><X className="h-4 w-4"/></button></div>
+              {chatAttachments[previewAttachment].mimeType?.startsWith('image/')?<img className="max-h-56 max-w-full rounded-lg object-contain" alt={chatAttachments[previewAttachment].name} src={`data:${chatAttachments[previewAttachment].mimeType};base64,${chatAttachments[previewAttachment].content}`}/>:
+                chatAttachments[previewAttachment].mimeType==='application/pdf'?<p className="text-xs text-slate-300">PDF gotowy do wysłania. Podgląd treści niedostępny.</p>:
+                <pre className="max-h-52 overflow-auto whitespace-pre-wrap break-words text-xs text-slate-200">{chatAttachments[previewAttachment].content.slice(0,4000)}{chatAttachments[previewAttachment].content.length>4000?'… (podgląd skrócony)':''}</pre>}
+            </div>}
+          </section>}
           {freeVoiceNotice && (
             <div className="mb-2 flex items-center justify-between gap-2 rounded-xl border border-emerald-900 bg-emerald-950/40 px-3 py-2 text-xs text-emerald-200">
               <span className="flex min-w-0 items-center gap-2"><Sparkles className="h-4 w-4 shrink-0"/><span className="truncate">{freeVoiceNotice}</span></span>
