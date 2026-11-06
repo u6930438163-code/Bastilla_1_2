@@ -9,6 +9,7 @@ import { ChatAvatar, ChatReactionBar, type ChatVotes } from './ChatReactionBar';
 import { chatReactionKeys, liveReactionKey } from '../lib/chatReactionKeys.mjs';
 import { loadPendingReactionVotes, mergePendingReactionVotes, nextOperatorReaction } from '../lib/chatReactionFallback.mjs';
 import { draftAgentTarget } from '../lib/workChatRouting.mjs';
+import { summarizeFreeVoiceEngines } from '../lib/freeVoiceEngine.mjs';
 import { LiveWorkspaceSession } from './LiveWorkspaceSession';
 import {
   ASTYRIA_MISSION_ACTIONS,
@@ -61,6 +62,7 @@ interface AgentCommsViewProps {
     spokenCount?: number;
     silentAgents?: string[];
     messages?: Array<{ agent: string; tekst: string }>;
+    engines?: Record<string, string>;
   }>;
   onTriggerInitiative?: () => Promise<void>;
   onUnclog?: () => void;
@@ -583,11 +585,13 @@ export const AgentCommsView: React.FC<AgentCommsViewProps> = ({
       if (optionalHint) {
         setMessageText('');
       }
+      const engines = summarizeFreeVoiceEngines(res.engines, res.spokenAgents);
       if (res.skipped || res.spokenAgents.length === 0) {
-        setFreeVoiceNotice('Agenci skorzystali z prawa do ciszy (brak przymusu odpowiedzi).');
+        const attempted = summarizeFreeVoiceEngines(res.engines, Object.keys(res.engines || {}));
+        setFreeVoiceNotice('Brak wypowiedzi. ' + (attempted || 'Model lub źródło niepotwierdzone.'));
       } else {
         const names = res.spokenAgents.map((a) => (a === 'si_1' ? 'Aria' : a)).join(', ');
-        setFreeVoiceNotice(`Swobodny głos zabrał(a): ${names}`);
+        setFreeVoiceNotice(`Swobodny głos: ${names}. Źródło: ${engines || 'niepotwierdzone'}.`);
       }
     } catch {
       // Errors are surfaced via sendError
