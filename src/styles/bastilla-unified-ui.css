@@ -1,0 +1,242 @@
+/*
+ * Bastilla 5 · Unified metadata-card skin (2026-11-06)
+ * Visual-only layer. No fake statuses, no changes to agent actions, terminal commands
+ * or privileged API endpoints. The existing "METADANE, NIE SEKRETY" card is the reference.
+ */
+.app-shell {
+  --b5-card-bg: rgba(17, 40, 59, .58);
+  --b5-card-border: #29475a;
+  --b5-surface: #091827;
+  --b5-surface-raised: #0d2233;
+  --b5-ink: #dbe9f2;
+  --b5-muted: #90afc0;
+  --b5-action: #b6eff7;
+  background: #06111e;
+}
+.app-shell :where(button, select, input, textarea):focus-visible {
+  outline: 2px solid #67e8f9;
+  outline-offset: 2px;
+}
+.app-shell :where(button, select, input, textarea):disabled { cursor: not-allowed; }
+
+/* Top line and navigation: same restrained hierarchy as the terminal metadata card. */
+.app-shell .bastilla-workspace-sync-strip {
+  background: #091827; border-bottom-color: var(--b5-card-border); color: var(--b5-action);
+}
+.app-shell .bastilla-workspace-sync-strip button {
+  text-decoration: none; border: 1px solid #31586a; border-radius: 8px;
+  background: #102b3d; padding: 5px 9px; color: var(--b5-action);
+}
+.app-shell .app-navigation {
+  background: #071321; border-color: #203c4d; box-shadow: 0 -5px 16px #02061733;
+}
+.app-shell .app-navigation button {
+  border-radius: 12px; min-height: 49px;
+}
+.app-shell .app-navigation button[aria-current="page"] {
+  background: #102f3d; border-color: #315f6d; box-shadow: inset 3px 0 #67e8f9;
+}
+
+/* One language for every chat message: the "METADANE, NIE SEKRETY" card. */
+.bastilla-chat-shell {
+  background: #071321 !important; background-image: none !important;
+  color: var(--b5-ink);
+}
+.bastilla-chat-toolbar {
+  background: #0a1b2b !important; border-bottom: 1px solid var(--b5-card-border) !important;
+  box-shadow: none !important; backdrop-filter: none;
+  min-height: 45px;
+}
+.bastilla-chat-toolbar :where(button, select) {
+  border-color: #2b4b5d; background-color: #112a3b;
+  color: #c8e8f4; border-radius: 10px;
+}
+.bastilla-chat-toolbar :where(button, select):hover:not(:disabled) {
+  border-color: #4a899a; background-color: #15394b;
+}
+.bastilla-chat-scroller {
+  background: #071321; max-width: none !important;
+  padding: 12px clamp(10px, 3vw, 32px) 18px;
+  scrollbar-color: #2d5569 #081725;
+}
+.bastilla-chat-scroller > :where(.bastilla-chat-card, section) {
+  max-width: 1080px; margin-left: auto; margin-right: auto;
+}
+.bastilla-chat-card {
+  --b5-accent: #38bdf8;
+  background: var(--b5-card-bg) !important;
+  border: 1px solid var(--b5-card-border) !important;
+  border-left: 3px solid var(--b5-accent) !important;
+  color: var(--b5-ink); border-radius: 13px !important;
+  padding: 12px 14px !important;
+  margin-inline: 0 !important;
+  box-shadow: none !important; backdrop-filter: none !important;
+  min-width: 0; overflow-wrap: anywhere;
+}
+.bastilla-chat-card--user { --b5-accent: #a78bfa; }
+.bastilla-chat-card--live { --b5-accent: #34d399; }
+.bastilla-chat-card--stream { --b5-accent: #22d3ee; }
+.bastilla-chat-card:hover { border-color: #3d6778 !important; }
+.bastilla-chat-card__header {
+  display: flex; align-items: center; min-height: 27px;
+  margin-bottom: 10px; padding-bottom: 8px;
+  border-bottom: 1px solid #284253 !important;
+}
+.bastilla-chat-card__header :where(span.rounded, span.rounded-md) {
+  border-color: #315567 !important;
+  background: #102c3c !important;
+  color: #cfedf6 !important;
+  border-radius: 7px; font-size: 11px;
+}
+.bastilla-chat-card :where(p, li, blockquote) {
+  line-height: 1.62; overflow-wrap: anywhere;
+}
+.bastilla-chat-card pre { max-width: 100%; overflow-x: auto; }
+.bastilla-chat-card :where(button, a) { touch-action: manipulation; }
+.bastilla-chat-card .bastilla-terminal-info-card {
+  background: #0d2435; border-color: #315165;
+}
+.bastilla-chat-card__actions {
+  border-top: 1px solid #243d50; padding-top: 8px;
+  margin-top: 10px;
+}
+.bastilla-chat-card__actions > button {
+  background: #10283a; border: 1px solid #29475a;
+  border-radius: 9px; color: #b2d2e1; padding: 6px 9px;
+}
+.bastilla-chat-card__actions > button:hover {
+  background: #1b3a4a; border-color: #4893a4; color: #edfdff;
+}
+.bastilla-chat-live-session {
+  background: #0b2030 !important; border-bottom: 1px solid #29475a !important;
+}
+.bastilla-chat-live-session > div + div {
+  border-color: #34536a; background: #0c2334;
+}
+.bastilla-chat-actions {
+  background: #091c2b !important; border-color: #2a4a5c !important;
+}
+.bastilla-chat-actions button {
+  background: #122b3d; border-color: #31556b; border-radius: 10px;
+}
+.bastilla-chat-actions button:hover:not(:disabled) {
+  background: #184255; border-color: #4a92a4;
+}
+
+/* Composer retains the roomy, ChatGPT-like field, but its shell matches cards. */
+.bastilla-chat-composer {
+  background: #081724 !important; border-color: #2b4757 !important;
+}
+.bastilla-chat-composer-panel {
+  background: #11283b !important; border: 1px solid #37566a !important;
+  border-radius: 19px !important;
+  box-shadow: 0 5px 18px #01081245 !important;
+}
+.bastilla-chat-composer-panel:focus-within {
+  border-color: #67e8f9 !important;
+  box-shadow: 0 0 0 1px #67e8f951 !important;
+}
+.bastilla-chat-composer-panel textarea { color: #f0f8ff; }
+.bastilla-chat-composer-panel textarea::placeholder { color: #91a9b9; }
+.bastilla-chat-composer-panel button[type="submit"] {
+  background: #10b7ad; color: #04212b;
+  box-shadow: 0 1px 9px #10b7ad35;
+}
+.bastilla-chat-composer-panel button[type="submit"]:hover:not(:disabled) {
+  background: #47e0d0;
+}
+.bastilla-chat-composer-panel button[type="submit"]:disabled {
+  background: #294755; color: #8da8b9; box-shadow: none;
+}
+.bastilla-chat-composer-panel select { color: #dbe9f2; }
+
+/* Terminal: cards, activity, log entries and action rows use the same surface. */
+.app-shell .bastilla-terminal-shell {
+  background: #071321; border-color: var(--b5-card-border);
+  box-shadow: none; border-radius: 12px;
+}
+.app-shell .bastilla-terminal-shell nav[aria-label="Widoki terminala"] {
+  background: #0a1d2b; border-color: var(--b5-card-border);
+  overflow-x: auto; scrollbar-width: thin;
+}
+.app-shell .bastilla-terminal-shell nav[aria-label="Widoki terminala"] button {
+  border-color: #305064; background: #102a3d; color: #b9d9e6;
+}
+.app-shell .bastilla-terminal-shell nav[aria-label="Widoki terminala"] button[aria-pressed="true"] {
+  background: #125064; border-color: #44b6c6; color: #e6fdff;
+}
+.app-shell .bastilla-terminal-quickbar,
+.app-shell .bastilla-terminal-console-toolbar {
+  background: #0b2030; border-bottom-color: #29475a;
+}
+.app-shell .bastilla-terminal-quickchip,
+.app-shell .bastilla-terminal-activity-row,
+.app-shell .bastilla-terminal-metrics > div,
+.app-shell .bastilla-terminal-info-card {
+  background: var(--b5-card-bg); border-color: var(--b5-card-border); border-radius: 12px;
+}
+.app-shell .bastilla-terminal-output { background: #071321; }
+.app-shell .bastilla-terminal-line {
+  border: 1px solid #203b4b; border-left: 3px solid #266b80;
+  background: #0b2030; border-radius: 9px; margin-bottom: 6px;
+  padding: 9px 11px; white-space: pre-wrap;
+}
+.app-shell .bastilla-terminal-line:hover {
+  background: #102c3d; border-left-color: #5ed5e8;
+}
+.app-shell .bastilla-terminal-inspector {
+  background: #091827; border-color: var(--b5-card-border);
+}
+.app-shell .bastilla-terminal-composer {
+  background: #0d2233; border-color: var(--b5-card-border);
+}
+
+/* Task manager, live agent workers, logs and Ollama all share the reference card. */
+.app-shell .bastilla-ops-shell { background: #071321; }
+.app-shell :is(
+  .bastilla-ops-panel, .bastilla-ops-kpi,
+  .bastilla-ops-jobs-section, .bastilla-ops-job-metrics > div,
+  .bastilla-ops-worker-list > div, .bastilla-ops-log-item,
+  .bastilla-ops-agent-bar, .bastilla-ops-model,
+  .bastilla-ops-chain, .bastilla-ops-status-line
+) {
+  background: var(--b5-card-bg);
+  border-color: var(--b5-card-border);
+  border-radius: 13px;
+  box-shadow: none;
+}
+.app-shell .bastilla-ops-log-item { border-left: 3px solid #38bdf8; }
+.app-shell .bastilla-ops-log-item.is-success { border-left-color: #34d399; }
+.app-shell .bastilla-ops-log-item.is-error { border-left-color: #fb7185; }
+.app-shell .bastilla-ops-tabs { background: #0b2030; border-color: #29475a; }
+.app-shell .bastilla-ops-tabs button {
+  background: #102637; border: 1px solid #284758; color: #a8c9d7;
+  border-radius: 10px;
+}
+.app-shell .bastilla-ops-tabs button.is-active {
+  color: #e7fcff; background: #16495c; border-color: #46b2c2;
+  box-shadow: none;
+}
+.app-shell .bastilla-ops-table-wrap {
+  border-color: var(--b5-card-border); background: #0b1c2b;
+}
+.app-shell .bastilla-ops-table th { background: #112e40; }
+.app-shell .bastilla-ops-send { background: #12566d; border-color: #3b9aaf; }
+.app-shell .bastilla-ops-send:hover { background: #19748c; }
+
+@media (max-width: 639px) {
+  .bastilla-chat-scroller { padding: 10px 9px 16px; }
+  .bastilla-chat-card { padding: 11px 12px !important; }
+  .bastilla-chat-toolbar { padding-inline: 9px !important; gap: 5px; }
+  .bastilla-chat-toolbar select { min-width: 90px; }
+  .bastilla-chat-composer { padding: 8px 9px !important; }
+  .bastilla-chat-composer-panel textarea { min-height: 54px; }
+  .app-shell .bastilla-ops-shell { padding: 10px; }
+  .app-shell .bastilla-ops-panel { padding: 12px; }
+  .app-shell .bastilla-terminal-quickbar { padding: 8px; }
+  .app-shell .bastilla-terminal-console-toolbar { padding: 7px 8px; }
+  .app-shell .app-navigation button { min-height: 54px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .bastilla-chat-card, .bastilla-chat-toolbar button { transition: none !important; }
+}
