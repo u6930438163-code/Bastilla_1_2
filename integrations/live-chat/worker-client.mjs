@@ -25,6 +25,11 @@ export function createAgentWorker(options = {}) {
   const fetchImpl = options.fetchImpl || globalThis.fetch;
   const pollIntervalMs = Math.max(500, Number(options.pollIntervalMs) || 2500);
   const heartbeatIntervalMs = Math.max(5000, Number(options.heartbeatIntervalMs) || 15000);
+  // Limit concurrent LLM requests; async I/O does not require OS threads.
+  // A per-agent cap keeps all four original runtimes isolated.
+  const requestedConcurrency = Number(options.maxConcurrency);
+  const maxConcurrency = Number.isInteger(requestedConcurrency)
+    ? Math.min(4, Math.max(1, requestedConcurrency)) : 2;
   const workerId = String(options.workerId || randomUUID());
   const onError = typeof options.onError === 'function' ? options.onError : () => {};
   const onIdle = typeof options.onIdle === 'function' ? options.onIdle : null;
@@ -39,6 +44,7 @@ export function createAgentWorker(options = {}) {
   const internalController = new AbortController();
   let lastHeartbeatAt = 0;
   let stopped = false;
+  const activeJobs = new Set();
 
   async function request(path, requestOptions = {}) {
     const headers = {
@@ -64,7 +70,7 @@ export function createAgentWorker(options = {}) {
   }
 
   async function sendHeartbeat(signal) {
-    const heartbeatResult = await request('worker/heartbeat', { method: 'POST', body: {}, signal });
+    const heartbeatResult = await request('worker/heartbeat', { method: 'POST', body: { concurrency: maxConcurrency }, signal });
     if (heartbeatResult?.agent !== agent) throw new Error('Worker token identity does not match configured agent ' + agent);
     lastHeartbeatAt = Date.now();
     return heartbeatResult;
@@ -124,14 +130,14 @@ export function createAgentWorker(options = {}) {
     });
   }
 
-  async function pollOnce(options = {}) {
-    const signal = options.signal || internalController.signal;
+  async function claimNextJob(signal) {
     await verifyIdentity(signal);
     const claimed = await request('worker/next', { method: 'POST', body: {}, signal });
     if (claimed?.agent !== agent) throw new Error('Server worker identity mismatch for ' + agent);
-    if (!claimed?.job) return false;
+    return claimed?.job || null;
+  }
 
-    const job = claimed.job;
+  async function executeJob(job, signal) {
     const heartbeat = setInterval(() => {
       Promise.all([
         sendHeartbeat(signal),
@@ -171,6 +177,14 @@ export function createAgentWorker(options = {}) {
     return true;
   }
 
+  // Retained for callers/tests that explicitly want a single synchronous dequeue + completion.
+  async function pollOnce(options = {}) {
+    const signal = options.signal || internalController.signal;
+    const job = await claimNextJob(signal);
+    if (!job) return false;
+    return executeJob(job, signal);
+  }
+
   async function runIdleOnce(options = {}) {
     if (!onIdle) return false;
     const signal = options.signal || internalController.signal;
@@ -185,21 +199,44 @@ export function createAgentWorker(options = {}) {
       else options.signal.addEventListener('abort', () => internalController.abort(), { once: true });
     }
     const signal = internalController.signal;
-    while (!stopped && !signal?.aborted) {
+
+    // Each claimed task has its own promise and its own renewable lease.
+    // Never allow more than maxConcurrency jobs to be active for this agent.
+    while (!stopped && !signal.aborted) {
       try {
-        const handled = await pollOnce({ signal });
-        if (!handled) {
-          if (onIdle && Date.now() - lastIdleAt >= idleCallbackIntervalMs) {
-            lastIdleAt = Date.now();
-            try { await runIdleOnce({ signal }); } catch (error) { onError(error); }
-          }
+        if (activeJobs.size >= maxConcurrency) {
           await sleep(pollIntervalMs, signal);
+          continue;
         }
+
+        const job = await claimNextJob(signal);
+        if (signal.aborted || stopped) {
+          // The lease will expire and the server will requeue this claimed task.
+          break;
+        }
+        if (job) {
+          const task = executeJob(job, signal);
+          activeJobs.add(task);
+          void task.catch((error) => {
+            try { onError(error); } catch { /* user callback must not crash worker */ }
+          }).finally(() => activeJobs.delete(task));
+          continue;
+        }
+        // Idle activity must not compete with the original agent's active jobs.
+        if (activeJobs.size === 0 && onIdle && Date.now() - lastIdleAt >= idleCallbackIntervalMs) {
+          lastIdleAt = Date.now();
+          try { await runIdleOnce({ signal }); } catch (error) { onError(error); }
+        }
+        await sleep(pollIntervalMs, signal);
       } catch (error) {
-        onError(error);
-        await sleep(Math.min(30000, pollIntervalMs * 2), signal);
+        if (!signal.aborted) {
+          try { onError(error); } catch { /* allow worker to retry */ }
+          await sleep(Math.min(30000, pollIntervalMs * 2), signal);
+        }
       }
     }
+    // Wait for aborted in-flight requests to settle before returning to systemd.
+    await Promise.allSettled([...activeJobs]);
   }
 
   function stop() {
@@ -207,5 +244,5 @@ export function createAgentWorker(options = {}) {
     internalController.abort();
   }
 
-  return { start, stop, pollOnce, runIdleOnce, sendMessage, listReactionMessages, voteOnMessage, workerId, agent };
+  return { start, stop, pollOnce, runIdleOnce, sendMessage, listReactionMessages, voteOnMessage, workerId, agent, maxConcurrency };
 }

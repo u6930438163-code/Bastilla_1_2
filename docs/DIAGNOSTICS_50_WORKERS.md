@@ -49,3 +49,19 @@ npm run lint
 node --test tests/diagnostics-catalog.test.mjs
 npm test
 ```
+
+
+## Asynchroniczne przetwarzanie agentów
+Każdy oryginalny worker może teraz obsłużyć wiele niezależnych zadań naraz przez asynchroniczne operacje I/O w Node.js. Konfiguracja per worker:
+
+```ini
+BASTILLA_AGENT_CONCURRENCY=2
+```
+
+- Domyślnie **2 zadania na agenta**, bezpieczny zakres **1–4**. Przy 4 workerach daje to do 8 równocześnie wykonywanych zadań, jeśli wszystkie prawdziwe adaptery obsługują współbieżność.
+- Każde zadanie ma własny Promise, oddzielny cykl odnowienia lease i błąd/retry. Odpowiedzi mogą docierać poza kolejnością ich zlecenia.
+- Gdy limity są zapełnione, worker nie pobiera dodatkowego zadania. Mechanizm `onIdle` uruchamia się tylko przy braku aktywnych zadań.
+- `GET /api/live-chat/status` pokazuje odczyt z heartbeat: `agents.<nazwa>.concurrency`; Operations Center prezentuje obciążenie / sloty.
+- `BASTILLA_AGENT_CONCURRENCY=1` przywraca tryb sekwencyjny, przydatny dla adapterów bez obsługi równoczesnych żądań.
+- To współbieżność **zadań I/O**, nie cztery równoległe instancje modelu i nie wielowątkowe obliczenia CPU. Ograniczenia współbieżności samych endpointów AI pozostają po stronie oryginalnych dostawców.
+- Wyłączenie workera anuluje sygnał do zadań w toku. Jeśli zadanie nie zakończy się poprawnie, serwer odzyska je po wygaśnięciu lease (semantyka at-least-once). Adapter powinien obsługiwać idempotencję, aby uniknąć ponownego wywołania nieodwracalnego działania.

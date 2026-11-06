@@ -100,7 +100,9 @@ export function createLiveChatRouter(options = {}) {
     try {
       const agent = req.agentIdentity;
       const workerId = String(req.get('X-Worker-Id') || agent).slice(0, 128);
-      const heartbeat = await store.heartbeat(agent, workerId);
+      const concurrency = Number.isInteger(req.body?.concurrency) && req.body.concurrency >= 1 && req.body.concurrency <= 4
+        ? req.body.concurrency : 1;
+      const heartbeat = await store.heartbeat(agent, workerId, concurrency);
       return res.json({ success: true, agent, lastSeen: heartbeat.lastSeen });
     } catch (error) {
       return res.status(errorStatus(error)).json({ error: error?.code || 'Heartbeat failed' });

@@ -20,6 +20,7 @@ const worker = createAgentWorker({
   agent,
   token: process.env.BASTILLA_LIVE_CHAT_WORKER_TOKEN || '',
   runAgent: adapter.runAgent,
+  maxConcurrency: Number(process.env.BASTILLA_AGENT_CONCURRENCY || 2),
   onIdle: async (context) => {
     // Read-only agent diagnostics are distinct from original agent's autonomous LLM actions.
     await diagnosticOnIdle(context);
@@ -30,5 +31,5 @@ const worker = createAgentWorker({
 
 process.once('SIGINT', () => worker.stop());
 process.once('SIGTERM', () => worker.stop());
-console.log('[LIVE CHAT WORKER] Starting authenticated worker for ' + agent);
+console.log('[LIVE CHAT WORKER] Starting authenticated worker for ' + agent + ' (concurrency ' + worker.maxConcurrency + ')');
 await worker.start();

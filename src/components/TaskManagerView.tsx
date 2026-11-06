@@ -26,7 +26,7 @@ type OllamaReport = {
   note?: string;
   checkedAt?: string;
 };
-type WorkerStatus = { agents?: Record<string, { status?: string; queued?: number; running?: number; lastSeen?: string | null }>; queue?: { queued?: number; running?: number; failed?: number } };
+type WorkerStatus = { agents?: Record<string, { status?: string; queued?: number; running?: number; concurrency?: number | null; lastSeen?: string | null }>; queue?: { queued?: number; running?: number; failed?: number } };
 type ManagerProps = { initialSection?: ManagerSection; onPrepareMainChat: (text: string, agent: AgentName) => void };
 
 const AGENTS: AgentName[] = ['Aria', 'Alex', 'Astyria', 'Aurelius'];
@@ -262,7 +262,7 @@ export function TaskManagerView({ initialSection = 'processes', onPrepareMainCha
                   <span className={worker?.status === 'online' ? 'text-emerald-300' : 'text-amber-300'}>
                     {worker ? (worker.status === 'online' ? 'ONLINE' : 'OFFLINE') : 'BRAK DANYCH'}
                   </span>
-                  <small>kolejka {worker?.queued ?? '—'} · wykonuje {worker?.running ?? '—'}</small>
+                  <small>kolejka {worker?.queued ?? '—'} · wykonuje {worker?.running ?? '—'} / {worker?.concurrency ?? '—'} sloty</small>
                 </div>;
               })}
             </div>
