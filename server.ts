@@ -172,6 +172,8 @@ const POLLINATIONS_API_KEY = rawEnvPollKey.startsWith('sk_')
 const app = express();
 const liveChatAuth = createLiveChatSessionAuth({
   password: process.env.BASTILLA_LIVE_CHAT_USER_PASSWORD || '',
+  setupToken: process.env.BASTILLA_LIVE_CHAT_SETUP_TOKEN || '',
+  credentialsPath: process.env.BASTILLA_LIVE_CHAT_CREDENTIALS_PATH || 'data/live-chat-credentials.json',
   secret: process.env.BASTILLA_LIVE_CHAT_SESSION_SECRET || '',
   allowedOrigin: process.env.BASTILLA_LIVE_CHAT_ALLOWED_ORIGIN || '',
   cookieSecure: (process.env.BASTILLA_LIVE_CHAT_COOKIE_SECURE || 'true').trim().toLowerCase() !== 'false',
