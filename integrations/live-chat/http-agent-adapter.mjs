@@ -57,13 +57,45 @@ function validateResult(data) {
   };
 }
 
+// Only explicit decisions returned by the ORIGINAL authenticated agent may vote.
+// Votes are always submitted using its verified worker identity and known message keys.
+async function reactionContext(context) {
+  if (typeof context.listReactionMessages !== 'function') return [];
+  try {
+    const messages = await context.listReactionMessages({ signal: context.signal });
+    return messages.slice(-20).map(({ messageKey, kind, author, preview, votes }) => ({
+      messageKey, kind, author, preview, votes,
+    }));
+  } catch {
+    return []; // Reactions are optional, never block the original message flow.
+  }
+}
+
+async function applyExplicitReactions(data, context) {
+  if (!Array.isArray(data?.reactions) || typeof context.voteOnMessage !== 'function') return;
+  for (const choice of data.reactions.slice(0, 5)) {
+    if (!choice || typeof choice.messageKey !== 'string' ||
+        !['up', 'down'].includes(choice.vote)) continue;
+    try {
+      await context.voteOnMessage(choice.messageKey, choice.vote, { signal: context.signal });
+    } catch (error) {
+      // Missing/stale keys or a disconnected server must not suppress the agent reply.
+      console.warn('[ORIGINAL WORKER REACTION] Not saved:', String(error?.message || error).slice(0, 150));
+    }
+  }
+}
+
 export async function runAgent(job, context = {}) {
-  const response = await callOriginalAgent({ mode: 'task', job }, context);
-  return validateResult(response.data);
+  const reactionMessages = await reactionContext(context);
+  const response = await callOriginalAgent({ mode: 'task', job, reactionMessages }, context);
+  const answer = validateResult(response.data);
+  await applyExplicitReactions(response.data, context);
+  return answer;
 }
 
 export async function onIdle(context = {}) {
-  const response = await callOriginalAgent({ mode: 'idle' }, context);
+  const reactionMessages = await reactionContext(context);
+  const response = await callOriginalAgent({ mode: 'idle', reactionMessages }, context);
   if (response.status === 204 || !response.data || typeof response.data.text !== 'string' || !response.data.text.trim()) {
     return false;
   }
@@ -72,5 +104,6 @@ export async function onIdle(context = {}) {
     channel: response.data.channel || 'Wszyscy',
     ...(result.to ? { to: result.to } : {}),
   });
+  await applyExplicitReactions(response.data, context);
   return true;
 }
