@@ -386,3 +386,21 @@ input, select, textarea {
   .bastilla-terminal-console {flex:1;min-height:0}
   .bastilla-terminal-footer span:last-child {display:none}
 }
+
+/* Compact, honest global sync indicator on every non-terminal screen. */
+.bastilla-workspace-sync-strip {
+  flex-shrink:0;display:flex;align-items:center;gap:8px;padding:6px 14px;
+  background:#071e2c;border-bottom:1px solid #155e75;color:#a5edff;
+  font-size:10px;letter-spacing:.025em;min-height:29px;
+}
+.bastilla-workspace-sync-dot {flex:0 0 auto;width:7px;height:7px;border-radius:50%;background:#fbbf24;}
+.bastilla-workspace-sync-dot.is-live {background:#34d399;box-shadow:0 0 9px #34d39990;}
+.bastilla-workspace-sync-detail {min-width:0;color:#92afbe;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.bastilla-workspace-sync-strip button {
+  margin-left:auto;color:#67e8f9;font-size:10px;flex-shrink:0;
+  cursor:pointer;text-decoration:underline;text-underline-offset:3px;
+}
+@media (max-width:640px) {
+  .bastilla-workspace-sync-strip {padding:5px 10px;gap:6px;}
+  .bastilla-workspace-sync-detail {display:none;}
+}
