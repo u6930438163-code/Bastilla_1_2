@@ -16,13 +16,15 @@ export function createChatReactionsRouter({ store, getHistory, getLiveHistory = 
   const respondVote = async (req, res, actor) => {
     const key = req.body?.messageKey;
     const vote = req.body?.vote;
-    if (typeof key !== 'string' || (vote !== 'up' && vote !== 'down' && vote !== null)) {
+    const mode = req.body?.mode;
+    if (typeof key !== 'string' || (vote !== 'up' && vote !== 'down' && vote !== null) ||
+        (mode !== undefined && mode !== 'set')) {
       return res.status(400).json({ error: 'Podaj messageKey oraz vote: up, down lub null.' });
     }
     try {
       const { keys, liveKeys } = await messages();
       if (!keys.includes(key) && !liveKeys.includes(key)) return res.status(404).json({ error: 'Wiadomość nie istnieje w aktualnej historii czatu.' });
-      const result = store.vote(key, actor, vote);
+      const result = mode === 'set' ? store.setVote(key, actor, vote) : store.vote(key, actor, vote);
       notify();
       return res.json({ success: true, messageKey: key, ...result });
     } catch (error) {
