@@ -8,6 +8,7 @@ import { WorkspaceCommandCenter } from './WorkspaceCommandCenter';
 import { ChatAvatar, ChatReactionBar, type ChatVotes } from './ChatReactionBar';
 import { chatReactionKeys, liveReactionKey } from '../lib/chatReactionKeys.mjs';
 import { loadPendingReactionVotes, mergePendingReactionVotes, nextOperatorReaction } from '../lib/chatReactionFallback.mjs';
+import { draftAgentTarget } from '../lib/workChatRouting.mjs';
 import { LiveWorkspaceSession } from './LiveWorkspaceSession';
 import {
   ASTYRIA_MISSION_ACTIONS,
@@ -325,11 +326,8 @@ export const AgentCommsView: React.FC<AgentCommsViewProps> = ({
     const prompt = text.slice(0, 20_500);
     // Diagnosis cards can explicitly name an agent. Select the actual chat channel
     // as well; merely prefixing a message would still send it to the wrong agent.
-    const route = /^Do agenta (Aria|Alex|Astyria|Aurelius):(?:\\s|$)/.exec(prompt);
-    if (route) {
-      const chosen = route[1] === 'Aria' ? 'si_1' : route[1] as 'Alex' | 'Astyria' | 'Aurelius';
-      setSelectedTarget(chosen);
-    }
+    const chosen = draftAgentTarget(prompt);
+    if (chosen) setSelectedTarget(chosen as 'si_1' | 'Alex' | 'Astyria' | 'Aurelius');
     setMessageText(prompt);
     setWorkNotice('Polecenie przygotowane. Możesz je edytować i wysłać do wybranego agenta.');
     window.requestAnimationFrame(() => chatInputRef.current?.focus());
