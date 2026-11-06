@@ -102,13 +102,33 @@ test('LibreChat bridge uses only existing authenticated Bastilla worker response
   assert.equal(result.choices[0].message.content, 'Real worker response from test backend');
   assert.equal(queued, true);
 
+  const streamed = await fetch(base + '/v1/chat/completions', {
+    ...options,
+    body: JSON.stringify({ model: 'Aria', stream: true, messages: [{ role: 'user', content: 'Hello original Aria' }] }),
+  });
+  assert.equal(streamed.status, 200);
+  assert.match(streamed.headers.get('content-type') || '', /text\/event-stream/);
+  const events = (await streamed.text()).trim().split(/\n\n/)
+    .filter(line => line.startsWith('data: ')).map(line => line.slice(6));
+  assert.equal(events.at(-1), '[DONE]');
+  const firstChunk = JSON.parse(events[0]);
+  assert.equal(firstChunk.object, 'chat.completion.chunk');
+  assert.equal(firstChunk.model, 'Aria');
+  assert.equal(firstChunk.choices[0].delta.content, 'Real worker response from test backend');
+  assert.equal(JSON.parse(events[1]).choices[0].finish_reason, 'stop');
+
+  const invalid = await fetch(base + '/v1/chat/completions', {
+    ...options, body: JSON.stringify({ model: 'Aria', stream: 'true', messages: [{ role: 'user', content: 'hi' }] }),
+  });
+  assert.equal(invalid.status, 400);
+  const unsupportedTools = await fetch(base + '/v1/chat/completions', {
+    ...options, body: JSON.stringify({ model: 'Aria', tools: [{ type: 'function' }],
+      messages: [{ role: 'user', content: 'Hello original Aria' }] }),
+  });
+  assert.equal(unsupportedTools.status, 400);
+
   originalOnline = false;
   const offline = await fetch(base + '/v1/chat/completions', options);
   assert.equal(offline.status, 503);
   assert.match((await offline.json()).error.message, /offline/);
-
-  const invalid = await fetch(base + '/v1/chat/completions', {
-    ...options, body: JSON.stringify({ model: 'Aria', stream: true, messages: [{ role: 'user', content: 'hi' }] }),
-  });
-  assert.equal(invalid.status, 400);
 });
