@@ -116,17 +116,17 @@ export const AgentCommsView: React.FC<AgentCommsViewProps> = ({
     }
     setTerminalCardCommand(command);
     setTerminalCardStatus('running');
-    setTerminalCardEntries(old => [...old, { type: 'input', text: '$ ' + command, time: new Date().toLocaleTimeString('pl-PL') }].slice(-100));
+    setTerminalCardEntries(old => [...old, { type: 'input' as const, text: '$ ' + command, time: new Date().toLocaleTimeString('pl-PL') }].slice(-100));
     try {
       const response = await onRunKernelCommand(command);
       if (!response || typeof response.output !== 'string') throw new Error('Serwer nie zwrócił wyniku polecenia.');
       setTerminalCardEntries(old => [...old, {
-        type: 'output', text: response.output, time: new Date().toLocaleTimeString('pl-PL'),
+        type: 'output' as const, text: response.output, time: new Date().toLocaleTimeString('pl-PL'),
       }].slice(-100));
       setTerminalCardStatus('success');
     } catch (cause) {
       setTerminalCardEntries(old => [...old, {
-        type: 'error', text: cause instanceof Error ? cause.message : 'Błąd backendu terminala.',
+        type: 'error' as const, text: cause instanceof Error ? cause.message : 'Błąd backendu terminala.',
         time: new Date().toLocaleTimeString('pl-PL'),
       }].slice(-100));
       setTerminalCardStatus('error');
