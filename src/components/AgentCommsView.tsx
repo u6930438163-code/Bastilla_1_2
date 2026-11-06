@@ -652,7 +652,7 @@ export const AgentCommsView: React.FC<AgentCommsViewProps> = ({
             type="button"
             onClick={() => {
               setSentImageHistory([]);
-              setMessageReactions({});
+              setReactionVotes({});
               try { localStorage.removeItem(REACTION_STORAGE_KEY); } catch {}
               onClearHistory();
             }}
