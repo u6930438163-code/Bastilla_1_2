@@ -147,13 +147,14 @@ const LLM_CHAIN_CONFIG: LlmChainConfig = {
   ollamaNumPredict: Number(process.env.OLLAMA_NUM_PREDICT) || 0,
   ollamaNumThread: Number(process.env.OLLAMA_NUM_THREAD) || os.cpus().length,
   // OpenAI is opt-in via a separate secret. When present it takes priority for API chat.
-  providers: (process.env.LLM_PROVIDERS || (OPENAI_CHAT_API_KEY ? 'openai,gemini,ollama,xai' : (realKey(GEMINI_API_KEY) ? 'gemini,ollama,xai' : 'ollama')))
+  // Bastilla chat is strictly OpenAI + Ollama. Ignore legacy Gemini/xAI env entries.
+  providers: (process.env.LLM_PROVIDERS || 'openai,ollama')
     .split(',')
     .map((name) => name.trim().toLowerCase())
-    .filter((name): name is 'gemini' | 'xai' | 'openai' | 'ollama' => name === 'gemini' || name === 'xai' || name === 'openai' || name === 'ollama'),
+    .filter((name): name is 'openai' | 'ollama' => name === 'openai' || name === 'ollama'),
 };
 // Awaryjny silnik without_nlp, gdy modele zawiodą — domyślnie wyłączony (CHAT_LOCAL_FALLBACK=on włącza).
-const CHAT_LOCAL_FALLBACK = /^(1|on|true|yes|tak)$/i.test((process.env.CHAT_LOCAL_FALLBACK || 'off').trim());
+const CHAT_LOCAL_FALLBACK = /^(1|on|true|yes|tak)$/i.test((process.env.CHAT_LOCAL_FALLBACK || 'on').trim());
 // Stare API chmurowe (OpenRouter, Groq/xAI w konsoli HyperOS) działają tylko, gdy LLM_PROVIDERS zawiera gemini lub xai.
 const CLOUD_LLM_ENABLED = (LLM_CHAIN_CONFIG.providers ?? []).some((name: string) => name === 'gemini' || name === 'xai' || name === 'openai');
 const usesOllama = () => configuredProviders(LLM_CHAIN_CONFIG).includes('ollama');
