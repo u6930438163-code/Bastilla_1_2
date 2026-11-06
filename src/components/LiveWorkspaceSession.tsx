@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { CheckCircle2, KeyRound, LoaderCircle, LockKeyhole, LogOut, RefreshCw, ShieldAlert, X } from 'lucide-react';
 
-type SessionState = 'loading' | 'authenticated' | 'unauthenticated' | 'unconfigured' | 'error';
+type SessionState = 'loading' | 'authenticated' | 'unauthenticated' | 'setup' | 'unconfigured' | 'error';
 type AgentHealth = { status?: 'online' | 'offline'; queued?: number; running?: number; lastSeen?: string | null };
 type LiveHealth = { agents?: Record<string, AgentHealth>; queue?: { queued?: number; running?: number; failed?: number } };
 
@@ -9,6 +9,10 @@ export function LiveWorkspaceSession({ onChange }: { onChange: (authenticated: b
   const [sessionState, setSessionState] = useState<SessionState>('loading');
   const [open, setOpen] = useState(false);
   const [password, setPassword] = useState('');
+  const [setupCode, setSetupCode] = useState('');
+  const [newPassword, setNewPassword] = useState('');
+  const [repeatPassword, setRepeatPassword] = useState('');
+  const autoOpened = React.useRef(false);
   const [pending, setPending] = useState(false);
   const [notice, setNotice] = useState('');
   const [health, setHealth] = useState<LiveHealth | null>(null);
@@ -21,7 +25,17 @@ export function LiveWorkspaceSession({ onChange }: { onChange: (authenticated: b
         const status = await fetch('/api/live-chat/status', { credentials: 'same-origin', cache: 'no-store' });
         setHealth(status.ok ? await status.json() as LiveHealth : null);
       } else {
-        setSessionState(response.status === 401 ? 'unauthenticated' : response.status === 503 ? 'unconfigured' : 'error');
+        if (response.status === 503) {
+          const setupResponse = await fetch('/api/live-chat/setup', { credentials: 'same-origin', cache: 'no-store' });
+          const setup = setupResponse.ok ? await setupResponse.json() as { setupRequired?: boolean } : null;
+          setSessionState(setup?.setupRequired ? 'setup' : 'unconfigured');
+          if (setup?.setupRequired && !autoOpened.current) {
+            autoOpened.current = true;
+            setOpen(true);
+          }
+        } else {
+          setSessionState(response.status === 401 ? 'unauthenticated' : 'error');
+        }
         onChange(false);
         setHealth(null);
       }
@@ -61,6 +75,48 @@ export function LiveWorkspaceSession({ onChange }: { onChange: (authenticated: b
     } catch { setPassword(''); setNotice('Błąd połączenia z serwerem.'); }
     finally { setPending(false); }
   };
+  const enroll = async (event: React.FormEvent) => {
+    event.preventDefault();
+    if (pending) return;
+    if (newPassword.length < 16 || newPassword.length > 512) {
+      setNotice('Nowe hasło musi mieć od 16 do 512 znaków.');
+      return;
+    }
+    if (newPassword !== repeatPassword) {
+      setNotice('Hasła nie są identyczne.');
+      return;
+    }
+    if (!setupCode) { setNotice('Wpisz jednorazowy kod aktywacyjny z sekretów serwera.'); return; }
+    setPending(true);
+    setNotice('');
+    try {
+      const response = await fetch('/api/live-chat/setup', {
+        method: 'POST', credentials: 'same-origin',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ token: setupCode, password: newPassword }),
+      });
+      setSetupCode('');
+      setNewPassword('');
+      setRepeatPassword('');
+      if (!response.ok) {
+        const result = await response.json().catch(() => ({})) as { error?: string };
+        setNotice(response.status === 401 ? 'Nieprawidłowy jednorazowy kod aktywacyjny.' :
+          response.status === 429 ? 'Zbyt wiele prób. Spróbuj później.' :
+          response.status === 409 ? 'Hasło operatora zostało już ustawione. Odśwież sesję.' :
+          response.status === 400 ? 'Nieprawidłowe hasło. Użyj 16–512 znaków.' :
+          'Nie udało się zapisać hasła. Sprawdź konfigurację i trwały dysk serwera.');
+        return;
+      }
+      setNotice('Hasło operatora ustawione. Sesja LIVE została uwierzytelniona.');
+      await check();
+      window.dispatchEvent(new Event('bastilla:live-chat-auth'));
+    } catch {
+      setSetupCode('');
+      setNewPassword('');
+      setRepeatPassword('');
+      setNotice('Nie można połączyć się z serwerem LIVE.');
+    } finally { setPending(false); }
+  };
   const logout = async () => {
     if (pending) return;
     setPending(true);
@@ -86,6 +142,7 @@ export function LiveWorkspaceSession({ onChange }: { onChange: (authenticated: b
         <span className="min-w-0 flex-1 truncate text-[10px] font-semibold text-slate-300">
           {sessionState === 'authenticated' ? 'Sesja LIVE · oryginalni agenci: ' + onlineCount + '/' + Math.max(4, healthEntries.length) + ' online' :
             sessionState === 'loading' ? 'Sprawdzanie sesji agentów…' :
+            sessionState === 'setup' ? 'LIVE · pierwsze ustawienie hasła' :
             sessionState === 'unconfigured' ? 'LIVE wymaga konfiguracji serwera' :
             sessionState === 'unauthenticated' ? 'LIVE wyłączony · zwykły czat jest dostępny' : 'Sesja LIVE niedostępna'}
         </span>
@@ -114,8 +171,27 @@ export function LiveWorkspaceSession({ onChange }: { onChange: (authenticated: b
             <button type="button" onClick={() => void check()} className="flex items-center gap-1 rounded border border-slate-700 px-2 py-1.5 text-cyan-200"><RefreshCw className="h-3 w-3"/> Odśwież</button>
             <button type="button" onClick={() => void logout()} disabled={pending} className="flex items-center gap-1 rounded border border-rose-800 px-2 py-1.5 text-rose-200 disabled:opacity-40"><LogOut className="h-3 w-3"/> Wyloguj</button>
           </div>
-        </> : sessionState === 'unconfigured' ?
-          <p className="flex items-start gap-2 text-amber-300"><ShieldAlert className="h-4 w-4 shrink-0"/> Serwer nie ma skonfigurowanego bezpiecznego uwierzytelniania LIVE. Ustaw zmienne środowiskowe zgodnie z dokumentacją, bez wpisywania sekretów w czacie.</p> :
+        </> : sessionState === 'setup' ?
+          <form onSubmit={(event) => void enroll(event)} className="grid gap-2" autoComplete="off">
+            <p className="text-cyan-100 font-semibold">Pierwsze uruchomienie — ustaw własne hasło operatora</p>
+            <p className="text-[11px] text-slate-400">Właściciel: ustaw jednorazowy sekret BASTILLA_LIVE_CHAT_SETUP_TOKEN na serwerze (minimum 32 losowe znaki). Nie wpisuj go w rozmowie ani w kodzie repozytorium.</p>
+            <input type="password" aria-label="Jednorazowy kod aktywacyjny właściciela" autoComplete="off" value={setupCode} onChange={event => setSetupCode(event.target.value)} maxLength={512}
+              className="min-w-0 w-full rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-[16px] text-white focus:border-cyan-400" placeholder="Jednorazowy kod aktywacyjny" />
+            <input type="password" aria-label="Nowe hasło operatora" autoComplete="new-password" value={newPassword} onChange={event => setNewPassword(event.target.value)} maxLength={512}
+              className="min-w-0 w-full rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-[16px] text-white focus:border-cyan-400" placeholder="Nowe hasło (minimum 16 znaków)" />
+            <input type="password" aria-label="Powtórz nowe hasło operatora" autoComplete="new-password" value={repeatPassword} onChange={event => setRepeatPassword(event.target.value)} maxLength={512}
+              className="min-w-0 w-full rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-[16px] text-white focus:border-cyan-400" placeholder="Powtórz hasło" />
+            <button type="submit" disabled={pending || !setupCode || newPassword.length < 16 || !repeatPassword}
+              className="rounded-lg bg-cyan-700 px-3 py-2 text-sm font-semibold text-white disabled:opacity-40">
+              {pending ? 'Zapisywanie…' : 'Ustaw hasło i połącz LIVE'}
+            </button>
+          </form> : sessionState === 'unconfigured' ?
+          <p className="flex items-start gap-2 text-amber-300"><ShieldAlert className="h-4 w-4 shrink-0"/> LIVE nie jest jeszcze skonfigurowany. Serwer potrzebuje BASTILLA_LIVE_CHAT_ALLOWED_ORIGIN, BASTILLA_LIVE_CHAT_SESSION_SECRET oraz dotychczasowego hasła lub kodu BASTILLA_LIVE_CHAT_SETUP_TOKEN. Sekretów nie wpisuj w czacie.</p> :
+          sessionState === 'error' ?
+          <div className="grid gap-2">
+            <p role="alert" className="text-amber-300">Nie można sprawdzić sesji LIVE. Sprawdź dostępność API i logi serwera.</p>
+            <button type="button" onClick={() => void check()} className="rounded-lg border border-slate-700 px-3 py-2 text-cyan-200">Sprawdź ponownie</button>
+          </div> :
           <form onSubmit={(event) => void login(event)} className="flex flex-wrap items-center gap-2">
             <input type="password" aria-label="Hasło operatora Bastilla LIVE" autoComplete="current-password"
               value={password} onChange={(event) => setPassword(event.target.value)} maxLength={512}
