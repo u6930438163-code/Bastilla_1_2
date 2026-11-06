@@ -69,6 +69,7 @@ interface AgentCommsViewProps {
 const TWO_WAY_STORAGE_KEY = 'bastilla_two_way_chat_enabled';
 const FREEDOM_STORAGE_KEY = 'bastilla_ai_freedom_enabled';
 const PROVIDER_MODE_STORAGE_KEY = 'bastilla_chat_provider_mode_v1';
+const LIVE_TRANSPORT_STORAGE_KEY = 'bastilla_chat_live_transport_v1';
 const REACTION_STORAGE_KEY = 'bastilla_chat_message_reactions_v1';
 type LiveChatEvent = { id: string; type: string; channel: string; sender: string; text: string; at: string };
 function validLiveEvent(value: unknown): value is LiveChatEvent {
@@ -137,7 +138,12 @@ export const AgentCommsView: React.FC<AgentCommsViewProps> = ({
   const [quickResult, setQuickResult] = useState<{ title: string; lines: string[]; at: string; failed?: boolean; reply?: string } | null>(null);
   const handledDraftRef = useRef<number | null>(null);
   const [liveAuthenticated, setLiveAuthenticated] = useState(false);
-  const [liveMode, setLiveMode] = useState(true);
+  // Prefer the existing real-agent LIVE transport for authenticated sessions.
+  // An explicit choice of the model transport survives app reloads.
+  const [liveMode, setLiveMode] = useState<boolean>(() => {
+    try { return localStorage.getItem(LIVE_TRANSPORT_STORAGE_KEY) !== 'false'; }
+    catch { return true; }
+  });
   const [providerMode, setProviderMode] = useState<'api' | 'ollama'>(() => {
     try { return localStorage.getItem(PROVIDER_MODE_STORAGE_KEY) === 'ollama' ? 'ollama' : 'api'; }
     catch { return 'api'; }
@@ -146,6 +152,9 @@ export const AgentCommsView: React.FC<AgentCommsViewProps> = ({
   useEffect(() => {
     try { localStorage.setItem(PROVIDER_MODE_STORAGE_KEY, providerMode); } catch {}
   }, [providerMode]);
+  useEffect(() => {
+    try { localStorage.setItem(LIVE_TRANSPORT_STORAGE_KEY, String(liveMode)); } catch {}
+  }, [liveMode]);
   const [liveBusy, setLiveBusy] = useState(false);
   const [liveEvents, setLiveEvents] = useState<LiveChatEvent[]>([]);
 
