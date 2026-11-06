@@ -683,7 +683,6 @@ export default function App() {
               onNavigate={setActiveTab}
               onSendMessage={handleSendMessage}
               onTriggerFreeVoice={handleTriggerFreeVoice}
-              preparedDraft={preparedChatDraft}
               onExecutePythonCommand={handleExecutePythonCommand}
             />
           )}
@@ -699,6 +698,7 @@ export default function App() {
               onClearHistory={handleClearHistory}
               onForceSync={handleForceSync}
               onTriggerFreeVoice={handleTriggerFreeVoice}
+              preparedDraft={preparedChatDraft}
             />
           )}
 
