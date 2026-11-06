@@ -7,7 +7,8 @@ const mockResponse = (status, body) => new Response(JSON.stringify(body), {
   status, headers: { 'Content-Type': 'application/json' },
 });
 const allConfigured = {
-  providers: ['gemini', 'ollama', 'xai'],
+  providers: ['gemini', 'ollama', 'xai', 'openai'],
+  openaiChatApiKey: 'test-openai',
   geminiApiKey: 'test-g',
   geminiModel: 'test-gemini',
   xaiApiKey: 'test-x',
@@ -19,8 +20,8 @@ const input = { system: 'System', history: [], message: 'Hello' };
 
 test('operator API mode never selects an Ollama provider', () => {
   const selected = selectChatProviderConfig(allConfigured, 'api');
-  assert.deepEqual(configuredProviders(selected), ['gemini', 'xai']);
-  assert.deepEqual(allConfigured.providers, ['gemini', 'ollama', 'xai'], 'source config stays unchanged');
+  assert.deepEqual(configuredProviders(selected), ['openai']);
+  assert.deepEqual(allConfigured.providers, ['gemini', 'ollama', 'xai', 'openai'], 'source config stays unchanged');
 });
 
 test('operator Ollama mode never selects API providers', () => {
