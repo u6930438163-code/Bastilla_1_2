@@ -6,7 +6,7 @@ Target: u6930438163-code/Bastilla_1_2. The integration is additive: no existing 
 
 Official LibreChat (a separate Docker stack) -> internal OpenAI-compatible adapter -> authenticated Bastilla LIVE API -> the REAL original Aria, Alex, Astyria and Aurelius workers.
 
-The LibreChat endpoint is named "Bastilla Agents", with four model names. The names select existing queues; they do not create replacement AI models. If the original worker has no fresh authenticated heartbeat, the adapter returns HTTP 503. It waits up to 90 seconds for a real worker response, then returns a timeout. A queued job can still finish in Bastilla later. Only the most recent plain-text user message is forwarded; the bridge does not support streaming, file attachments or tool calls. LibreChat's own history is separate from Bastilla's original chat history. The existing worker transport still supports agent-to-agent messages.
+The LibreChat endpoint is named "Bastilla Agents", with four model names. The names select existing queues; they do not create replacement AI models. If the original worker has no fresh authenticated heartbeat, the adapter returns HTTP 503. It waits up to 90 seconds for a real worker response, then returns a timeout. A queued job can still finish in Bastilla later. Only the most recent plain-text user message is forwarded; the bridge supports OpenAI-compatible SSE responses (one complete text chunk after the original worker finishes), not token-by-token worker streaming. File attachments, tool calls and function execution are NOT supported. LibreChat's own history is separate from Bastilla's original chat history. The existing worker transport still supports agent-to-agent messages.
 
 ## Requirements
 
@@ -38,6 +38,6 @@ Security: The gateway listens only inside the Compose network (no published host
 
 ## Verification limits
 
-A mock API contract test can confirm request/response handling, but NOT actual worker connectivity. A live installation must independently verify Docker startup, HTTPS/authentication, worker heartbeats, real reply text, mobile access and security controls. Merely committing files to GitHub does not launch services.
+A mock API contract test can confirm request/response handling, but NOT actual worker connectivity. A live installation must independently verify Docker startup, HTTPS/authentication, worker heartbeats, streaming-envelope compatibility with LibreChat, real reply text, mobile access and security controls. The CI unit test checks SSE formatting against a mock HTTP server, NOT real runtime tokens or model responses. Merely committing files to GitHub does not launch services.
 
 Official references: https://github.com/LibreChat-AI/LibreChat ; https://www.librechat.ai/docs/local/docker ; https://www.librechat.ai/docs/configuration/librechat_yaml
