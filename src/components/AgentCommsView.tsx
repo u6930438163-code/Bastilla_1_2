@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { DataStore, OPERATOR_NAME } from '../kernel/svlKernel';
 import { SYSTEM_AGENTS, AgentProfile } from '../kernel/agents';
-import { Sparkles, ShieldCheck, RefreshCw, Image as ImageIcon, FileText, MessagesSquare, Paperclip, Send, X, SlidersHorizontal, Maximize2, Minimize2, BarChart3, Clapperboard, Code2, Copy } from 'lucide-react';
+import { Sparkles, ShieldCheck, RefreshCw, Image as ImageIcon, FileText, MessagesSquare, Paperclip, Send, X, SlidersHorizontal, Maximize2, Minimize2, BarChart3, Clapperboard, Code2, Copy, Download, Reply, ThumbsDown, ThumbsUp } from 'lucide-react';
 import { WorkChatMessage, WorkChatDemo } from './WorkChatMessage';
 import { TerminalWorkCard, type TerminalCardEntry, type TerminalCardStatus } from './TerminalWorkCard';
 import { WorkspaceCommandCenter } from './WorkspaceCommandCenter';
@@ -61,6 +61,7 @@ interface AgentCommsViewProps {
 }
 
 const TWO_WAY_STORAGE_KEY = 'bastilla_two_way_chat_enabled';
+const REACTION_STORAGE_KEY = 'bastilla_chat_message_reactions_v1';
 
 export const AgentCommsView: React.FC<AgentCommsViewProps> = ({
   dataStore,
@@ -94,6 +95,14 @@ export const AgentCommsView: React.FC<AgentCommsViewProps> = ({
   const [terminalCardStatus, setTerminalCardStatus] = useState<TerminalCardStatus>('idle');
   const [terminalCardEntries, setTerminalCardEntries] = useState<TerminalCardEntry[]>([]);
   const [workNotice, setWorkNotice] = useState<string | null>(null);
+  const [messageReactions, setMessageReactions] = useState<Record<string, 'up' | 'down'>>(() => {
+    try {
+      const raw = localStorage.getItem(REACTION_STORAGE_KEY);
+      const stored: unknown = raw ? JSON.parse(raw) : {};
+      if (!stored || typeof stored !== 'object' || Array.isArray(stored)) return {};
+      return Object.fromEntries(Object.entries(stored).filter(([, value]) => value === 'up' || value === 'down')) as Record<string, 'up' | 'down'>;
+    } catch { return {}; }
+  });
   const [isFullViewport, setIsFullViewport] = useState(false);
   const [twoWayEnabled, setTwoWayEnabled] = useState<boolean>(() => {
     try {
@@ -137,6 +146,29 @@ export const AgentCommsView: React.FC<AgentCommsViewProps> = ({
       }].slice(-100));
       setTerminalCardStatus('error');
     }
+  };
+
+  const setReaction = (key: string, value: 'up' | 'down') => {
+    setMessageReactions((current) => {
+      const next = { ...current };
+      if (next[key] === value) delete next[key];
+      else next[key] = value;
+      try { localStorage.setItem(REACTION_STORAGE_KEY, JSON.stringify(next)); } catch {}
+      return next;
+    });
+  };
+
+  const exportConversation = () => {
+    const transcript = dataStore.chat_history.map((message, index) =>
+      String(index + 1) + '. [' + (message.agent === 'si_1' ? 'Aria' : message.agent) + ']\n' + message.tekst
+    ).join('\n\n---\n\n');
+    const url = URL.createObjectURL(new Blob([transcript], { type: 'text/plain;charset=utf-8' }));
+    const anchor = document.createElement('a');
+    anchor.href = url;
+    anchor.download = 'bastilla-czat-' + new Date().toISOString().slice(0, 10) + '.txt';
+    anchor.click();
+    window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+    setWorkNotice('Wyeksportowano historię tekstową czatu na urządzenie.');
   };
 
   const prepareWorkPrompt = (text: string) => {
@@ -461,6 +493,17 @@ export const AgentCommsView: React.FC<AgentCommsViewProps> = ({
             <span className="hidden sm:inline">Narzędzia</span>
           </button>
 
+          <button
+            type="button"
+            onClick={exportConversation}
+            disabled={dataStore.chat_history.length === 0}
+            className="p-1.5 sm:px-2 sm:py-1 rounded-lg bg-slate-950 border border-slate-700 text-cyan-300 text-[11px] flex items-center gap-1 hover:border-cyan-500/50 disabled:opacity-40"
+            title="Zapisz historię rozmowy na urządzeniu"
+            aria-label="Eksportuj historię rozmowy"
+          >
+            <Download className="w-3.5 h-3.5" /><span className="hidden lg:inline">Eksport</span>
+          </button>
+
           {onForceSync && (
             <button
               type="button"
@@ -478,6 +521,8 @@ export const AgentCommsView: React.FC<AgentCommsViewProps> = ({
             type="button"
             onClick={() => {
               setSentImageHistory([]);
+              setMessageReactions({});
+              try { localStorage.removeItem(REACTION_STORAGE_KEY); } catch {}
               onClearHistory();
             }}
             className="p-1.5 sm:px-2 sm:py-1 bg-rose-950/80 hover:bg-rose-900 border border-rose-600/60 text-rose-200 rounded-lg cursor-pointer transition font-bold text-[11px] flex items-center gap-1"
@@ -677,7 +722,31 @@ export const AgentCommsView: React.FC<AgentCommsViewProps> = ({
 
                 {/* Message Body with KaTeX LaTeX formulas and Markdown */}
                 <WorkChatMessage content={msg.tekst} onPrompt={prepareWorkPrompt} onOpenTerminal={onOpenTerminal} />
-                <div className="mt-2 flex items-center justify-end gap-1">
+                <div className="mt-2 flex flex-wrap items-center justify-end gap-1">
+                  {!isOperator && <>
+                    <button type="button" aria-label="Dobra odpowiedź" title="Oceń pozytywnie"
+                      aria-pressed={messageReactions[String(idx) + ':' + msg.agent + ':' + msg.tekst.length] === 'up'}
+                      onClick={() => setReaction(String(idx) + ':' + msg.agent + ':' + msg.tekst.length, 'up')}
+                      className={'rounded-lg p-1.5 hover:bg-emerald-950 ' + (messageReactions[String(idx) + ':' + msg.agent + ':' + msg.tekst.length] === 'up' ? 'text-emerald-300' : 'text-slate-500')}>
+                      <ThumbsUp className="h-3.5 w-3.5" />
+                    </button>
+                    <button type="button" aria-label="Słaba odpowiedź" title="Oceń negatywnie"
+                      aria-pressed={messageReactions[String(idx) + ':' + msg.agent + ':' + msg.tekst.length] === 'down'}
+                      onClick={() => setReaction(String(idx) + ':' + msg.agent + ':' + msg.tekst.length, 'down')}
+                      className={'rounded-lg p-1.5 hover:bg-rose-950 ' + (messageReactions[String(idx) + ':' + msg.agent + ':' + msg.tekst.length] === 'down' ? 'text-rose-300' : 'text-slate-500')}>
+                      <ThumbsDown className="h-3.5 w-3.5" />
+                    </button>
+                    <button type="button" title="Odpowiedz temu agentowi"
+                      className="flex items-center gap-1 rounded-lg px-2 py-1 text-[10px] text-slate-400 hover:bg-slate-800 hover:text-cyan-200"
+                      onClick={() => {
+                        if (msg.agent === 'si_1' || ['Alex', 'Astyria', 'Aurelius'].includes(msg.agent)) {
+                          setSelectedTarget(msg.agent as 'si_1' | 'Alex' | 'Astyria' | 'Aurelius');
+                        }
+                        prepareWorkPrompt('W nawiązaniu do Twojej wiadomości: "' + msg.tekst.slice(0, 500) + '"\\n');
+                      }}>
+                      <Reply className="h-3 w-3"/> Odpowiedz
+                    </button>
+                  </>}
                   <button type="button" className="rounded-lg px-2 py-1 text-[10px] text-slate-400 hover:text-cyan-200 hover:bg-slate-800 flex items-center gap-1"
                     onClick={() => void navigator.clipboard?.writeText(msg.tekst).then(() => setWorkNotice('Skopiowano wiadomość.')).catch(() => setWorkNotice('Nie można skopiować.'))}
                     title="Kopiuj treść wiadomości"><Copy className="w-3 h-3"/> Kopiuj</button>
