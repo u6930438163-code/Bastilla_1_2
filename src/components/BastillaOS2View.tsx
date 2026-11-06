@@ -22,6 +22,7 @@ import { TabId } from './Navigation';
 import { AgentProtocolRequest } from '../kernel/agentProtocol';
 import { ChatAttachment } from '../kernel/chatAttachments';
 import { OllamaModelManager } from './OllamaModelManager';
+import { summarizeFreeVoiceEngines } from '../lib/freeVoiceEngine.mjs';
 
 interface AgentTaskArtifact {
   path: string;
@@ -70,6 +71,7 @@ interface BastillaOS2ViewProps {
     spokenCount: number;
     silentAgents: string[];
     messages: Array<{ agent: string; tekst: string }>;
+    engines?: Record<string, string>;
   }>;
   onExecutePythonCommand?: (command: string) => Promise<any>;
 }
@@ -277,9 +279,11 @@ export const BastillaOS2View: React.FC<BastillaOS2ViewProps> = ({
       const res = await onTriggerFreeVoice(chatAgent);
       if (res.spokenCount > 0) {
         const names = res.messages.map((m) => (m.agent === 'si_1' ? 'Aria' : m.agent)).join(', ');
-        setChatFeedback(`Swobodny głos zabrał(a): ${names}`);
+        const engineInfo = summarizeFreeVoiceEngines(res.engines, res.messages.map(m => m.agent));
+        setChatFeedback(`Swobodny głos: ${names}. Źródło: ${engineInfo || 'niepotwierdzone'}.`);
       } else {
-        setChatFeedback('Agenci skorzystali z prawa do ciszy (brak przymusu odpowiedzi).');
+        const attempted = summarizeFreeVoiceEngines(res.engines, Object.keys(res.engines || {}));
+        setChatFeedback('Brak wypowiedzi. ' + (attempted || 'Źródło niepotwierdzone.'));
       }
     } catch (err) {
       setChatFeedback(err instanceof Error ? err.message : 'Błąd wywołania swobodnego głosu AI.');
