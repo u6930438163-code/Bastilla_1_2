@@ -678,7 +678,6 @@ export default function App() {
               onSendMessage={handleSendMessage}
               onTriggerFreeVoice={handleTriggerFreeVoice}
               onExecutePythonCommand={handleExecutePythonCommand}
-              workspaceLive={workspaceLive}
             />
           )}
 
@@ -734,6 +733,7 @@ export default function App() {
               onUpdateDataStore={setDataStore}
               onSendProtocol={handleSendProtocol}
               onExecutePythonCommand={handleExecutePythonCommand}
+              workspaceLive={workspaceLive}
             />
           )}
 
