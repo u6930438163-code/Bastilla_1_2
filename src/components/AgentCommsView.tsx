@@ -66,6 +66,7 @@ interface AgentCommsViewProps {
 
 const TWO_WAY_STORAGE_KEY = 'bastilla_two_way_chat_enabled';
 const FREEDOM_STORAGE_KEY = 'bastilla_ai_freedom_enabled';
+const PROVIDER_MODE_STORAGE_KEY = 'bastilla_chat_provider_mode_v1';
 const REACTION_STORAGE_KEY = 'bastilla_chat_message_reactions_v1';
 type LiveChatEvent = { id: string; type: string; channel: string; sender: string; text: string; at: string };
 function validLiveEvent(value: unknown): value is LiveChatEvent {
@@ -113,6 +114,14 @@ export const AgentCommsView: React.FC<AgentCommsViewProps> = ({
   const [workNotice, setWorkNotice] = useState<string | null>(null);
   const [liveAuthenticated, setLiveAuthenticated] = useState(false);
   const [liveMode, setLiveMode] = useState(true);
+  const [providerMode, setProviderMode] = useState<'api' | 'ollama'>(() => {
+    try { return localStorage.getItem(PROVIDER_MODE_STORAGE_KEY) === 'ollama' ? 'ollama' : 'api'; }
+    catch { return 'api'; }
+  });
+
+  useEffect(() => {
+    try { localStorage.setItem(PROVIDER_MODE_STORAGE_KEY, providerMode); } catch {}
+  }, [providerMode]);
   const [liveBusy, setLiveBusy] = useState(false);
   const [liveEvents, setLiveEvents] = useState<LiveChatEvent[]>([]);
 
@@ -486,7 +495,7 @@ export const AgentCommsView: React.FC<AgentCommsViewProps> = ({
       return;
     }
     try {
-      await onSendMessage(message, selectedTarget, attachmentsSnapshot, freedomEnabled);
+      await onSendMessage(message, selectedTarget, attachmentsSnapshot, freedomEnabled, providerMode);
       const images = attachmentsSnapshot.filter((attachment) => attachment.mimeType?.startsWith('image/'));
       if (images.length > 0) {
         setSentImageHistory((prev) => [
@@ -1068,126 +1077,97 @@ export const AgentCommsView: React.FC<AgentCommsViewProps> = ({
         <span>{workNotice}</span>
         <button type="button" onClick={() => setWorkNotice(null)} aria-label="Zamknij komunikat" className="p-1 text-slate-300 hover:text-white"><X className="w-3 h-3"/></button>
       </div>}
-      {/* Original main chat composer */}
-      <form onSubmit={handleSendMessage} className="relative w-full shrink-0 border-t border-cyan-500/30 bg-slate-950 px-2.5 py-2 sm:px-4 sm:py-2.5 backdrop-blur-xl">
-        <div className="max-w-6xl mx-auto space-y-1.5">
+      {/* Main chat composer — mobile-first, two-row layout */}
+      <form onSubmit={handleSendMessage} className="w-full shrink-0 border-t border-slate-800 bg-slate-950/95 px-3 py-2.5 sm:px-5 sm:py-3">
+        <div className="mx-auto max-w-4xl">
           {chatAttachments.length > 0 && (
-            <ul aria-label="Załączone pliki" className="flex flex-wrap gap-1.5">
+            <ul aria-label="Załączone pliki" className="mb-2 flex flex-wrap gap-1.5">
               {chatAttachments.map((file, index) => (
-                <li key={`${file.name}-${index}`} className="flex max-w-full items-center gap-1.5 rounded border border-cyan-500/40 bg-cyan-950/60 px-2 py-1 text-[11px] text-cyan-100">
+                <li key={`${file.name}-${index}`} className="flex max-w-full items-center gap-2 rounded-xl border border-slate-700 bg-slate-900 px-2.5 py-1.5 text-xs text-slate-200">
                   {file.mimeType?.startsWith('image/') ? (
-                    <img
-                      src={`data:${file.mimeType};base64,${file.content}`}
-                      alt={`Podgląd zdjęcia: ${file.name}`}
-                      className="h-10 w-10 shrink-0 rounded border border-cyan-500/30 object-cover"
-                    />
-                  ) : (
-                    <FileText className="h-3 w-3 shrink-0 text-cyan-400" />
-                  )}
-                  <span className="break-all">{file.name}</span>
-                  <button
-                    type="button"
-                    onClick={() => setChatAttachments((current) => current.filter((_, fileIndex) => fileIndex !== index))}
-                    aria-label={`Usuń załącznik ${file.name}`}
-                    className="text-slate-400 hover:text-white p-0.5"
-                  ><X className="h-3 w-3" /></button>
+                    <img src={`data:${file.mimeType};base64,${file.content}`} alt={`Podgląd: ${file.name}`} className="h-9 w-9 shrink-0 rounded-lg object-cover"/>
+                  ) : <FileText className="h-4 w-4 shrink-0 text-slate-400"/>}
+                  <span className="max-w-[60vw] truncate">{file.name}</span>
+                  <button type="button" onClick={() => setChatAttachments(current => current.filter((_, fileIndex) => fileIndex !== index))}
+                    aria-label={`Usuń załącznik ${file.name}`} className="rounded-md p-1 text-slate-400 hover:bg-slate-800 hover:text-white"><X className="h-4 w-4"/></button>
                 </li>
               ))}
             </ul>
           )}
           {freeVoiceNotice && (
-            <div className="flex items-center justify-between gap-2 rounded-lg border border-emerald-500/30 bg-emerald-950/40 px-2.5 py-1 text-[11px] text-emerald-200">
-              <span className="flex items-center gap-1.5 truncate">
-                <Sparkles className="h-3 w-3 shrink-0 text-emerald-400" />
-                <span className="truncate">{freeVoiceNotice}</span>
-              </span>
-              <button
-                type="button"
-                onClick={() => setFreeVoiceNotice(null)}
-                className="text-emerald-300/70 hover:text-white px-1 cursor-pointer"
-                aria-label="Zamknij powiadomienie"
-              >
-                ✕
-              </button>
+            <div className="mb-2 flex items-center justify-between gap-2 rounded-xl border border-emerald-900 bg-emerald-950/40 px-3 py-2 text-xs text-emerald-200">
+              <span className="flex min-w-0 items-center gap-2"><Sparkles className="h-4 w-4 shrink-0"/><span className="truncate">{freeVoiceNotice}</span></span>
+              <button type="button" onClick={() => setFreeVoiceNotice(null)} aria-label="Zamknij komunikat" className="p-1 text-emerald-300 hover:text-white"><X className="h-4 w-4"/></button>
             </div>
           )}
-          {attachmentError && <p role="alert" className="text-[11px] text-rose-300 font-semibold">{attachmentError}</p>}
-          <div className="flex items-center gap-1.5 sm:gap-2">
-            <div className="relative flex min-w-0 flex-1 items-center">
-              <textarea
-                ref={chatInputRef}
-                id="triad-chat-message"
-                aria-label="Wiadomość do czterech agentów AI"
-                value={messageText}
-                onChange={(event) => setMessageText(event.target.value)}
-                onKeyDown={(event) => {
-                  if (event.key === 'Enter' && !event.shiftKey && !event.nativeEvent.isComposing) {
-                    event.preventDefault();
-                    event.currentTarget.form?.requestSubmit();
-                  }
-                }}
-                maxLength={20_500}
-                rows={1}
-                disabled={isLoading || liveBusy}
-                placeholder={liveAuthenticated && liveMode ? 'Wiadomość do oryginalnych agentów LIVE…' : 'Wiadomość do agentów…'}
-                className="w-full resize-none rounded-xl border border-slate-700 bg-slate-900/95 px-3 py-2 pr-8 font-mono text-xs sm:text-sm text-slate-100 outline-none transition placeholder:text-slate-500 focus:border-cyan-400 focus:ring-1 focus:ring-cyan-400/40 disabled:opacity-50 min-h-[48px] max-h-40"
-              />
-              {messageText && !isLoading && (
-                <button
-                  type="button"
-                  onClick={() => setMessageText('')}
-                  className="absolute right-2 p-1 text-xs text-slate-400 hover:text-white"
-                  title="Wyczyść tekst"
-                  aria-label="Wyczyść tekst"
-                >
-                  ✕
+          {(attachmentError || sendError) && <p role="alert" className="mb-2 text-xs text-rose-300">{attachmentError || sendError}</p>}
+          <div className="rounded-[24px] border border-slate-700 bg-[#202123] shadow-[0_4px_18px_rgba(0,0,0,.24)] transition focus-within:border-slate-500">
+            <textarea
+              ref={chatInputRef}
+              id="triad-chat-message"
+              aria-label="Wiadomość do agentów"
+              value={messageText}
+              onChange={event => setMessageText(event.target.value)}
+              onKeyDown={event => {
+                if (event.key === 'Enter' && !event.shiftKey && !event.nativeEvent.isComposing) {
+                  event.preventDefault();
+                  event.currentTarget.form?.requestSubmit();
+                }
+              }}
+              maxLength={20_500}
+              rows={2}
+              disabled={isLoading || liveBusy}
+              placeholder="Wiadomość do agentów…"
+              className="block max-h-40 min-h-[62px] w-full resize-y bg-transparent px-4 pt-4 pb-2 text-[16px] leading-6 text-white outline-none placeholder:text-slate-400 disabled:opacity-50 sm:px-5"
+            />
+            <div className="flex min-h-12 items-center gap-2 px-2.5 pb-2 sm:px-3">
+              <div className="relative">
+                <button type="button" aria-label="Dodaj załącznik" title="Dodaj plik lub zdjęcie"
+                  disabled={isLoading || chatAttachments.length >= MAX_CHAT_ATTACHMENTS}
+                  onClick={() => document.getElementById('chat-attachment-picker')?.click()}
+                  className="flex h-10 w-10 items-center justify-center rounded-full text-slate-200 transition hover:bg-white/10 disabled:opacity-40">
+                  <span className="text-3xl font-light leading-none">+</span>
+                </button>
+                <input id="chat-attachment-picker" type="file" accept={CHAT_ATTACHMENT_ACCEPT} multiple
+                  disabled={isLoading || chatAttachments.length >= MAX_CHAT_ATTACHMENTS}
+                  onChange={event => void handleAttachmentSelection(event)} className="sr-only"
+                  aria-label="Dołącz pliki tekstowe, DOCX, PDF lub zdjęcia"/>
+                <input type="file" accept="image/jpeg,image/png,image/webp" capture="environment"
+                  disabled={isLoading || chatAttachments.length >= MAX_CHAT_ATTACHMENTS}
+                  onChange={event => void handleAttachmentSelection(event)} className="sr-only"
+                  aria-label="Zrób zdjęcie aparatem"/>
+              </div>
+              <div className="min-w-0 flex-1"/>
+              {!liveAuthenticated && (
+                <label className="flex shrink-0 items-center gap-1.5 rounded-full px-2 py-1 text-sm text-slate-300 hover:bg-white/5">
+                  <span className="hidden text-xs text-slate-500 sm:inline">Silnik</span>
+                  <select aria-label="Wybierz silnik AI" value={providerMode}
+                    onChange={event => setProviderMode(event.target.value as 'api' | 'ollama')}
+                    disabled={isLoading}
+                    className="max-w-[120px] appearance-none bg-transparent py-1 pl-1 pr-4 text-[14px] font-medium text-slate-100 outline-none">
+                    <option value="api" className="bg-slate-900">API</option>
+                    <option value="ollama" className="bg-slate-900">Ollama</option>
+                  </select>
+                  <span aria-hidden="true" className="pointer-events-none -ml-4 text-[10px] text-slate-400">▾</span>
+                </label>
+              )}
+              {liveAuthenticated && (
+                <button type="button" aria-label={liveMode ? 'Przełącz na modele API lub Ollama' : 'Przełącz na workery LIVE'}
+                  onClick={() => setLiveMode(value => !value)} disabled={liveBusy}
+                  className="shrink-0 rounded-full px-2 py-1 text-xs font-medium text-slate-300 hover:bg-white/10">
+                  {liveMode ? 'Workery LIVE' : providerMode === 'ollama' ? 'Ollama' : 'API'} ▾
                 </button>
               )}
+              <button type="submit"
+                aria-label={isLoading || liveBusy ? 'Wysyłanie wiadomości' : `Wyślij wiadomość do ${{ triad: 'wszystkich agentów', si_1: 'Arii', Alex: 'Alexa', Astyria: 'Astyrii', Aurelius: 'Aureliusa' }[selectedTarget]}`}
+                disabled={(!messageText.trim() && chatAttachments.length === 0) || isLoading || liveBusy}
+                className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-white text-slate-950 transition hover:bg-slate-200 disabled:bg-slate-600 disabled:text-slate-400"
+                title="Wyślij (Enter)">
+                {isLoading || liveBusy ? <RefreshCw className="h-5 w-5 animate-spin"/> : <Send className="h-5 w-5"/>}
+              </button>
             </div>
-            <label
-              className={`flex h-9 w-9 sm:h-10 sm:w-10 shrink-0 cursor-pointer items-center justify-center rounded-xl border border-slate-700 bg-slate-900 text-cyan-200 hover:border-cyan-400 hover:bg-slate-800 transition ${
-                isLoading || chatAttachments.length >= MAX_CHAT_ATTACHMENTS ? 'pointer-events-none opacity-40' : ''
-              }`}
-              title="Wybierz zdjęcie lub plik z galerii (tekst, DOCX, PDF, JPG, PNG, WebP)"
-            >
-              <Paperclip className="h-4 w-4 text-cyan-300" />
-              <input
-                type="file"
-                accept={CHAT_ATTACHMENT_ACCEPT}
-                multiple
-                disabled={isLoading || chatAttachments.length >= MAX_CHAT_ATTACHMENTS}
-                onChange={(event) => void handleAttachmentSelection(event)}
-                className="sr-only"
-                aria-label="Dołącz pliki tekstowe, DOCX, PDF lub JPG"
-              />
-            </label>
-            <label
-              className={`flex h-9 w-9 sm:h-10 sm:w-10 shrink-0 cursor-pointer items-center justify-center rounded-xl border border-slate-700 bg-slate-900 text-cyan-200 hover:border-cyan-400 hover:bg-slate-800 transition ${
-                isLoading || chatAttachments.length >= MAX_CHAT_ATTACHMENTS ? 'pointer-events-none opacity-40' : ''
-              }`}
-              title="Zrób zdjęcie aparatem"
-            >
-              <ImageIcon className="h-4 w-4 text-cyan-300" />
-              <input
-                type="file"
-                accept="image/jpeg,image/png,image/webp"
-                capture="environment"
-                disabled={isLoading || chatAttachments.length >= MAX_CHAT_ATTACHMENTS}
-                onChange={(event) => void handleAttachmentSelection(event)}
-                className="sr-only"
-                aria-label="Zrób zdjęcie aparatem"
-              />
-            </label>
-            <button
-              type="submit"
-              aria-label={`Wyślij wiadomość do ${{ triad: 'Triady', si_1: 'Arii', Alex: 'Alexa', Astyria: 'Astyrii', Aurelius: 'Aureliusa' }[selectedTarget]}`}
-              disabled={(!messageText.trim() && chatAttachments.length === 0) || isLoading || liveBusy}
-              className="flex h-9 sm:h-10 shrink-0 items-center justify-center gap-1.5 rounded-xl bg-gradient-to-r from-emerald-500 via-teal-500 to-cyan-500 px-3.5 sm:px-4 font-mono text-xs font-bold text-slate-950 shadow-[0_0_12px_rgba(16,185,129,0.35)] transition hover:from-emerald-400 hover:to-cyan-400 disabled:cursor-not-allowed disabled:opacity-40 cursor-pointer"
-            >
-              <Send className="h-4 w-4 shrink-0" />
-              <span className="hidden sm:inline">WYŚLIJ</span>
-            </button>
           </div>
+          <p className="mt-1.5 px-2 text-[10px] text-slate-500">Enter wysyła · Shift+Enter dodaje nową linię · Do: {{ triad: 'wszyscy agenci', si_1: 'Aria', Alex: 'Alex', Astyria: 'Astyria', Aurelius: 'Aurelius' }[selectedTarget]}</p>
         </div>
       </form>
     </div>
