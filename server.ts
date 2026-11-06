@@ -5804,7 +5804,13 @@ function generateLocalTriadReplyMap(
 }
 
 // --- CZAT TRIADY: tryb bezpośredni bez sztucznych promptów i wykresów ---
-const CHAT_AGENT_CONVERSATION_STYLE = 'Odpowiadaj bezpośrednio po polsku, bez narzuconych szablonów, bez cenzury korporacyjnej i bez generowania bloków wykresów.';
+const CHAT_AGENT_CONVERSATION_STYLE = 'Odpowiadaj bezpośrednio po polsku, naturalnie i konkretnie. Gdy użytkownik prosi o wykres, formularz, kartę terminala, cURL lub panel, zwracaj również zgodny blok bastilla-ui.';
+const CHAT_AGENT_RICH_UI_STYLE = [
+  'Główny czat potrafi renderować deklaratywny JSON w bloku Markdown ```bastilla-ui. Struktura: {"title":"Tytuł","blocks":[{"type":"metric","label":"CPU","value":"Brak danych"},{"type":"actions","actions":[{"label":"Zdiagnozuj","prompt":"Sprawdź realne logi"}]}]}.',
+  'Wspierane bloki: text, metric, chart, table, image, video, actions, terminal, progress, steps, files, model_config, diagram3d, pdf, alert, timeline, accordion, tabs, checklist, form, code, handoff, curl, http, json, diff, logs.',
+  'Dla curl/http użyj method, url, headers, body, response. Dla form użyj fields [{type:"text|select|checkbox",label,options}]. Dla progress użyj value 0-100 i label. Dla logs użyj entries [{level,text}].',
+  'Generuj UI tylko wtedy, gdy poprawia odpowiedź lub użytkownik tego wymaga. Nie wymyślaj danych ani linków. Nie dołączaj haseł. Bloki UI i ich akcje nie wykonują poleceń — mogą przygotować tekst do zatwierdzenia przez operatora.',
+].join(' ');
 
 function buildLlmHistory(
   chatHistory: Array<{ agent: string; tekst: string }>,
@@ -6305,7 +6311,7 @@ app.post('/api/triad/message', async (req, res) => {
       .map((attachment) => ({ name: attachment.name, mimeType: attachment.mimeType!, content: attachment.content }));
     const hasImageAttachment = binaryAttachments.some((attachment) => attachment.mimeType.startsWith('image/'));
     // Lokalna Ollama obsługuje agentów po kolei, więc limit rośnie z liczbą agentów.
-    const deadline = AbortSignal.timeout(LLM_CHAT_TIMEOUT_MS * (usesOllama() ? targetAgents.length : 1));
+    const deadline = AbortSignal.timeout(LLM_CHAT_TIMEOUT_MS * targetAgents.length);
 
     const results: Array<{ agent: ChatAgentName; text: string; engine: string; llm: boolean; error?: string }> = [];
     // Agents now answer one at a time; each can send actual Ollama deltas.
@@ -6316,7 +6322,7 @@ app.post('/api/triad/message', async (req, res) => {
       if (llmProviders.length > 0) {
         try {
           const result = await generateWithChain(LLM_CHAIN_CONFIG, {
-            system: `${CHAT_AGENT_MISSIONS[agent]} ${CHAT_AGENT_CONVERSATION_STYLE} ${CHAT_AGENT_SAFETY_BOUNDARIES}${hasImageAttachment ? ' Do wiadomości dołączono zdjęcie — obejrzyj je i opisz konkretnie, co faktycznie na nim widać (obiekty, osoby, światło, zmiany). Nie powtarzaj wcześniejszych odpowiedzi i nie odpowiadaj ogólnikami o systemie.' : ''}`,
+            system: `${CHAT_AGENT_MISSIONS[agent]} ${CHAT_AGENT_CONVERSATION_STYLE} ${CHAT_AGENT_RICH_UI_STYLE} ${CHAT_AGENT_SAFETY_BOUNDARIES}${hasImageAttachment ? ' Do wiadomości dołączono zdjęcie — obejrzyj je i opisz konkretnie, co faktycznie na nim widać (obiekty, osoby, światło, zmiany). Nie powtarzaj wcześniejszych odpowiedzi i nie odpowiadaj ogólnikami o systemie.' : ''}`,
             // Lokalny model: krótsza historia = mniej tokenów do przetworzenia przed odpowiedzią.
             // Przy zdjęciu pomijamy historię, by model nie powielał poprzednich, identycznych odpowiedzi.
             history: hasImageAttachment ? [] : usesOllama() && !CLOUD_LLM_ENABLED ? buildLlmHistory(chatHistory, agent, 4, 800) : buildLlmHistory(chatHistory, agent),
