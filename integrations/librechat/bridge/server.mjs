@@ -115,7 +115,9 @@ async function completion(payload, res) {
   if (!AGENTS.includes(agent)) throw fail(400, 'Model must be Aria, Alex, Astyria or Aurelius');
   if (payload.stream !== undefined && typeof payload.stream !== 'boolean') throw fail(400, 'stream must be boolean');
   if (!Array.isArray(payload.messages)) throw fail(400, 'messages must be an array');
-  if (payload.tools || payload.functions || payload.response_format?.type === 'json_schema') {
+  if ((Array.isArray(payload.tools) ? payload.tools.length > 0 : Boolean(payload.tools)) ||
+      (Array.isArray(payload.functions) ? payload.functions.length > 0 : Boolean(payload.functions)) ||
+      payload.response_format?.type === 'json_schema') {
     throw fail(400, 'Tools and structured outputs are not supported by this bridge');
   }
   const lastUser = [...payload.messages].reverse().find(m => m?.role === 'user');
