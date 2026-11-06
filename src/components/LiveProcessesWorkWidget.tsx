@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { Cpu, Pause, Play, RefreshCw } from 'lucide-react';
+import { useLiveCardVisibility } from '../hooks/useLiveCardVisibility';
 
 type ProcessItem = {
   pid: number; ppid: number; name: string; cpuPercent: number; rssBytes: number; state: string; elapsed: string;
@@ -36,6 +37,7 @@ function parseSnapshot(value: unknown): ProcessSnapshot {
 export function LiveProcessesWorkWidget({
   onPrompt,
 }: { onPrompt: (prompt: string) => void }) {
+  const { cardRef, cardVisible } = useLiveCardVisibility<HTMLElement>();
   const [enabled, setEnabled] = useState(true);
   const [snapshot, setSnapshot] = useState<ProcessSnapshot | null>(null);
   const [state, setState] = useState<'loading' | 'ready' | 'locked' | 'error'>('loading');
@@ -46,13 +48,15 @@ export function LiveProcessesWorkWidget({
   const [selected, setSelected] = useState<number | null>(null);
 
   useEffect(() => {
-    if (!enabled) return;
+    if (!enabled || !cardVisible) return;
     let disposed = false;
     let active: AbortController | null = null;
     const poll = async () => {
       if (disposed || document.hidden || active) return;
       const controller = new AbortController();
       active = controller;
+      let timedOut = false;
+      const timeout = window.setTimeout(() => { timedOut = true; controller.abort(); }, 8000);
       try {
         const response = await fetch(API, { credentials: 'same-origin', cache: 'no-store', method: 'GET', signal: controller.signal });
         if ([401, 403, 503].includes(response.status)) {
@@ -64,11 +68,11 @@ export function LiveProcessesWorkWidget({
         const data = parseSnapshot(await response.json());
         if (!disposed) { setSnapshot(data); setError(''); setState('ready'); }
       } catch (cause) {
-        if (!disposed && !controller.signal.aborted) {
-          setError(cause instanceof Error ? cause.message.slice(0, 140) : 'Brak dostępu do procesów');
+        if (!disposed && (!controller.signal.aborted || timedOut)) {
+          setError(timedOut ? 'Serwer nie odpowiedział w ciągu 8 sekund.' : cause instanceof Error ? cause.message.slice(0, 140) : 'Brak dostępu do procesów');
           setState('error');
         }
-      } finally { if (active === controller) active = null; }
+      } finally { window.clearTimeout(timeout); if (active === controller) active = null; }
     };
     void poll();
     const timer = window.setInterval(() => { void poll(); }, 9000);
@@ -78,7 +82,7 @@ export function LiveProcessesWorkWidget({
       disposed = true; active?.abort(); window.clearInterval(timer);
       document.removeEventListener('visibilitychange', visible);
     };
-  }, [enabled, refresh]);
+  }, [enabled, refresh, cardVisible]);
 
   const query = search.trim().toLowerCase();
   const filtered = (snapshot?.processes || [])
@@ -96,7 +100,7 @@ export function LiveProcessesWorkWidget({
   const time = snapshot?.sampledAt && Number.isFinite(Date.parse(snapshot.sampledAt))
     ? new Date(snapshot.sampledAt).toLocaleTimeString('pl-PL') : '—';
 
-  return <section className="min-w-0 space-y-3 rounded-xl border border-cyan-800/60 bg-[#071827] p-3 text-slate-100" aria-label="Procesy serwera na żywo">
+  return <section ref={cardRef} className="min-w-0 space-y-3 rounded-xl border border-cyan-800/60 bg-[#071827] p-3 text-slate-100" aria-label="Procesy serwera na żywo">
     <header className="flex flex-wrap items-center gap-2">
       <Cpu size={16} className="text-cyan-300"/>
       <strong className="flex-1 text-sm">Procesy serwera · LIVE</strong>
