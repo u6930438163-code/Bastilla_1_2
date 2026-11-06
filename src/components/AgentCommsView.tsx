@@ -7,6 +7,7 @@ import { TerminalWorkCard, type TerminalCardEntry, type TerminalCardStatus } fro
 import { WorkspaceCommandCenter } from './WorkspaceCommandCenter';
 import { ChatAvatar, ChatReactionBar, type ChatVotes } from './ChatReactionBar';
 import { chatReactionKeys, liveReactionKey } from '../lib/chatReactionKeys.mjs';
+import { loadPendingReactionVotes, mergePendingReactionVotes, nextOperatorReaction } from '../lib/chatReactionFallback.mjs';
 import { LiveWorkspaceSession } from './LiveWorkspaceSession';
 import {
   ASTYRIA_MISSION_ACTIONS,
@@ -77,6 +78,25 @@ function validLiveEvent(value: unknown): value is LiveChatEvent {
     typeof event[key] === 'string' && (event[key] as string).length <= 100000);
 }
 
+type ReactionSelection = 'up' | 'down' | null;
+
+async function saveReactionOnServer(messageKey: string, vote: ReactionSelection): Promise<ChatVotes> {
+  const controller = new AbortController();
+  const timeout = window.setTimeout(() => controller.abort(), 4500);
+  try {
+    const response = await fetch('/api/chat/reactions/vote', {
+      method: 'POST', credentials: 'same-origin', signal: controller.signal,
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ messageKey, vote, mode: 'set' }),
+    });
+    const payload = await response.json().catch(() => null) as { success?: boolean; votes?: ChatVotes; error?: string } | null;
+    if (!response.ok || !payload?.success || !payload.votes) {
+      throw new Error(payload?.error || 'Serwer ocen niedostępny (HTTP ' + response.status + ').');
+    }
+    return payload.votes;
+  } finally { window.clearTimeout(timeout); }
+}
+
 export const AgentCommsView: React.FC<AgentCommsViewProps> = ({
   dataStore,
   streamingChat,
@@ -129,8 +149,18 @@ export const AgentCommsView: React.FC<AgentCommsViewProps> = ({
   const [liveBusy, setLiveBusy] = useState(false);
   const [liveEvents, setLiveEvents] = useState<LiveChatEvent[]>([]);
 
-  const [reactionVotes, setReactionVotes] = useState<Record<string, ChatVotes>>({});
+  const pendingReactionVotesRef = useRef<Record<string, ReactionSelection>>(
+    loadPendingReactionVotes(typeof localStorage !== 'undefined' ? localStorage : null, REACTION_STORAGE_KEY)
+  );
+  const [reactionVotes, setReactionVotes] = useState<Record<string, ChatVotes>>(() =>
+    mergePendingReactionVotes({}, pendingReactionVotesRef.current)
+  );
   const [reactionPending, setReactionPending] = useState<string | null>(null);
+  const [reactionsLocalOnly, setReactionsLocalOnly] = useState(false);
+  const reactionSyncInFlightRef = useRef(false);
+  const persistPendingReactions = () => {
+    try { localStorage.setItem(REACTION_STORAGE_KEY, JSON.stringify(pendingReactionVotesRef.current)); } catch {}
+  };
   const reactionKeys = React.useMemo(() => chatReactionKeys(dataStore.chat_history), [dataStore.chat_history]);
   const [isFullViewport, setIsFullViewport] = useState(false);
   const [twoWayEnabled, setTwoWayEnabled] = useState<boolean>(() => {
@@ -177,23 +207,57 @@ export const AgentCommsView: React.FC<AgentCommsViewProps> = ({
     }
   };
 
-  // Shared reactions are fetched from the server, so other devices see the same votes.
+  // Shared votes come from the server. Unsynced operator votes stay visible
+  // and survive page reloads, including inside AI Studio Preview.
   useEffect(() => {
     let active = true;
     const refresh = async () => {
       try {
-        const response = await fetch('/api/chat/reactions', { credentials: 'same-origin', cache: 'no-store' });
-        if (!response.ok) return;
-        const payload = await response.json() as { reactions?: Record<string, ChatVotes> };
-        if (active && payload.reactions && typeof payload.reactions === 'object') setReactionVotes(payload.reactions);
-      } catch { /* Remain usable when server is offline. */ }
+        const controller = new AbortController();
+        const timeout = window.setTimeout(() => controller.abort(), 4500);
+        let payload: { reactions?: Record<string, ChatVotes> };
+        try {
+          const response = await fetch('/api/chat/reactions', {
+            credentials: 'same-origin', cache: 'no-store', signal: controller.signal,
+          });
+          if (!response.ok) return;
+          payload = await response.json();
+        } finally { window.clearTimeout(timeout); }
+        if (!active || !payload?.reactions || typeof payload.reactions !== 'object') return;
+        const remote = payload.reactions;
+        setReactionVotes(mergePendingReactionVotes(remote, pendingReactionVotesRef.current));
+        if (reactionSyncInFlightRef.current) return;
+        if (!Object.keys(pendingReactionVotesRef.current).length) {
+          setReactionsLocalOnly(false);
+          return;
+        }
+        reactionSyncInFlightRef.current = true;
+        try {
+          for (const [key, desired] of Object.entries(pendingReactionVotesRef.current)) {
+            if (!active) break;
+            try {
+              const votes = await saveReactionOnServer(key, desired);
+              remote[key] = votes;
+              // Preserve any newer selection made while this request was in flight.
+              if (pendingReactionVotesRef.current[key] === desired) {
+                delete pendingReactionVotesRef.current[key];
+                persistPendingReactions();
+              }
+            } catch { break; }
+          }
+        } finally {
+          reactionSyncInFlightRef.current = false;
+          if (active) {
+            setReactionVotes(mergePendingReactionVotes(remote, pendingReactionVotesRef.current));
+            setReactionsLocalOnly(Object.keys(pendingReactionVotesRef.current).length > 0);
+          }
+        }
+      } catch { /* The local copy remains usable when API is offline. */ }
     };
     const onSync = (event: Event) => {
       const topic = (event as CustomEvent<{ topic?: string }>).detail?.topic;
       if (topic === 'chat' || topic === 'workspace') void refresh();
     };
-    // A logged-in SSE session gives immediate updates. Without LIVE auth, an
-    // inexpensive visibility-aware poll still keeps votes in sync across devices.
     const onVisible = () => { if (!document.hidden) void refresh(); };
     void refresh();
     const poll = window.setInterval(() => { if (!document.hidden) void refresh(); }, 7000);
@@ -211,23 +275,28 @@ export const AgentCommsView: React.FC<AgentCommsViewProps> = ({
 
   const submitReaction = async (messageKey: string, value: 'up' | 'down') => {
     if (!messageKey || reactionPending) return;
+    const selected = nextOperatorReaction(reactionVotes[messageKey]?.Operator, value) as ReactionSelection;
+    pendingReactionVotesRef.current[messageKey] = selected;
+    persistPendingReactions();
+    setReactionVotes(current => mergePendingReactionVotes(current, pendingReactionVotesRef.current));
     setReactionPending(messageKey);
     try {
-      const response = await fetch('/api/chat/reactions/vote', {
-        method: 'POST',
-        credentials: 'same-origin',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ messageKey, vote: value }),
-      });
-      const result = await response.json() as { success?: boolean; votes?: ChatVotes; error?: string };
-      if (!response.ok || !result.success || !result.votes) throw new Error(result.error || 'Nie udało się zapisać głosu.');
-      setReactionVotes(current => ({ ...current, [messageKey]: result.votes! }));
+      const votes = await saveReactionOnServer(messageKey, selected);
+      if (pendingReactionVotesRef.current[messageKey] === selected) {
+        delete pendingReactionVotesRef.current[messageKey];
+        persistPendingReactions();
+      }
+      setReactionVotes(current => mergePendingReactionVotes(
+        { ...current, [messageKey]: votes }, pendingReactionVotesRef.current
+      ));
+      setReactionsLocalOnly(Object.keys(pendingReactionVotesRef.current).length > 0);
       window.dispatchEvent(new CustomEvent('bastilla:workspace-local', { detail: { topic: 'chat' } }));
     } catch (error) {
-      setWorkNotice('Ocena nie została zapisana: ' + (error instanceof Error ? error.message : 'Błąd połączenia.'));
-    } finally {
-      setReactionPending(null);
-    }
+      setReactionsLocalOnly(true);
+      setWorkNotice('👍👎 Ocena zachowana lokalnie. Serwer nie potwierdził zapisu: ' +
+        (error instanceof Error ? error.message : 'Błąd połączenia.') +
+        ' Ponowimy synchronizację automatycznie.');
+    } finally { setReactionPending(null); }
   };
 
   const exportConversation = () => {
@@ -769,6 +838,8 @@ export const AgentCommsView: React.FC<AgentCommsViewProps> = ({
             onClick={() => {
               setSentImageHistory([]);
               setReactionVotes({});
+              pendingReactionVotesRef.current = {};
+              setReactionsLocalOnly(false);
               try { localStorage.removeItem(REACTION_STORAGE_KEY); } catch {}
               onClearHistory();
             }}
@@ -1183,6 +1254,7 @@ export const AgentCommsView: React.FC<AgentCommsViewProps> = ({
           </div>
         </>}
       </section>}
+      {reactionsLocalOnly && <div role="status" className="px-3 py-1.5 text-[11px] text-amber-300 bg-amber-950/30 border-t border-amber-800/30">👍👎 Oceny zapisane na tym urządzeniu · oczekiwanie na synchronizację z serwerem.</div>}
       {workNotice && <div role="status" className="flex items-center justify-between gap-2 bg-slate-900/90 px-3 py-1.5 text-[11px] text-cyan-200">
         <span>{workNotice}</span>
         <button type="button" onClick={() => setWorkNotice(null)} aria-label="Zamknij komunikat" className="p-1 text-slate-300 hover:text-white"><X className="w-3 h-3"/></button>
