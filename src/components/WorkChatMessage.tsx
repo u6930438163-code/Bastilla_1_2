@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { BarChart3, ChevronDown, ChevronUp, Clapperboard, Code2, Copy, Image as ImageIcon, Play, Sparkles } from 'lucide-react';
 import { FormattedMessage } from './FormattedMessage';
+import { AdvancedWorkWidget } from './AdvancedWorkWidget';
 import { TerminalWorkCard, type TerminalCardEntry, type TerminalCardStatus } from './TerminalWorkCard';
 import { ProgressWorkWidget, StepsWorkWidget, FileExplorerWorkWidget, ModelSettingsWorkWidget, ThreeDWorkWidget, PdfWorkWidget } from './AdvancedWorkWidgets';
 
@@ -103,6 +104,7 @@ function Widget({ block, onPrompt, onOpenTerminal }: { block: WorkBlock; onPromp
   if (kind === 'model_config') return <ModelSettingsWorkWidget block={block} onPrompt={onPrompt}/>;
   if (kind === 'diagram3d') return <ThreeDWorkWidget block={block}/>;
   if (kind === 'pdf') return <PdfWorkWidget block={block}/>;
+  if (['alert','timeline','accordion','tabs','checklist','form','code','handoff','curl','http','json','diff','logs'].includes(String(kind))) return <AdvancedWorkWidget block={block} onPrompt={onPrompt}/>;
   if (kind === 'terminal') {
     const types = new Set(['input','output','success','error','system','banner']);
     const entries: TerminalCardEntry[] = Array.isArray(block.entries)
@@ -231,6 +233,33 @@ const examples = {
         { type: 'success', text: 'Przykładowy blok wyniku terminala.', time: 'DEMO' },
       ] }],
   },
+  formatting: {
+    title: 'Formatowanie techniczne — przykłady',
+    blocks: [
+      { type: 'curl', title: 'Przykładowe żądanie cURL (DEMO)', method: 'GET', url: '/api/system/metrics',
+        headers: { Accept: 'application/json' }, response: { cpuPercent: null, ramUsedBytes: null, note: 'Brak pomiaru; to tylko podgląd formatu odpowiedzi.' } },
+      { type: 'json', title: 'JSON / dane', data: { verified: false, status: 'demo', agents: ['Aria','Alex','Astyria','Aurelius'] } },
+      { type: 'diff', title: 'Różnice w plikach (DEMO)', diff: '@@ -1,2 +1,2 @@\n-oldValue = false\n+newValue = true\n context = "demo"' },
+      { type: 'logs', title: 'Filtr logów (DEMO)', entries: [
+        { level: 'success', text: 'Przykładowy test pomyślny' },
+        { level: 'error', text: 'Przykładowy błąd do diagnozy' },
+      ] },
+    ],
+  },
+  form: {
+    title: 'Formularze i przekazania (DEMO)',
+    blocks: [
+      { type: 'form', title: 'Nowe zadanie', prompt: 'Przygotuj zadanie na podstawie tych danych:', fields: [
+        { type: 'text', label: 'Opis', placeholder: 'Opisz problem' },
+        { type: 'select', label: 'Priorytet', options: ['Normalny','Wysoki','Krytyczny'] },
+        { type: 'checkbox', label: 'Zgłoszenie do weryfikacji' },
+      ] },
+      { type: 'checklist', title: 'Kroki diagnozy (DEMO)', items: [
+        { label: 'Sprawdź aktualne logi' }, { label: 'Odczytaj stan modelu' }, { label: 'Przygotuj raport' },
+      ] },
+      { type: 'handoff', title: 'Przekaż zadanie', description: 'Przygotuj szkic wiadomości do wybranego agenta.', prompt: 'Zdiagnozuj status Ollamy i MCP oraz zaproponuj rozwiązanie.' },
+    ],
+  },
   action: {
     title: 'Interaktywne przyciski',
     blocks: [{ type: 'actions', actions: [
@@ -257,6 +286,8 @@ export function WorkChatDemo({ onPrompt, onOpenTerminal }: { onPrompt: (prompt: 
           ['video', Clapperboard, 'Wideo'],
           ['action', Code2, 'Przyciski'],
           ['terminal', Code2, 'Terminal'],
+          ['formatting', Code2, 'cURL / JSON'],
+          ['form', Sparkles, 'Formularze'],
           ['advanced', Sparkles, 'Zaawansowane'],
         ] as const).map(([key, Icon, label]) =>
           <button key={key} type="button" onClick={() => setTab(key)} aria-pressed={tab === key} className={'px-3 py-2 rounded-lg text-xs flex gap-1.5 items-center border ' + (tab === key ? 'bg-cyan-900/70 border-cyan-500 text-white' : 'bg-slate-900 border-slate-700 text-slate-300')}><Icon size={14}/>{label}</button>)}
