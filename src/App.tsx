@@ -691,7 +691,7 @@ export default function App() {
   return (
     <ErrorBoundary>
       <div className="app-shell flex h-dvh max-h-dvh min-w-0 max-w-full flex-col overflow-hidden bg-[#050b18] font-sans text-slate-100 selection:bg-cyan-400/30 selection:text-cyan-100">
-        {activeTab !== 'comms' && (
+        {!['comms', 'terminal', 'task_manager', 'ollama_manager'].includes(activeTab) && (
           <Header
             dataStore={dataStore}
             activeTab={activeTab}
@@ -702,7 +702,7 @@ export default function App() {
           />
         )}
 
-        {activeTab !== 'terminal' && <div className="bastilla-workspace-sync-strip" role="status" aria-live="polite">
+        {!['terminal', 'task_manager', 'ollama_manager'].includes(activeTab) && <div className="bastilla-workspace-sync-strip" role="status" aria-live="polite">
           <span className={workspaceLive ? 'bastilla-workspace-sync-dot is-live' : 'bastilla-workspace-sync-dot'} />
           <span className="font-semibold">{workspaceLive ? 'WORKSPACE LIVE' : 'WORKSPACE · ODSWIEZANIE 4s'}</span>
           <span className="bastilla-workspace-sync-detail">{workspaceLive ? 'Czat · terminal · jądro: zmiany na żywo' : 'Zaloguj się w Czat AI · LIVE, aby włączyć synchronizację SSE'}</span>
