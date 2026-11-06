@@ -9,7 +9,7 @@ export function selectChatProviderConfig(
 ): LlmChainConfig {
   const available = configuredProviders(config);
   const providers = mode === 'api'
-    ? available.filter(provider => provider !== 'ollama')
+    ? available.filter(provider => provider === 'openai')
     : mode === 'ollama'
       ? available.filter(provider => provider === 'ollama')
       : available;
