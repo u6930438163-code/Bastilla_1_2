@@ -38,6 +38,12 @@ test('named up/down votes persist and cannot impersonate actors outside approved
     assert.equal(store.get(key).Operator, 'down');
     store.vote(key, 'Operator', 'down'); // toggle
     assert.equal(store.get(key).Operator, undefined);
+    store.setVote(key, 'Operator', 'up');
+    store.setVote(key, 'Operator', 'up'); // repeated request never toggles
+    assert.equal(store.get(key).Operator, 'up');
+    store.setVote(key, 'Operator', null);
+    store.setVote(key, 'Operator', null);
+    assert.equal(store.get(key).Operator, undefined);
     assert.throws(() => store.vote(key, 'Unknown', 'up'), /Nieprawidłowy głos/);
     assert.throws(() => store.vote('wrong-key', 'Aria', 'up'), /Nieprawidłowy głos/);
     assert.equal(new ChatReactionStore(file).get(key).Aria, 'down');
