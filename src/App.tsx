@@ -1,4 +1,3 @@
-import LiveAgentChat from './components/LiveAgentChat';
 import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import {
   DataStore,
@@ -52,7 +51,7 @@ import type { ChatSystemChange } from './kernel/chatChanges';
 const LOCAL_STORAGE_KEY = 'svl_kernel_datastore_v9_0_0_chat_sync';
 
 export default function App() {
-  const [showLiveAgentChat, setShowLiveAgentChat] = useState(false);
+  const [preparedChatDraft, setPreparedChatDraft] = useState<{ id: number; text: string; agent: 'triad' | 'Alex' | 'Astyria' | 'Aurelius' | 'si_1' } | null>(null);
   const [rawDataStore, setRawDataStore] = useState<DataStore>(() => {
     try {
       localStorage.removeItem('svl_kernel_datastore_v8_5_1_desktop_ready');
@@ -684,6 +683,7 @@ export default function App() {
               onNavigate={setActiveTab}
               onSendMessage={handleSendMessage}
               onTriggerFreeVoice={handleTriggerFreeVoice}
+              preparedDraft={preparedChatDraft}
               onExecutePythonCommand={handleExecutePythonCommand}
             />
           )}
@@ -712,7 +712,10 @@ export default function App() {
           {(activeTab === 'process_matrix' || activeTab === 'task_manager' || activeTab === 'ollama_manager') && (
             <TaskManagerView
               initialSection={activeTab === 'ollama_manager' ? 'ollama' : 'processes'}
-              onOpenLiveChat={() => setShowLiveAgentChat(true)}
+              onPrepareMainChat={(text, agent) => {
+                setPreparedChatDraft({ id: Date.now(), text, agent: agent === 'Aria' ? 'si_1' : agent });
+                setActiveTab('comms');
+              }}
             />
           )}
 
@@ -833,12 +836,6 @@ export default function App() {
           dataStore={dataStore}
         />
 
-        <button type="button" aria-expanded={showLiveAgentChat} aria-controls="bastilla-live-agent-chat" onClick={() => setShowLiveAgentChat(value => !value)} className="bastilla-chat-launcher">
-          {showLiveAgentChat ? 'Zamknij czat AI' : 'Czat AI · LIVE'}
-        </button>
-        {showLiveAgentChat && <div id="bastilla-live-agent-chat" role="dialog" aria-label="Czat agentów Bastilla" className="bastilla-chat-overlay">
-          <LiveAgentChat />
-        </div>}
         <SystemHealthDock />
       </div>
     </ErrorBoundary>
