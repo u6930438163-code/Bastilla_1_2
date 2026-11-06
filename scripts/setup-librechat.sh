@@ -28,6 +28,8 @@ if [[ ! -f "$HOME_DIR/.env" ]]; then
   cp "$HOME_DIR/.env.example" "$HOME_DIR/.env"
 fi
 
+if [[ $# -eq 0 ]]; then set -- up -d; fi
+
 cd "$HOME_DIR"
 # All secrets stay on the host. The LibreChat checkout remains out of Bastilla Git.
 exec docker compose --project-directory "$HOME_DIR" \
