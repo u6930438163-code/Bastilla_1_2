@@ -35,6 +35,10 @@ export function createAgentWorker(options = {}) {
   const onError = typeof options.onError === 'function' ? options.onError : () => {};
   const onIdle = typeof options.onIdle === 'function' ? options.onIdle : null;
   const idleCallbackIntervalMs = Math.max(5000, Number(options.idleCallbackIntervalMs) || 30000);
+  // A model adapter may ignore AbortSignal. systemd must not hang indefinitely on shutdown.
+  const requestedShutdownMs = Number(options.shutdownTimeoutMs);
+  const shutdownTimeoutMs = Number.isFinite(requestedShutdownMs) && requestedShutdownMs > 0
+    ? Math.min(60000, Math.max(1000, Math.floor(requestedShutdownMs))) : 15000;
   let lastIdleAt = 0;
 
   if (!baseUrl || !AGENTS.includes(agent) || token.length < 32 || typeof runAgent !== 'function' || typeof fetchImpl !== 'function') {
@@ -237,8 +241,18 @@ export function createAgentWorker(options = {}) {
         }
       }
     }
-    // Wait for aborted in-flight requests to settle before returning to systemd.
-    await Promise.allSettled([...activeJobs]);
+    // Give cooperative adapters time to stop. A hung external model must not block restart forever.
+    if (activeJobs.size) {
+      let timeout;
+      try {
+        await Promise.race([
+          Promise.allSettled([...activeJobs]),
+          new Promise(resolve => { timeout = setTimeout(resolve, shutdownTimeoutMs); }),
+        ]);
+      } finally {
+        clearTimeout(timeout);
+      }
+    }
   }
 
   function stop() {
@@ -246,5 +260,5 @@ export function createAgentWorker(options = {}) {
     internalController.abort();
   }
 
-  return { start, stop, pollOnce, runIdleOnce, sendMessage, listReactionMessages, voteOnMessage, workerId, agent, maxConcurrency };
+  return { start, stop, pollOnce, runIdleOnce, sendMessage, listReactionMessages, voteOnMessage, workerId, agent, maxConcurrency, shutdownTimeoutMs };
 }

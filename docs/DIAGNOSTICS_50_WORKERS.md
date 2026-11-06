@@ -105,3 +105,9 @@ Nadal obowiązuje semantyka **at-least-once**: jeśli oryginalny model wykonał 
 - `expiredLeases`: zadania nadal w statusie `running`, których okres własności upłynął; kolejny worker może je przejąć.
 
 Panel pokazuje także istniejące liczniki `failed`. Są to dane z prawdziwej trwałej kolejki, **nie udawana aktywność agentów**. `expiredLeases > 0` nie musi oznaczać trwałej awarii: zadanie może czekać na najbliższe pobranie przez worker. Ponieważ odczyt `getStatus()` nie modyfikuje kolejki, samo otwarcie panelu nigdy nie naprawia ani nie przejmuje zadania.
+
+
+## Przed uruchomieniem na hostach / Codespaces — preflight
+Nowy skrypt `npm run check:workers` jest tylko do odczytu. Weryfikuje obecność czterech plików `/etc/bastilla/live-chat/<Agent>.env`, ich uprawnienia, podstawową kompletność konfiguracji i status usług systemd. Nie odczytuje wartości z sekretami do raportu, nie odpala workera i nie wysyła heartbeat (nie może sztucznie oznaczyć agentów jako ONLINE). Zwraca niezerowy kod wyjścia przy brakach; `npm run check:workers -- --json` daje JSON bez kluczy i adresów endpointów.
+
+Worker ma też limit czasu łagodnego zatrzymania `BASTILLA_AGENT_SHUTDOWN_TIMEOUT_MS` (domyślnie 15000 ms, 1000–60000 ms). Jeśli adapter ignoruje anulowanie, proces przestaje na niego czekać, a systemd ma `TimeoutStopSec=25s` i może dokończyć zatrzymanie usługi. Po restarcie lease wygasłego zadania zostanie ponownie przydzielony. To wymaga idempotentnych działań zewnętrznych; nie wolno bez zgody wykonywać automatycznych powtórzeń zmian administracyjnych.

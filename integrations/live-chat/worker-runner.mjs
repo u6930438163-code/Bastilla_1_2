@@ -23,6 +23,7 @@ const worker = createAgentWorker({
   token: process.env.BASTILLA_LIVE_CHAT_WORKER_TOKEN || '',
   runAgent: adapter.runAgent,
   maxConcurrency: policy.concurrency,
+  shutdownTimeoutMs: Number(process.env.BASTILLA_AGENT_SHUTDOWN_TIMEOUT_MS || 15000),
   pollIntervalMs: policy.pollIntervalMs,
   idleCallbackIntervalMs: policy.idleCallbackIntervalMs,
   policyMode: policy.mode,
