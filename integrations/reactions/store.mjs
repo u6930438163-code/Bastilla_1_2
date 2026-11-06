@@ -37,13 +37,20 @@ export class ChatReactionStore {
     return this.list();
   }
   vote(key, actor, requested) {
+    return this.writeVote(key, actor, requested, true);
+  }
+  // Idempotent setter for queued browser votes; retrying must never undo a vote.
+  setVote(key, actor, requested) {
+    return this.writeVote(key, actor, requested, false);
+  }
+  writeVote(key, actor, requested, toggle) {
     if (!keyPattern.test(key) || !REACTION_ACTORS.includes(actor) ||
       (requested !== null && !VALID_VOTES.has(requested))) {
       throw Object.assign(new Error('Nieprawidłowy głos, uczestnik lub identyfikator wiadomości.'), { status: 400 });
     }
     const draft = structuredClone(this.data);
     const votes = { ...(draft[key] || {}) };
-    const next = votes[actor] === requested ? null : requested;
+    const next = toggle && votes[actor] === requested ? null : requested;
     if (next) votes[actor] = next;
     else delete votes[actor];
     if (Object.keys(votes).length) draft[key] = votes;
