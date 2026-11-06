@@ -1,4 +1,6 @@
-import { createHmac, randomBytes, timingSafeEqual } from 'node:crypto';
+import { createHmac, randomBytes, scryptSync, timingSafeEqual } from 'node:crypto';
+import fs from 'node:fs';
+import path from 'node:path';
 
 const AGENTS = ['Aria', 'Alex', 'Astyria', 'Aurelius'];
 const COOKIE_NAME = 'bastilla_live_chat_session';
@@ -25,6 +27,17 @@ function readCookie(req, name) {
 export function createLiveChatSessionAuth(options = {}) {
   const password = String(options.password || '');
   const secret = String(options.secret || '');
+  const setupToken = String(options.setupToken || '');
+  const credentialsPath = path.resolve(String(options.credentialsPath || 'data/live-chat-credentials.json'));
+  const legacyPasswordConfigured = password.length >= 16;
+  const readCredentials = () => {
+    try {
+      const value = JSON.parse(fs.readFileSync(credentialsPath, 'utf8'));
+      if (value.version === 1 && /^[0-9a-f]{32}$/.test(value.salt) && /^[0-9a-f]{64}$/.test(value.hash)) return value;
+    } catch { /* Missing or invalid credentials: fail closed. */ }
+    return null;
+  };
+  let storedCredentials = readCredentials();
   const allowedOriginInput = String(options.allowedOrigin || '');
   const ttlSeconds = Math.max(900, Math.min(604800, Number(options.ttlSeconds) || 43200));
   let localHttpOrigin = false;
@@ -40,8 +53,13 @@ export function createLiveChatSessionAuth(options = {}) {
   }
 
   const cookieSecure = !localHttpOrigin || options.cookieSecure !== false;
-  const configured = password.length >= 16 && Buffer.byteLength(secret) >= 32 && Boolean(allowedOrigin);
+  const baseConfigured = Buffer.byteLength(secret) >= 32 && Boolean(allowedOrigin);
+  const isConfigured = () => baseConfigured && (legacyPasswordConfigured || Boolean(storedCredentials));
+  // Enrollment never replaces an existing credential, including a malformed file.
+  const enrollmentReady = () => baseConfigured && !legacyPasswordConfigured &&
+    !fs.existsSync(credentialsPath) && Buffer.byteLength(setupToken) >= 32;
   const loginAttempts = new Map();
+  const setupAttempts = new Map();
   const sign = (payload) => createHmac('sha256', secret).update(payload).digest('base64url');
   const originAllowed = (req) => Boolean(allowedOrigin) && req.get('Origin') === allowedOrigin;
   const setCookie = (res, value, maxAge) => {
@@ -51,8 +69,15 @@ export function createLiveChatSessionAuth(options = {}) {
     res.setHeader('Cache-Control', 'no-store');
   };
 
+  const issueSession = (res) => {
+    const expiresAt = Math.floor(Date.now() / 1000) + ttlSeconds;
+    const payload = expiresAt + '.' + randomBytes(18).toString('base64url');
+    setCookie(res, encodeURIComponent(payload + '.' + sign(payload)), ttlSeconds);
+    return { authenticated: true, expiresAt };
+  };
+
   function requireUser(req, res, next) {
-    if (!configured) return res.status(503).json({ error: 'Live chat user authentication is not configured' });
+    if (!isConfigured()) return res.status(503).json({ error: 'Live chat user authentication is not configured' });
     const token = readCookie(req, COOKIE_NAME);
     const parts = token.split('.');
     if (parts.length !== 3) return res.status(401).json({ error: 'Login required' });
@@ -71,7 +96,7 @@ export function createLiveChatSessionAuth(options = {}) {
   }
 
   function login(req, res) {
-    if (!configured) return res.status(503).json({ error: 'Set the live chat origin, user password and session secret on the server' });
+    if (!isConfigured()) return res.status(503).json({ error: 'Live chat operator authentication needs server configuration or owner enrollment' });
     if (!originAllowed(req)) return res.status(403).json({ error: 'Origin is not allowed' });
     const now = Date.now();
     for (const [key, value] of loginAttempts) if (value.resetAt <= now) loginAttempts.delete(key);
@@ -80,17 +105,69 @@ export function createLiveChatSessionAuth(options = {}) {
     if (attempt.resetAt <= now) { attempt.count = 0; attempt.resetAt = now + 900000; }
     if (attempt.count >= 10) return res.status(429).json({ error: 'Too many login attempts; try again later' });
     const supplied = typeof req.body?.password === 'string' ? req.body.password : '';
-    if (supplied.length > 512 || !safeEqual(supplied, password)) {
+    const valid = supplied.length <= 512 && (legacyPasswordConfigured
+      ? safeEqual(supplied, password)
+      : Boolean(storedCredentials) && safeEqual(
+          scryptSync(supplied, Buffer.from(storedCredentials.salt, 'hex'), 32).toString('hex'),
+          storedCredentials.hash));
+    if (!valid) {
       attempt.count += 1;
       loginAttempts.set(address, attempt);
       return res.status(401).json({ error: 'Invalid password' });
     }
     loginAttempts.delete(address);
-    const expiresAt = Math.floor(Date.now() / 1000) + ttlSeconds;
-    const payload = expiresAt + '.' + randomBytes(18).toString('base64url');
-    const token = payload + '.' + sign(payload);
-    setCookie(res, encodeURIComponent(token), ttlSeconds);
-    return res.json({ authenticated: true, expiresAt });
+    return res.json(issueSession(res));
+  }
+
+  function setupStatus(_req, res) {
+    res.setHeader('Cache-Control', 'no-store');
+    return res.json({ setupRequired: enrollmentReady(), serverConfigured: baseConfigured });
+  }
+
+  function setup(req, res) {
+    res.setHeader('Cache-Control', 'no-store');
+    if (!originAllowed(req)) return res.status(403).json({ error: 'Origin is not allowed' });
+    if (isConfigured()) return res.status(409).json({ error: 'Operator account already exists' });
+    if (!enrollmentReady()) return res.status(503).json({ error: 'Owner enrollment requires server setup' });
+
+    const now = Date.now();
+    for (const [key, value] of setupAttempts) if (value.resetAt <= now) setupAttempts.delete(key);
+    const address = String(req.ip || req.socket?.remoteAddress || 'unknown');
+    const attempt = setupAttempts.get(address) || { count: 0, resetAt: now + 900000 };
+    if (attempt.count >= 5) return res.status(429).json({ error: 'Too many enrollment attempts' });
+
+    const suppliedToken = typeof req.body?.token === 'string' ? req.body.token : '';
+    if (suppliedToken.length > 512 || !safeEqual(suppliedToken, setupToken)) {
+      attempt.count += 1;
+      setupAttempts.set(address, attempt);
+      return res.status(401).json({ error: 'Invalid owner setup code' });
+    }
+    const chosen = typeof req.body?.password === 'string' ? req.body.password : '';
+    if (chosen.length < 16 || chosen.length > 512 || safeEqual(chosen, setupToken)) {
+      return res.status(400).json({ error: 'Choose a distinct operator password of 16 to 512 characters' });
+    }
+
+    const salt = randomBytes(16).toString('hex');
+    const record = {
+      version: 1,
+      salt,
+      hash: scryptSync(chosen, Buffer.from(salt, 'hex'), 32).toString('hex'),
+    };
+    const temporaryPath = credentialsPath + '.' + randomBytes(8).toString('hex') + '.tmp';
+    try {
+      fs.mkdirSync(path.dirname(credentialsPath), { recursive: true, mode: 0o700 });
+      fs.writeFileSync(temporaryPath, JSON.stringify(record) + '\n', { encoding: 'utf8', mode: 0o600, flag: 'wx' });
+      // Hard-link publish is atomic and cannot overwrite a concurrent enrollment.
+      fs.linkSync(temporaryPath, credentialsPath);
+      storedCredentials = record;
+      setupAttempts.clear();
+      return res.status(201).json(issueSession(res));
+    } catch (error) {
+      if (error?.code === 'EEXIST') return res.status(409).json({ error: 'Operator account already exists' });
+      return res.status(503).json({ error: 'Unable to persist operator credentials on the server' });
+    } finally {
+      try { fs.unlinkSync(temporaryPath); } catch { /* Best-effort cleanup. */ }
+    }
   }
 
   function logout(req, res) {
@@ -103,7 +180,7 @@ export function createLiveChatSessionAuth(options = {}) {
     return res.json({ authenticated: true, expiresAt: req.liveChatExpiresAt || null });
   }
 
-  return { configured, requireUser, login, logout, session };
+  return { get configured() { return isConfigured(); }, requireUser, login, logout, session, setup, setupStatus };
 }
 
 export function createLiveChatWorkerAuth(options = {}) {
