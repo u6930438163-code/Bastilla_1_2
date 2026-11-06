@@ -404,3 +404,118 @@ input, select, textarea {
   .bastilla-workspace-sync-strip {padding:5px 10px;gap:6px;}
   .bastilla-workspace-sync-detail {display:none;}
 }
+
+
+/* Operations Center: actual process telemetry, real logs and live Ollama diagnostics */
+.bastilla-ops-shell {
+  color:#e2e8f0; background:radial-gradient(circle at 100% 0%,#0c3450 0%,#081423 32%,#050c17 80%);
+  min-height:0; width:100%; flex:1; overflow-y:auto; padding:20px; display:flex; flex-direction:column; gap:16px;
+  font-family:Inter,ui-sans-serif,system-ui,-apple-system,sans-serif;
+}
+.bastilla-ops-header {display:flex;justify-content:space-between;align-items:center;gap:16px}
+.bastilla-ops-brand-icon {border:1px solid #155e75;border-radius:14px;min-width:52px;height:52px;background:#0d374b;display:flex;align-items:center;justify-content:center;color:#67e8f9;box-shadow:0 0 28px #0891b222}
+.bastilla-ops-header h1 {font-weight:850;letter-spacing:.1em;font-size:18px;color:#fff}
+.bastilla-ops-header h1 span {color:#67e8f9}
+.bastilla-ops-header p {font-size:12px;color:#93a9bb;margin-top:3px;line-height:1.5}
+.bastilla-ops-refresh {display:flex;align-items:center;gap:7px;border:1px solid #28516a;border-radius:10px;padding:10px 13px;background:#10283b;color:#c6eefd;font-size:12px;cursor:pointer;flex-shrink:0}
+.bastilla-ops-refresh:hover {border-color:#22d3ee;background:#15506a}
+.bastilla-ops-status-line {display:flex;align-items:center;gap:14px;flex-wrap:wrap;font-size:10px;color:#879eae;padding:10px 14px;border:1px solid #24415780;background:#0b2133b5;border-radius:11px}
+.ops-status-online,.ops-status-lock {display:inline-flex;align-items:center;gap:7px;font-size:10px;letter-spacing:.06em;font-weight:800;color:#b4f6cb}
+.ops-status-lock {color:#fde68a}
+.ops-led {width:8px;height:8px;border-radius:50%;background:#34d399;box-shadow:0 0 9px #34d39988}
+.ops-status-lock .ops-led {background:#fbbf24;box-shadow:none}
+.bastilla-ops-tabs {display:flex;gap:6px;padding:6px;background:#0b2033;border:1px solid #1e3b4e;border-radius:14px;overflow-x:auto}
+.bastilla-ops-tabs button {display:flex;align-items:center;justify-content:center;gap:8px;min-height:40px;min-width:105px;flex:1;padding:9px 14px;border-radius:10px;border:1px solid transparent;color:#94adc0;font-size:12px;font-weight:700;white-space:nowrap;cursor:pointer}
+.bastilla-ops-tabs button:hover {background:#183747;color:#e6faff}
+.bastilla-ops-tabs button.is-active {background:linear-gradient(130deg,#164e63,#0e7490);border-color:#22d3ee88;color:#ecfeff;box-shadow:0 3px 16px #22d3ee11}
+.bastilla-ops-body {display:flex;flex-direction:column;gap:16px}
+.bastilla-ops-panel {display:flex;flex-direction:column;gap:18px;background:linear-gradient(140deg,#0c1c2d,#081320);border:1px solid #25455b;border-radius:17px;padding:20px;min-width:0}
+.bastilla-ops-section-heading {display:flex;align-items:center;justify-content:space-between;gap:12px}
+.bastilla-ops-section-heading h2 {font-size:18px;font-weight:800;color:#e9f8ff;line-height:1.4}
+.bastilla-ops-section-heading p {color:#8da9bc;font-size:12px;line-height:1.5;margin-top:4px}
+.bastilla-ops-count {border:1px solid #125979;background:#0c3144;color:#a5f3fc;border-radius:999px;padding:7px 11px;flex-shrink:0;white-space:nowrap;font-size:11px}
+.bastilla-ops-controls {display:flex;align-items:center;justify-content:space-between;gap:14px;flex-wrap:wrap;font-size:11px;color:#89a5b8}
+.bastilla-ops-controls input {background:#05101c;color:#f1f5f9;border:1px solid #28516b;border-radius:10px;padding:10px 13px;max-width:100%;min-width:180px;font-size:14px;flex:0 1 320px}
+.bastilla-ops-table-wrap {overflow-x:auto;border:1px solid #284356;border-radius:12px;background:#071422;overscroll-behavior-x:contain}
+.bastilla-ops-table {border-collapse:collapse;width:100%;font-size:12px;min-width:550px}
+.bastilla-ops-table th {text-align:left;letter-spacing:.06em;font-size:10px;font-weight:800;color:#8bb1c7;background:#102c3d;padding:12px 14px}
+.bastilla-ops-table td {padding:11px 14px;border-top:1px solid #213a4a;color:#b6c9d7;font-family:ui-monospace,monospace}
+.bastilla-ops-table tr:hover td {background:#13344955}
+.bastilla-ops-table small {color:#34d399}
+.bastilla-ops-empty {color:#829cb0;font-size:12px;border:1px dashed #28506a;border-radius:12px;padding:18px;line-height:1.65;background:#071423}
+.bastilla-ops-footnote {color:#86a2b5;font-size:11px;line-height:1.6}
+.bastilla-ops-log-filters {display:flex;gap:7px;flex-wrap:wrap}
+.bastilla-ops-log-filters button {border:1px solid #29475b;background:#0b2538;color:#a3c5d5;border-radius:9px;padding:8px 12px;cursor:pointer;font-size:11px}
+.bastilla-ops-log-filters button.is-active {border-color:#22d3ee;color:#c8faff;background:#0b3f52}
+.bastilla-ops-log-filters button b {border-radius:6px;background:#193e51;padding:3px 6px;margin-left:5px}
+.bastilla-ops-list {display:flex;flex-direction:column;gap:10px;max-height:550px;overflow-y:auto;overscroll-behavior:contain}
+.bastilla-ops-log-item {border-left:3px solid #38bdf8;padding:13px 14px;border-radius:9px;border-top:1px solid #28435b;border-right:1px solid #28435b;border-bottom:1px solid #28435b;background:#071725;min-width:0}
+.bastilla-ops-log-item.is-error {border-left-color:#fb7185;background:#2b142026}
+.bastilla-ops-log-item.is-success {border-left-color:#34d399;background:#0b2d2428}
+.bastilla-ops-log-meta {display:flex;align-items:center;gap:8px;flex-wrap:wrap;font-size:11px;color:#849eae}
+.bastilla-ops-log-meta strong {color:#cbd5e1;font-size:10px;letter-spacing:.035em}
+.bastilla-ops-log-meta time {margin-left:auto;color:#7593a4}
+.bastilla-ops-log-item pre {white-space:pre-wrap;overflow-wrap:anywhere;font:12px/1.65 ui-monospace,monospace;color:#cad9e6;margin-top:10px}
+.bastilla-ops-send {display:inline-flex;align-items:center;justify-content:center;gap:8px;background:#0e7490;border:1px solid #22d3ee88;border-radius:10px;color:#f0fdff;font-size:12px;font-weight:750;padding:11px 13px;cursor:pointer;align-self:flex-start;margin-top:13px;max-width:100%}
+.bastilla-ops-send:hover {background:#0891b2}
+.bastilla-ops-send:disabled {opacity:.5;cursor:not-allowed}
+.bastilla-ops-ollama-grid {display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px}
+.bastilla-ops-kpi {display:flex;flex-direction:column;gap:7px;border:1px solid #284e63;border-radius:12px;padding:16px;background:linear-gradient(145deg,#10354a,#0d1a2a);min-width:0}
+.bastilla-ops-kpi>span {color:#8da9bd;font-size:11px}
+.bastilla-ops-kpi strong {font-size:15px;font-weight:800;overflow-wrap:anywhere}
+.bastilla-ops-kpi small {color:#86a5b9;font-size:10px;line-height:1.5}
+.bastilla-ops-indicator {display:inline-flex;align-items:center;gap:7px;border:1px solid #5f3947;background:#451e2d6b;color:#fecdd3;padding:9px 11px;border-radius:999px;font-size:11px;font-weight:800;white-space:nowrap}
+.bastilla-ops-indicator.is-on {color:#a7f3d0;background:#064e3b6b;border-color:#047857}
+.bastilla-ops-subheading {display:flex;align-items:center;gap:9px;color:#80eaff;font-size:13px;margin-top:7px}
+.bastilla-ops-subheading h3 {font-weight:800}
+.bastilla-ops-model-list {display:flex;flex-direction:column;gap:8px}
+.bastilla-ops-model {display:flex;justify-content:space-between;gap:10px;align-items:center;background:#0d2739;border:1px solid #28516b;padding:12px;border-radius:11px}
+.bastilla-ops-model>div {display:flex;flex-direction:column;gap:6px;font-size:12px}
+.bastilla-ops-model strong {color:#e6f8fd}
+.bastilla-ops-model small {font-size:10px;color:#90abbd}
+.bastilla-ops-model>div:last-child {align-items:flex-end;color:#a5dceb;font-size:11px}
+.bastilla-ops-installed {display:flex;flex-wrap:wrap;gap:8px}
+.bastilla-ops-installed>span {background:#0a2938;border:1px solid #1d5468;color:#c1e7f5;border-radius:8px;font-size:12px;padding:8px 10px;overflow-wrap:anywhere}
+.bastilla-ops-installed small {color:#86aabd;margin-left:6px}
+.bastilla-ops-chain {border:1px solid #234557;border-radius:10px;background:#061625;padding:14px;display:flex;flex-direction:column;gap:9px}
+.bastilla-ops-chain p {font-size:12px;color:#bbcedb;line-height:1.55;overflow-wrap:anywhere}
+.bastilla-ops-chain strong {color:#7dd3fc}
+.bastilla-ops-agent-bar {display:flex;align-items:center;justify-content:space-between;gap:14px;flex-wrap:wrap;background:linear-gradient(120deg,#132d46,#0e2636);border:1px solid #286078;border-radius:16px;padding:15px}
+.bastilla-ops-agent-bar>div:first-child {min-width:190px}
+.bastilla-ops-agent-bar strong {font-size:13px;color:#dbf8ff}
+.bastilla-ops-agent-bar p {font-size:11px;color:#8fb3c4;line-height:1.45;margin-top:4px}
+.bastilla-ops-agent-controls {display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.bastilla-ops-agent-controls select {background:#051e2f;border:1px solid #28627a;color:#e5faff;padding:10px;border-radius:9px;font-size:14px;min-width:130px}
+.bastilla-ops-agent-controls>span {font-size:11px}
+.bastilla-ops-agent-controls>button {border:1px solid #22d3ee66;color:#9fe8fb;padding:10px;border-radius:9px;background:#10516c;font-size:11px;cursor:pointer}
+.bastilla-ops-submission {width:100%;margin:0!important;padding:12px;border:1px solid #22956a;border-radius:10px;background:#07392c;color:#caf8e0!important;font-size:12px!important}
+.bastilla-ops-error {display:flex;align-items:center;gap:8px;color:#fecdd3;border:1px solid #be123c55;border-radius:10px;padding:12px;font-size:12px;background:#4c051922}
+.bastilla-ops-notice {display:flex;align-items:center;flex-wrap:wrap;gap:12px;padding:16px;border:1px solid #ca8a043f;background:#4220064a;border-radius:12px;color:#fde68a}
+.bastilla-ops-notice strong {font-size:13px}
+.bastilla-ops-notice p {font-size:11px;color:#fcd34d;margin-top:4px}
+.bastilla-ops-notice button {margin-left:auto;background:#a16207;color:white;padding:10px 14px;border-radius:9px;font-size:12px;cursor:pointer}
+.bastilla-ops-loading {display:flex;align-items:center;gap:8px;color:#bae6fd;font-size:12px}
+@media (max-width:1000px) {.bastilla-ops-ollama-grid {grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media (max-width:640px) {
+ .bastilla-ops-shell {padding:10px;gap:11px}
+ .bastilla-ops-header {align-items:flex-start;gap:8px}
+ .bastilla-ops-brand-icon {min-width:40px;height:40px;border-radius:10px}
+ .bastilla-ops-header h1 {font-size:13px;letter-spacing:.035em}
+ .bastilla-ops-header p {font-size:10px}
+ .bastilla-ops-refresh {font-size:0;padding:10px}
+ .bastilla-ops-refresh svg {width:17px;height:17px}
+ .bastilla-ops-tabs button {min-width:0;padding:10px 6px;font-size:11px;gap:4px}
+ .bastilla-ops-panel {padding:12px;gap:14px}
+ .bastilla-ops-section-heading h2 {font-size:15px}
+ .bastilla-ops-section-heading p {font-size:11px}
+ .bastilla-ops-count {font-size:10px;padding:6px}
+ .bastilla-ops-kpi {padding:10px}
+ .bastilla-ops-kpi strong {font-size:12px}
+ .bastilla-ops-model {align-items:flex-start;flex-direction:column}
+ .bastilla-ops-model>div:last-child {align-items:flex-start}
+ .bastilla-ops-log-item {padding:10px}
+ .bastilla-ops-agent-bar {padding:12px}
+ .bastilla-ops-agent-controls {width:100%}
+ .bastilla-ops-agent-controls select {flex:1}
+ .bastilla-ops-send {width:100%}
+}
