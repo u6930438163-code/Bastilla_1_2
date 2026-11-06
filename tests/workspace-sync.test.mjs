@@ -39,8 +39,18 @@ test('workspace sync only streams metadata to authenticated operators', async t 
   const event = hub.publish('terminal');
   assert.equal(event.topic, 'terminal');
   assert.equal(Object.keys(event).sort().join(','), 'at,id,topic');
-  const next = await reader.read();
-  const output = new TextDecoder().decode(next.value);
+  let output = '';
+  const decoder = new TextDecoder();
+  const timeout = setTimeout(() => controller.abort(), 4000);
+  try {
+    while (!output.includes('"topic":"terminal"')) {
+      const { done, value } = await reader.read();
+      if (done) throw new Error('SSE closed before terminal notification');
+      output += decoder.decode(value, { stream: true });
+    }
+  } finally {
+    clearTimeout(timeout);
+  }
   assert.match(output, /event: change/);
   assert.match(output, /"topic":"terminal"/);
   assert.doesNotMatch(output, /password|command|output|secret/i);
