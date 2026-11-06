@@ -689,8 +689,8 @@ export default function App() {
         {/* Jeden kompaktowy nagłówek Workspace na wszystkich kartach — bez dużego bannera systemu. */}
         <div className="bastilla-workspace-sync-strip" role="status" aria-live="polite">
           <span className={workspaceLive ? 'bastilla-workspace-sync-dot is-live' : 'bastilla-workspace-sync-dot'} />
-          <span className="font-semibold">{workspaceLive ? 'WORKSPACE LIVE' : 'WORKSPACE · ODSWIEZANIE 4s'}</span>
-          <span className="bastilla-workspace-sync-detail">{workspaceLive ? 'Czat · terminal · jądro: zmiany na żywo' : 'Zaloguj się w Czat AI · LIVE, aby włączyć synchronizację SSE'}</span>
+          <span className="font-semibold">{workspaceLive ? 'WORKSPACE · SSE' : 'WORKSPACE · ODSWIEZANIE 4s'}</span>
+          <span className="bastilla-workspace-sync-detail">{workspaceLive ? 'Czat · terminal · jądro: synchronizacja zdarzeń' : 'Czat · terminal · jądro: automatyczne odświeżanie'}</span>
           <button type="button" onClick={() => setActiveTab(activeTab === 'comms' ? 'terminal' : 'comms')}>
             {activeTab === 'comms' ? 'Otwórz terminal' : 'Otwórz czat'}
           </button>
