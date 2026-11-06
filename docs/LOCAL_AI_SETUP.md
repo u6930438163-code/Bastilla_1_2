@@ -2,7 +2,7 @@
 
 ## Ollama
 
-`npm run setup:ollama` instaluje lokalną usługę, pobiera skonfigurowany model `qwen3:14b`, usuwa pozostałe modele z lokalnej Ollamy oraz uruchamia model w pamięci (`keep_alive=24h`). Naprawia brakujące `zstd` na Debianie/Ubuntu, jeśli proces ma uprawnienia administratora. Używa ustawionego `OLLAMA_MODEL` (domyślnie `qwen3:14b`).
+`npm run setup:ollama` instaluje lokalną usługę, pobiera wskazany model i próbuje go uruchomić w pamięci (`keep_alive=24h`). **Domyślnie zachowuje inne pobrane modele**; ich usunięcie wymaga jawnego `OLLAMA_PRUNE_OTHERS=true`. Naprawia brakujące `zstd` na Debianie/Ubuntu, jeśli proces ma uprawnienia administratora. Używa ustawionego `OLLAMA_MODEL` (domyślnie `dolphin-mixtral:8x7b`, model wymagający znacznych zasobów RAM/VRAM).
 
 Instalacja może potrwać kilka minut. W zwykłym terminalu uruchom polecenie bezpośrednio. Z konsoli WWW z krótkim limitem czasu możesz uruchomić `root exec nohup npm run setup:ollama > /tmp/bastilla-ai-setup.log 2>&1 < /dev/null &`, a następnie odczytać log przez `root exec tail -n 15 /tmp/bastilla-ai-setup.log`.
 
