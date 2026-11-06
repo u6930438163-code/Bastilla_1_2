@@ -31,3 +31,16 @@ pominięto prywatne bazy, stan wykonawczy i archiwa.
 
 LibreChat można uruchomić obok BastillaOS. Most API łączy jego czat z **istniejącymi** agentami Aria, Alex, Astyria i Aurelius przez uwierzytelniony transport Bastilla LIVE, bez tworzenia zastępczych agentów. Przed uruchomieniem wymagane są klucze, Docker i działające oryginalne workery. Instrukcja: [LibreChat + Bastilla](docs/LIBRECHAT_INTEGRATION.md).
 
+
+## Automatyczna instalacja narzędzi diagnostycznych
+
+Katalog 50 narzędzi ma opcjonalny, bezpieczny instalator APT dla Debian/Ubuntu.
+Domyślnie generuje plan bez zmian systemowych; instalacja wymaga flagi --apply.
+
+```sh
+npm run setup:diagnostics
+npm run setup:diagnostics -- --apply --profile expanded
+```
+
+Instrukcja, zakres automatyzacji oraz ograniczenia:
+[Automatyczna diagnostyka](docs/DIAGNOSTICS_AUTO_INSTALL.md).
