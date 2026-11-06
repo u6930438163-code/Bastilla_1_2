@@ -4,6 +4,7 @@ import { SYSTEM_AGENTS, AgentProfile } from '../kernel/agents';
 import { Sparkles, ShieldCheck, RefreshCw, Image as ImageIcon, FileText, MessagesSquare, Paperclip, Send, X, SlidersHorizontal, Maximize2, Minimize2, BarChart3, Clapperboard, Code2, Copy, Download, Reply, ThumbsDown, ThumbsUp } from 'lucide-react';
 import { WorkChatMessage, WorkChatDemo } from './WorkChatMessage';
 import { ChatEngineSelector } from './ChatEngineSelector';
+import { ChatAttachmentMenu } from './ChatAttachmentMenu';
 import { TerminalWorkCard, type TerminalCardEntry, type TerminalCardStatus } from './TerminalWorkCard';
 import { WorkspaceCommandCenter } from './WorkspaceCommandCenter';
 import { ChatAvatar, ChatReactionBar, type ChatVotes } from './ChatReactionBar';
@@ -1184,18 +1185,36 @@ export const AgentCommsView: React.FC<AgentCommsViewProps> = ({
               className="block max-h-40 min-h-[62px] w-full resize-y bg-transparent px-4 pt-4 pb-2 text-[16px] leading-6 text-white outline-none placeholder:text-slate-400 disabled:opacity-50 sm:px-5"
             />
             <div className="flex min-h-12 items-center gap-2 px-2.5 pb-2 sm:px-3">
-              <div className="relative">
-                <button type="button" aria-label="Dodaj załącznik" title="Dodaj plik lub zdjęcie"
-                  disabled={isLoading || chatAttachments.length >= MAX_CHAT_ATTACHMENTS}
-                  onClick={() => document.getElementById('chat-attachment-picker')?.click()}
-                  className="flex h-10 w-10 items-center justify-center rounded-full text-slate-200 transition hover:bg-white/10 disabled:opacity-40">
-                  <span className="text-3xl font-light leading-none">+</span>
-                </button>
-                <input id="chat-attachment-picker" type="file" accept={CHAT_ATTACHMENT_ACCEPT} multiple
-                  disabled={isLoading || chatAttachments.length >= MAX_CHAT_ATTACHMENTS}
-                  onChange={event => void handleAttachmentSelection(event)} className="sr-only"
-                  aria-label="Dołącz pliki tekstowe, DOCX, PDF lub zdjęcia"/>
-              </div>
+              <ChatAttachmentMenu disabled={isLoading || chatAttachments.length >= MAX_CHAT_ATTACHMENTS}
+                onFiles={(kind) => {
+                  const picker = document.getElementById('chat-attachment-picker') as HTMLInputElement | null;
+                  if (!picker) return;
+                  const types: Record<string,string> = {
+                    image: 'image/png,image/jpeg,image/webp', document: '.pdf,.docx,.txt',
+                    video: 'video/mp4,video/webm', audio: 'audio/mpeg,audio/wav',
+                    code: '.js,.ts,.tsx,.jsx,.py,.json,.md', logs: '.log,.txt,.json'
+                  };
+                  picker.accept = types[kind] ?? CHAT_ATTACHMENT_ACCEPT;
+                  picker.click();
+                }}
+                onSource={(source) => {
+                  const prompts: Record<string,string> = {
+                    github: 'Przeanalizuj plik, commit lub PR z GitHub. Poproś o link.',
+                    explorer: 'Chcę wybrać plik z eksploratora Bastilli.',
+                    terminal: 'Przeanalizuj ostatni wynik terminala bez uruchamiania poleceń.',
+                    diagnostics: 'Przygotuj rzeczywisty raport diagnostyczny CPU, RAM i usług.',
+                    mcp: 'Pokaż dostępne narzędzia MCP i ich wyniki.',
+                    screenshot: 'Chcę dołączyć zrzut ekranu.',
+                    error: 'Przygotuj raport błędu z rzeczywistych logów.',
+                    history: 'Chcę przekazać wybrane wiadomości historii czatu innemu agentowi.'
+                  };
+                  setMessageText(current => current ? current + '\n' + prompts[source] : prompts[source]);
+                  chatInputRef.current?.focus();
+                }}/>
+              <input id="chat-attachment-picker" type="file" accept={CHAT_ATTACHMENT_ACCEPT} multiple
+                disabled={isLoading || chatAttachments.length >= MAX_CHAT_ATTACHMENTS}
+                onChange={event => void handleAttachmentSelection(event)} className="sr-only"
+                aria-label="Dołącz pliki tekstowe, DOCX, PDF lub zdjęcia"/>
               <div className="min-w-0 flex-1"/>
               <ChatEngineSelector value={providerMode} onChange={setProviderMode} disabled={isLoading}/>
               <button type="submit"
