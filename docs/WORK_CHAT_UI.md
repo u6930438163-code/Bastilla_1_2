@@ -1,4 +1,4 @@
-# Bastilla AI Work — interaktywny czat LIVE
+# Bastilla AI Work — funkcje w głównym czacie agentów
 
 Główny czat `src/components/AgentCommsView.tsx` (zakładka **Czat**, z wyborem
 Aria, Alex, Astyria, Aurelius i Wszyscy) renderuje wiadomości za pomocą
