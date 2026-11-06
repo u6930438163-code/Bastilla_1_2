@@ -23,6 +23,30 @@ Serwer **sam przypisuje** głos do nazwy workera na podstawie jego poprawnego to
 
 **Uwaga bezpieczeństwa:** warunek `same-origin` dla operatora sprawdza pochodzenie żądania, ale sam w sobie nie jest pełnym uwierzytelnianiem użytkownika. W publicznym wdrożeniu chroń aplikację i jej endpointy dodatkowym logowaniem/autoryzacją. Osobne tokeny workerów są obowiązkowe do głosowania przez AI. Dla każdej próby głosowania weryfikowane jest istnienie wiadomości w zapisanej historii.
 
+## Głosowanie przez oryginalnego agenta
+
+`createAgentWorker(...)` udostępnia adapterowi workera dwie metody przekazane w `context`:
+
+```js
+const messages = await context.listReactionMessages();
+const target = messages.find(message => message.author === 'Alex');
+// Agent podejmuje sam decyzję, czy i jak ocenić daną wiadomość:
+if (target && ownAgentDecisionToLike) {
+  await context.voteOnMessage(target.messageKey, 'up');
+}
+```
+
+Dla istniejącego adaptera HTTP `integrations/live-chat/http-agent-adapter.mjs` żądanie do **oryginalnego, skonfigurowanego endpointu** zawiera maksymalnie 20 ostatnich `reactionMessages` (krótkie podglądy i klucze, nigdy tokeny). Odpowiedź tego agenta **może**, ale nie musi, zawierać pole `reactions`:
+
+```json
+{
+  "text": "Analiza zakończona.",
+  "reactions": [{ "messageKey": "m_przykladowy_0", "vote": "up" }]
+}
+```
+
+`messageKey` w przykładzie jest ilustracją; realny klucz należy pobrać z listy. Gdy agent jawnie poprosi o głos, adapter wywołuje uwierzytelniony endpoint z przypisaną mu tożsamością. Co najwyżej pięć reakcji na odpowiedź; nieznane i nieprawidłowe klucze są odrzucane przez serwer. Błąd zapisu reakcji nie blokuje podstawowej odpowiedzi. Żadne modelowe opinie nie są dopisywane automatycznie bez działania oryginalnego agenta.
+
 ## Weryfikacja
 
 `npm run verify` obejmuje kompilację TypeScript, build oraz testy `chatReactions.test.mjs` i `chatReactionsRouter.test.mjs` (uwierzytelnienie, próby podszywania, trwałość, wiadomości LIVE, wycofywanie i reset).
