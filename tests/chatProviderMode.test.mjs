@@ -33,6 +33,7 @@ test('explicit API mode errors without API keys rather than silently using Ollam
     providers: ['ollama'], ollamaModel: 'test-ollama',
   }, 'api');
   assert.deepEqual(noApi.providers, []);
+  assert.deepEqual(configuredProviders(noApi), [], 'explicitly empty provider list never discovers Ollama');
 });
 
 test('selected Ollama uses only Ollama even with configured API keys', async () => {
