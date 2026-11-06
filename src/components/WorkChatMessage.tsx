@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { BarChart3, ChevronDown, ChevronUp, Clapperboard, Code2, Copy, Image as ImageIcon, Play, Sparkles } from 'lucide-react';
 import { FormattedMessage } from './FormattedMessage';
+import { RichInlineWidget } from './RichInlineWidget';
 import { AdvancedWorkWidget } from './AdvancedWorkWidget';
 import { TerminalWorkCard, type TerminalCardEntry, type TerminalCardStatus } from './TerminalWorkCard';
 import { ProgressWorkWidget, StepsWorkWidget, FileExplorerWorkWidget, ModelSettingsWorkWidget, ThreeDWorkWidget, PdfWorkWidget } from './AdvancedWorkWidgets';
@@ -98,6 +99,7 @@ function VideoPlayer({ src, title }: { src: string; title: string }) {
 
 function Widget({ block, onPrompt, onOpenTerminal }: { block: WorkBlock; onPrompt: (prompt: string) => void; onOpenTerminal?: () => void }) {
   const kind = block.type;
+  if (kind === 'rich_inline') return <RichInlineWidget block={block}/>;
   if (kind === 'progress') return <ProgressWorkWidget block={block}/>;
   if (kind === 'steps') return <StepsWorkWidget block={block}/>;
   if (kind === 'files') return <FileExplorerWorkWidget block={block}/>;
@@ -199,6 +201,33 @@ export function WorkChatMessage({ content, onPrompt, onOpenTerminal }: WorkChatM
 }
 
 const examples = {
+  inline: {
+    title: 'Formatowanie inline · przykład',
+    blocks: [{
+      type: 'rich_inline',
+      title: 'Wiadomość agenta · formatowanie techniczne',
+      items: [
+        {kind: 'text', value: 'Wywołanie'},
+        {kind: 'code', value: 'curl'},
+        {kind: 'text', value: 'i test'},
+        {kind: 'path', value: '/api/v1/mcp'},
+        {kind: 'success', value: 'Sukces (DEMO)'},
+        {kind: 'break'},
+        {kind: 'text', value: 'Przykładowy wynik:'},
+        {kind: 'warning', value: 'Opóźnienie API'},
+        {kind: 'error', value: 'Brak odpowiedzi MCP'},
+        {kind: 'info', value: 'Weryfikuj w logach'},
+        {kind: 'break'},
+        {kind: 'command', value: 'npm run build'},
+        {kind: 'kbd', value: 'Ctrl'},
+        {kind: 'kbd', value: 'K'},
+        {kind: 'badge', value: 'v10.0.0'},
+        {kind: 'highlight', value: 'Ważne'},
+        {kind: 'copy', label: 'Kopiuj komendę', value: 'npm run build'},
+      ],
+      caption: 'To przykładowy układ, nie wynik diagnostyki. Kopiowanie nie wykonuje komend.',
+    }],
+  },
   chart: {
     title: 'Monitoring zasobów — dane demonstracyjne',
     blocks: [
@@ -281,6 +310,7 @@ export function WorkChatDemo({ onPrompt, onOpenTerminal }: { onPrompt: (prompt: 
     {open && <div className="pt-2">
       <div className="flex flex-wrap gap-1.5 mb-2">
         {([
+          ['inline', Code2, 'Inline + status'],
           ['chart', BarChart3, 'Wykres'],
           ['image', ImageIcon, 'Grafiki'],
           ['video', Clapperboard, 'Wideo'],
