@@ -1,5 +1,13 @@
 # Bastilla_1_2 — uruchomienie prawdziwego czatu agentów
 
+## Domyślny start LIVE i odzyskanie dostępu (2026-11-06)
+
+Główny czat **preferuje transport oryginalnych workerów LIVE** przy pierwszym uruchomieniu. Po ręcznym przełączeniu na API/Ollama wybór jest zapamiętywany w przeglądarce. Panel sam sprawdza już wystawioną sesję HttpOnly przy starcie, po powrocie do aplikacji i cyklicznie. Nie uruchamia to żadnego fikcyjnego workera: wiadomości trafiają do kolejki LIVE dopiero po poprawnym uwierzytelnieniu, przy aktywnym serwerze i skonfigurowanych agentach. Gdy nie ma sesji, zwykły czat przez API/Ollama pozostaje dostępny.
+
+**Nie pamiętasz hasła operatora?** Nie usuwaj całej integracji, bazy wiadomości ani istniejących plików z hashem. Osoba z dostępem administracyjnym do wdrożenia może ustawić nowe, losowe `BASTILLA_LIVE_CHAT_USER_PASSWORD` (16–512 znaków) w **prywatnych sekretach serwera** i zrestartować usługę. Po restarcie hasło środowiskowe ma pierwszeństwo przed zapisanym hashem. Dla unieważnienia dotychczasowych ciasteczek sesyjnych należy również wymienić `BASTILLA_LIVE_CHAT_SESSION_SECRET` na nowy losowy sekret (32+ bajty). Następnie zaloguj się nowym hasłem jednorazowo w Bastilla. Po zalogowaniu LIVE wznowi działanie automatycznie do czasu wygaśnięcia sesji. Niezalogowany odwiedzający nie otrzymuje dostępu do prywatnych endpointów i workerów.
+
+Nie umieszczaj żadnego hasła, klucza odzyskiwania ani tokenu w repozytorium, czacie AI ani kodzie po stronie przeglądarki. Interfejs nie może samodzielnie odzyskać lub wyświetlić starego hasła.
+
 ## 1. Pierwsze uruchomienie: samodzielne ustawienie hasła właściciela
 
 Wybierz jedną z dwóch metod. Dotychczasowa metoda z hasłem ustawionym w sekretach serwera nadal działa.
