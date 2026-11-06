@@ -126,6 +126,8 @@ const XAI_API_KEY = realKey(process.env.XAI_API_KEY)
   || (/x\.ai/i.test(process.env.FALLBACK_NLP_BASE_URL || '') ? realKey(process.env.FALLBACK_NLP_API_KEY) : '');
 const XAI_MODEL = (process.env.XAI_MODEL || '').trim();
 const XAI_BASE_URL = (process.env.XAI_BASE_URL || DEFAULT_XAI_BASE_URL).trim();
+const OPENAI_CHAT_API_KEY = realKey(process.env.OPENAI_CHAT_API_KEY);
+const OPENAI_CHAT_MODEL = (process.env.OPENAI_CHAT_MODEL || 'gpt-4o').trim();
 const LLM_CHAIN_CONFIG: LlmChainConfig = {
   geminiApiKey: realKey(GEMINI_API_KEY),
   geminiModel: GEMINI_MODEL,
@@ -133,30 +135,33 @@ const LLM_CHAIN_CONFIG: LlmChainConfig = {
   xaiApiKey: XAI_API_KEY,
   xaiModel: XAI_MODEL,
   xaiBaseUrl: XAI_BASE_URL,
+  openaiChatApiKey: OPENAI_CHAT_API_KEY,
+  openaiChatModel: OPENAI_CHAT_MODEL,
   ollamaModel: (process.env.OLLAMA_MODEL || DEFAULT_EXCLUSIVE_OLLAMA_MODEL).trim(),
   ollamaBaseUrl: (process.env.OLLAMA_BASE_URL || DEFAULT_OLLAMA_BASE_URL).trim(),
   ollamaKeepAlive: (process.env.OLLAMA_KEEP_ALIVE || '-1').trim(),
   ollamaNumCtx: Number(process.env.OLLAMA_NUM_CTX) || 4096,
   ollamaNumPredict: Number(process.env.OLLAMA_NUM_PREDICT) || 0,
   ollamaNumThread: Number(process.env.OLLAMA_NUM_THREAD) || os.cpus().length,
-  // Zawsze dołączamy gemini, gdy klucz GEMINI_API_KEY jest dostępny w AI Studio
-  providers: (process.env.LLM_PROVIDERS || (realKey(GEMINI_API_KEY) ? 'gemini,ollama,xai' : 'ollama'))
+  // OpenAI is opt-in via a separate secret. When present it takes priority for API chat.
+  providers: (process.env.LLM_PROVIDERS || (OPENAI_CHAT_API_KEY ? 'openai,gemini,ollama,xai' : (realKey(GEMINI_API_KEY) ? 'gemini,ollama,xai' : 'ollama')))
     .split(',')
     .map((name) => name.trim().toLowerCase())
-    .filter((name): name is 'gemini' | 'xai' | 'ollama' => name === 'gemini' || name === 'xai' || name === 'ollama'),
+    .filter((name): name is 'gemini' | 'xai' | 'openai' | 'ollama' => name === 'gemini' || name === 'xai' || name === 'openai' || name === 'ollama'),
 };
 // Awaryjny silnik without_nlp, gdy modele zawiodą — domyślnie wyłączony (CHAT_LOCAL_FALLBACK=on włącza).
 const CHAT_LOCAL_FALLBACK = /^(1|on|true|yes|tak)$/i.test((process.env.CHAT_LOCAL_FALLBACK || 'off').trim());
 // Stare API chmurowe (OpenRouter, Groq/xAI w konsoli HyperOS) działają tylko, gdy LLM_PROVIDERS zawiera gemini lub xai.
-const CLOUD_LLM_ENABLED = (LLM_CHAIN_CONFIG.providers ?? []).some((name: string) => name === 'gemini' || name === 'xai');
+const CLOUD_LLM_ENABLED = (LLM_CHAIN_CONFIG.providers ?? []).some((name: string) => name === 'gemini' || name === 'xai' || name === 'openai');
 const usesOllama = () => configuredProviders(LLM_CHAIN_CONFIG).includes('ollama');
 // Lokalny model na CPU potrzebuje więcej czasu niż API w chmurze.
 const LLM_CHAT_TIMEOUT_MS = Math.max(15, Number(process.env.LLM_TIMEOUT_SEC) || (usesOllama() ? 360 : 70)) * 1000;
 const llmProviderLabel = (provider: string) =>
-  provider === 'gemini' ? 'Google Gemini' : provider === 'xai' ? 'xAI' : 'Ollama (lokalnie)';
+  provider === 'gemini' ? 'Google Gemini' : provider === 'xai' ? 'xAI' : provider === 'openai' ? 'OpenAI' : 'Ollama (lokalnie)';
 const describeLlmProvider = (provider: string) =>
   provider === 'gemini' ? `Google Gemini (${GEMINI_MODEL})`
   : provider === 'xai' ? `xAI Grok (${XAI_MODEL || 'auto'})`
+  : provider === 'openai' ? `OpenAI (${OPENAI_CHAT_MODEL})`
   : `Ollama (model: ${LLM_CHAIN_CONFIG.ollamaModel}, ${LLM_CHAIN_CONFIG.ollamaBaseUrl})`;
 {
   const chain = configuredProviders(LLM_CHAIN_CONFIG).map(describeLlmProvider);
