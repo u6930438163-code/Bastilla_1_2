@@ -4,6 +4,7 @@ import { SYSTEM_AGENTS, AgentProfile } from '../kernel/agents';
 import { Sparkles, ShieldCheck, RefreshCw, Image as ImageIcon, FileText, MessagesSquare, Paperclip, Send, X, SlidersHorizontal, Maximize2, Minimize2, BarChart3, Clapperboard, Code2, Copy } from 'lucide-react';
 import { WorkChatMessage, WorkChatDemo } from './WorkChatMessage';
 import { TerminalWorkCard, type TerminalCardEntry, type TerminalCardStatus } from './TerminalWorkCard';
+import { WorkspaceCommandCenter } from './WorkspaceCommandCenter';
 import {
   ASTYRIA_MISSION_ACTIONS,
   ASTYRIA_MISSION_LABELS,
@@ -499,6 +500,16 @@ export const AgentCommsView: React.FC<AgentCommsViewProps> = ({
         </div>
       </div>
 
+      <WorkspaceCommandCenter
+        history={dataStore.chat_history}
+        streamingChat={streamingChat}
+        isLoading={isLoading}
+        onPreparePrompt={prepareWorkPrompt}
+        onToggleTerminal={() => setTerminalCardVisible((visible) => !visible)}
+        onOpenTerminal={onOpenTerminal}
+        onSync={onForceSync}
+      />
+
       {/* Collapsible Protocol & Mission Drawer (hidden by default so chat gets 100% height) */}
       {showProtocolTools && (
         <div className="flex flex-col gap-2 border-b border-slate-800 bg-slate-900/95 px-3 py-2.5 shrink-0 max-h-[45dvh] overflow-y-auto">
@@ -848,7 +859,7 @@ export const AgentCommsView: React.FC<AgentCommsViewProps> = ({
               <textarea
                 ref={chatInputRef}
                 id="triad-chat-message"
-                aria-label="Wiadomość do czatu without_nlp"
+                aria-label="Wiadomość do czterech agentów AI"
                 value={messageText}
                 onChange={(event) => setMessageText(event.target.value)}
                 onKeyDown={(event) => {
@@ -861,7 +872,7 @@ export const AgentCommsView: React.FC<AgentCommsViewProps> = ({
                 rows={1}
                 disabled={isLoading}
                 placeholder="Wiadomość do agentów…"
-                className="w-full resize-none rounded-xl border border-slate-700 bg-slate-900/95 px-3 py-2 pr-8 font-mono text-xs sm:text-sm text-slate-100 outline-none transition placeholder:text-slate-500 focus:border-cyan-400 focus:ring-1 focus:ring-cyan-400/40 disabled:opacity-50 min-h-[38px] max-h-28"
+                className="w-full resize-none rounded-xl border border-slate-700 bg-slate-900/95 px-3 py-2 pr-8 font-mono text-xs sm:text-sm text-slate-100 outline-none transition placeholder:text-slate-500 focus:border-cyan-400 focus:ring-1 focus:ring-cyan-400/40 disabled:opacity-50 min-h-[48px] max-h-40"
               />
               {messageText && !isLoading && (
                 <button
