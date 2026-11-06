@@ -22,6 +22,7 @@ const EXPANDED = Object.freeze({
   'testssl.sh': 'testssl.sh', AIDE: 'aide',
   OpenSCAP: 'openscap-scanner', pg_activity: 'pg-activity',
   pgBadger: 'pgbadger',
+  'ssh-audit': 'ssh-audit', MySQLTuner: 'mysqltuner', ClamAV: 'clamav',
 });
 export const INSTALL_MAP = Object.freeze({ ...CORE, ...EXPANDED });
 
@@ -94,6 +95,15 @@ function packageInstalled(pkg) {
 function packageCandidate(pkg) {
   return command('apt-cache', ['show', '--no-all-versions', pkg]).ok;
 }
+/**
+ * APT simulates changes without root. Never allow automatic package removals.
+ * Error text is not included in the UI reports because it may contain host details.
+ */
+export function isSafeAptSimulation(result) {
+  return Boolean(result && result.ok &&
+    !/^(?:Remv|Purg)\s/m.test(result.stdout || '') &&
+    !/^(?:Remv|Purg)\s/m.test(result.stderr || ''));
+}
 export function buildPlan({ profile = 'core', names = [], distroSupported = true,
   installed = () => false, candidate = () => false, executable = () => false } = {}) {
   return selectDiagnosticTools({ profile, names }).map(tool => {
@@ -122,7 +132,8 @@ export function main(argv = process.argv.slice(2)) {
     process.stderr.write('Wymagany Debian/Ubuntu; bez zmian.\n');
     return 2;
   }
-  if (opts.apply && opts.update) {
+  const missingSelected = selectDiagnosticTools(opts).some(t => t.eligible && !packageInstalled(t.aptPackage));
+  if (opts.apply && opts.update && missingSelected) {
     process.stderr.write('Odświeżam indeks APT...\n');
     if (!apt(['update']).ok) {
       process.stderr.write('Błąd apt-get update. Instalacja wstrzymana.\n');
@@ -137,10 +148,17 @@ export function main(argv = process.argv.slice(2)) {
   if (opts.apply) {
     for (const row of rows) {
       if (row.status !== 'ready-to-install') continue;
+      const simulation = command('apt-get', ['--simulate', '--no-install-recommends', 'install', row.aptPackage]);
+      if (!isSafeAptSimulation(simulation)) {
+        process.stderr.write('Pomijam ' + row.name + ': nieudana lub ryzykowna symulacja APT.\n');
+        failures.push({ name: row.name, package: row.aptPackage,
+          stage: 'apt-simulate', reason: 'simulation-failed-or-package-removal' });
+        continue;
+      }
       process.stderr.write('Instaluję ' + row.name + ' (' + row.aptPackage + ')...\n');
       const result = apt(['install', '--yes', '--no-install-recommends', row.aptPackage]);
       if (!result.ok) failures.push({ name: row.name, package: row.aptPackage,
-        code: result.code, error: result.error || null });
+        stage: 'apt-install', code: result.code, error: result.error || null });
     }
     rows = getPlan();
   }
@@ -152,7 +170,8 @@ export function main(argv = process.argv.slice(2)) {
     failed: failures.length };
   const report = { mode: opts.apply ? 'apply' : 'plan', profile: opts.profile,
     generatedAt: new Date().toISOString(), distroSupported: supported,
-    notes: ['APT tylko z aktywnych repozytoriów systemu; żadnych skanów lub uruchamiania usług.',
+    notes: ['APT tylko z aktywnych repozytoriów systemu; brak skanów lub uruchamiania narzędzi diagnostycznych.',
+      'Najpierw apt --simulate; każda planowana operacja usuwania pakietów blokuje instalację. Skrypty postinstalacyjne APT mogą uruchomić usługi.',
       'Pozostałe narzędzia i usługi wymagają osobnego wdrożenia.',
       'W PATH oznacza obecność pliku, nie poprawne działanie usługi.'],
     summary, failures, tools: rows };
