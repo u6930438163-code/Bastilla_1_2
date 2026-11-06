@@ -5,6 +5,7 @@ import { Sparkles, ShieldCheck, RefreshCw, Image as ImageIcon, FileText, Message
 import { WorkChatMessage, WorkChatDemo } from './WorkChatMessage';
 import { TerminalWorkCard, type TerminalCardEntry, type TerminalCardStatus } from './TerminalWorkCard';
 import { WorkspaceCommandCenter } from './WorkspaceCommandCenter';
+import { LiveWorkspaceSession } from './LiveWorkspaceSession';
 import {
   ASTYRIA_MISSION_ACTIONS,
   ASTYRIA_MISSION_LABELS,
@@ -64,6 +65,13 @@ interface AgentCommsViewProps {
 const TWO_WAY_STORAGE_KEY = 'bastilla_two_way_chat_enabled';
 const FREEDOM_STORAGE_KEY = 'bastilla_ai_freedom_enabled';
 const REACTION_STORAGE_KEY = 'bastilla_chat_message_reactions_v1';
+type LiveChatEvent = { id: string; type: string; channel: string; sender: string; text: string; at: string };
+function validLiveEvent(value: unknown): value is LiveChatEvent {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
+  const event = value as Record<string, unknown>;
+  return ['id', 'type', 'channel', 'sender', 'text', 'at'].every((key) =>
+    typeof event[key] === 'string' && (event[key] as string).length <= 100000);
+}
 
 export const AgentCommsView: React.FC<AgentCommsViewProps> = ({
   dataStore,
@@ -101,6 +109,11 @@ export const AgentCommsView: React.FC<AgentCommsViewProps> = ({
   const [terminalCardStatus, setTerminalCardStatus] = useState<TerminalCardStatus>('idle');
   const [terminalCardEntries, setTerminalCardEntries] = useState<TerminalCardEntry[]>([]);
   const [workNotice, setWorkNotice] = useState<string | null>(null);
+  const [liveAuthenticated, setLiveAuthenticated] = useState(false);
+  const [liveMode, setLiveMode] = useState(true);
+  const [liveBusy, setLiveBusy] = useState(false);
+  const [liveEvents, setLiveEvents] = useState<LiveChatEvent[]>([]);
+
   const [messageReactions, setMessageReactions] = useState<Record<string, 'up' | 'down'>>(() => {
     try {
       const raw = localStorage.getItem(REACTION_STORAGE_KEY);
@@ -191,6 +204,44 @@ export const AgentCommsView: React.FC<AgentCommsViewProps> = ({
     setWorkNotice('Zgłoszenie diagnostyczne przygotowane w głównym czacie. Zatwierdź przyciskiem Wyślij.');
     window.requestAnimationFrame(() => chatInputRef.current?.focus());
   }, [preparedDraft?.id]);
+
+  // One real worker transport, shown within the existing conversation rather than a
+  // second floating chat. GET /history includes all channels when channel=Wszyscy.
+  useEffect(() => {
+    if (!liveAuthenticated) { setLiveEvents([]); return; }
+    let disposed = false;
+    const refreshLive = async () => {
+      try {
+        const response = await fetch('/api/live-chat/history?channel=Wszyscy', { cache: 'no-store', credentials: 'same-origin' });
+        if (!response.ok || disposed) return;
+        const result = await response.json() as { messages?: unknown };
+        if (Array.isArray(result.messages)) {
+          const events = result.messages.filter(validLiveEvent).slice(-200);
+          if (!disposed) setLiveEvents(events);
+        }
+      } catch { /* The session panel shows connection health. */ }
+    };
+    void refreshLive();
+    const stream = new EventSource('/api/live-chat/events', { withCredentials: true });
+    stream.onmessage = (event) => {
+      try {
+        const item: unknown = JSON.parse(event.data);
+        if (!disposed && validLiveEvent(item)) {
+          setLiveEvents((current) => current.some((entry) => entry.id === item.id)
+            ? current : [...current, item].slice(-200));
+        }
+      } catch { /* Malformed events are ignored. */ }
+    };
+    const onWorkspaceEvent = () => { void refreshLive(); };
+    window.addEventListener('bastilla:workspace-event', onWorkspaceEvent);
+    const timer = window.setInterval(() => { if (!document.hidden) void refreshLive(); }, 10000);
+    return () => {
+      disposed = true;
+      stream.close();
+      window.clearInterval(timer);
+      window.removeEventListener('bastilla:workspace-event', onWorkspaceEvent);
+    };
+  }, [liveAuthenticated]);
 
   const transmissionStatus = sendError
     ? { label: 'BŁĄD', color: 'rose' }
@@ -359,8 +410,41 @@ export const AgentCommsView: React.FC<AgentCommsViewProps> = ({
     const message = messageText.startsWith('/propose write-file ')
       ? messageText
       : messageText.trim();
-    if ((!message && chatAttachments.length === 0) || isLoading) return;
+    if ((!message && chatAttachments.length === 0) || isLoading || liveBusy) return;
     const attachmentsSnapshot = [...chatAttachments];
+    if (liveAuthenticated && liveMode) {
+      if (attachmentsSnapshot.length) {
+        setWorkNotice('Kanał workerów LIVE przyjmuje aktualnie tylko tekst. Przełącz na Modele LLM, aby wysłać załączniki.');
+        return;
+      }
+      if (!message || message.length > 8000) {
+        setWorkNotice('Kanał LIVE przyjmuje tekst o długości od 1 do 8000 znaków.');
+        return;
+      }
+      setLiveBusy(true);
+      try {
+        const channel = selectedTarget === 'triad' ? 'Wszyscy' : selectedTarget === 'si_1' ? 'Aria' : selectedTarget;
+        const response = await fetch('/api/live-chat/messages', {
+          method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ channel, text: message }),
+        });
+        const result = await response.json() as { error?: string; event?: LiveChatEvent; queuedFor?: string[] };
+        if (!response.ok) throw new Error(result.error || 'Serwer LIVE odrzucił wiadomość.');
+        if (result.event && validLiveEvent(result.event)) {
+          setLiveEvents((current) => current.some((item) => item.id === result.event!.id)
+            ? current : [...current, result.event!].slice(-200));
+        }
+        setWorkNotice('Przyjęto do kolejki agentów: ' + (result.queuedFor || []).join(', ') + '. To nie oznacza wykonania zadania.');
+        setMessageText('');
+        setChatAttachments([]);
+        setAttachmentError(null);
+      } catch (cause) {
+        setWorkNotice('Błąd LIVE: ' + (cause instanceof Error ? cause.message : 'brak odpowiedzi serwera'));
+      } finally {
+        setLiveBusy(false);
+      }
+      return;
+    }
     try {
       await onSendMessage(message, selectedTarget, attachmentsSnapshot, freedomEnabled);
       const images = attachmentsSnapshot.filter((attachment) => attachment.mimeType?.startsWith('image/'));
@@ -567,6 +651,7 @@ export const AgentCommsView: React.FC<AgentCommsViewProps> = ({
         </div>
       </div>
 
+      <LiveWorkspaceSession onChange={setLiveAuthenticated} />
       <WorkspaceCommandCenter
         history={dataStore.chat_history}
         streamingChat={streamingChat}
@@ -820,6 +905,28 @@ export const AgentCommsView: React.FC<AgentCommsViewProps> = ({
           })
         )}
 
+        {liveAuthenticated && liveEvents.filter((item) => item.type === 'message').length > 0 && (
+          <section className="space-y-2 border-t border-cyan-900/60 pt-3" aria-label="Wiadomości od oryginalnych workerów LIVE">
+            <div className="flex flex-wrap items-center gap-2 px-1 text-xs font-bold text-cyan-100">
+              <span className="h-2 w-2 rounded-full bg-emerald-400"/>
+              Oryginalni agenci · transport LIVE
+              <span className="font-normal text-slate-400">Odebrane zdarzenia serwera, nie symulacja</span>
+            </div>
+            {liveEvents.filter((item) => item.type === 'message').map((item) => (
+              <article key={item.id} className={'rounded-xl border p-3 sm:p-4 ' +
+                (item.sender === 'user' ? 'ml-2 border-purple-500/40 bg-purple-950/25 sm:ml-14' : 'mr-2 border-cyan-800/65 bg-slate-900 sm:mr-14')}>
+                <div className="mb-2 flex flex-wrap items-center justify-between gap-2 border-b border-slate-800 pb-1.5">
+                  <span className="text-[11px] font-bold text-cyan-200">{item.sender === 'user' ? 'Operator · LIVE' : item.sender + ' · LIVE'}</span>
+                  <span className="text-[10px] text-slate-400">
+                    {item.channel} · {Number.isFinite(Date.parse(item.at)) ? new Date(item.at).toLocaleTimeString('pl-PL') : 'czas nieznany'}
+                  </span>
+                </div>
+                <WorkChatMessage content={item.text} onPrompt={prepareWorkPrompt} onOpenTerminal={onOpenTerminal}/>
+              </article>
+            ))}
+          </section>
+        )}
+
         {streamingChat && (
           <section className="space-y-3" aria-label="Bieżąca rozmowa z agentami">
             <div className="ml-2 rounded-xl border border-purple-500/50 bg-purple-950/30 p-3 sm:ml-14 sm:p-4">
@@ -876,6 +983,20 @@ export const AgentCommsView: React.FC<AgentCommsViewProps> = ({
             <button type="button" onClick={()=>setTerminalCardVisible(false)} className="rounded border border-slate-700 px-2 py-1 text-slate-200 hover:bg-slate-800">Zamknij kartę</button>
           </div>
         </div>
+      </div>}
+      {liveAuthenticated && <div className="flex shrink-0 items-center gap-2 border-t border-cyan-900/60 bg-[#091b2b] px-3 py-1.5" aria-label="Wybierz transport czatu">
+        <span className="text-[10px] text-slate-400">Transport:</span>
+        <button type="button" aria-pressed={liveMode} disabled={liveBusy} onClick={() => setLiveMode(true)}
+          className={'rounded-lg border px-2.5 py-1 text-[11px] font-semibold ' +
+            (liveMode ? 'border-emerald-500/60 bg-emerald-950 text-emerald-200' : 'border-slate-700 text-slate-400')}>
+          Workery LIVE
+        </button>
+        <button type="button" aria-pressed={!liveMode} disabled={liveBusy} onClick={() => setLiveMode(false)}
+          className={'rounded-lg border px-2.5 py-1 text-[11px] font-semibold ' +
+            (!liveMode ? 'border-cyan-500/60 bg-cyan-950 text-cyan-200' : 'border-slate-700 text-slate-400')}>
+          Modele LLM
+        </button>
+        {liveBusy && <span role="status" className="animate-pulse text-[10px] text-cyan-300">Kolejkowanie…</span>}
       </div>}
       {/* Work actions in the original chat, with explicit operator confirmation before sending */}
       {showMoreMenu && <div className="flex w-full shrink-0 gap-1.5 overflow-x-auto border-t border-cyan-900/60 bg-[#071625] px-3 py-2" aria-label="Akcje AI Work">
@@ -961,8 +1082,8 @@ export const AgentCommsView: React.FC<AgentCommsViewProps> = ({
                 }}
                 maxLength={20_500}
                 rows={1}
-                disabled={isLoading}
-                placeholder="Wiadomość do agentów…"
+                disabled={isLoading || liveBusy}
+                placeholder={liveAuthenticated && liveMode ? 'Wiadomość do oryginalnych agentów LIVE…' : 'Wiadomość do agentów…'}
                 className="w-full resize-none rounded-xl border border-slate-700 bg-slate-900/95 px-3 py-2 pr-8 font-mono text-xs sm:text-sm text-slate-100 outline-none transition placeholder:text-slate-500 focus:border-cyan-400 focus:ring-1 focus:ring-cyan-400/40 disabled:opacity-50 min-h-[48px] max-h-40"
               />
               {messageText && !isLoading && (
@@ -1014,7 +1135,7 @@ export const AgentCommsView: React.FC<AgentCommsViewProps> = ({
             <button
               type="submit"
               aria-label={`Wyślij wiadomość do ${{ triad: 'Triady', si_1: 'Arii', Alex: 'Alexa', Astyria: 'Astyrii', Aurelius: 'Aureliusa' }[selectedTarget]}`}
-              disabled={(!messageText.trim() && chatAttachments.length === 0) || isLoading}
+              disabled={(!messageText.trim() && chatAttachments.length === 0) || isLoading || liveBusy}
               className="flex h-9 sm:h-10 shrink-0 items-center justify-center gap-1.5 rounded-xl bg-gradient-to-r from-emerald-500 via-teal-500 to-cyan-500 px-3.5 sm:px-4 font-mono text-xs font-bold text-slate-950 shadow-[0_0_12px_rgba(16,185,129,0.35)] transition hover:from-emerald-400 hover:to-cyan-400 disabled:cursor-not-allowed disabled:opacity-40 cursor-pointer"
             >
               <Send className="h-4 w-4 shrink-0" />
