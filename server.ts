@@ -20,6 +20,7 @@ import { randomUUID, createHash } from 'crypto';
 import { INITIAL_DATA_STORE, normalizeDataStore } from './src/kernel/svlKernel';
 import type { ChatSystemChange } from './src/kernel/chatChanges';
 import { withoutNlpEngine } from './src/lib/withoutNlpEngine';
+import { selectChatProviderConfig } from './src/kernel/chatProviderMode';
 import {
   DEFAULT_OLLAMA_BASE_URL,
   warmupOllama,
@@ -6498,19 +6499,18 @@ app.post('/api/triad/message', async (req, res) => {
   }
 
   // CZAT TRIADY: swobodna rozmowa — Gemini → xAI (Grok) → Ollama (lokalny model) → without_nlp.
-  const availableLlmProviders = configuredProviders(LLM_CHAIN_CONFIG);
-  const llmProviders = requestedProviderMode === 'ollama'
-    ? availableLlmProviders.filter((provider) => provider === 'ollama')
-    : requestedProviderMode === 'api'
-      ? availableLlmProviders.filter((provider) => provider !== 'ollama')
-      : availableLlmProviders;
+  const chatLlmConfig = selectChatProviderConfig(
+    LLM_CHAIN_CONFIG,
+    requestedProviderMode as 'api' | 'ollama' | undefined,
+  );
+  const llmProviders = configuredProviders(chatLlmConfig);
   if (requestedProviderMode && llmProviders.length === 0) {
     return sendChatError(req, res, 503,
       requestedProviderMode === 'ollama'
         ? 'Wybrano Ollamę, lecz model lokalny nie jest skonfigurowany.'
         : 'Wybrano API, ale żaden dostawca API nie jest skonfigurowany.');
   }
-  const chatLlmConfig: LlmChainConfig = { ...LLM_CHAIN_CONFIG, providers: llmProviders };
+
   if (llmProviders.length === 0 && (!CHAT_LOCAL_FALLBACK || attachments.some((attachment) => attachment.mimeType?.startsWith('image/')))) {
     return sendChatError(req, res, 503, 'Brak skonfigurowanego modelu czatu. Ustaw LLM_PROVIDERS="ollama" i uruchom Ollamę albo skonfiguruj dostawcę API w sekretach serwera.');
   }
