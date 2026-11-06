@@ -47,8 +47,8 @@ if [[ "$model" == 'auto' || -z "$model" ]]; then model='dolphin-mixtral:8x7b'; f
 printf 'Pobieranie modelu docelowego: %s\n' "$model"
 OLLAMA_HOST=127.0.0.1:11434 ollama pull "$model"
 
-# Usuń wszystkie pozostałe modele z lokalnej Ollamy, zostawiając wyłącznie $model
-if command -v node >/dev/null 2>&1; then
+# Bezpieczny start: inne modele są zachowywane. Usuwanie wymaga jawnego OLLAMA_PRUNE_OTHERS=true.
+if [[ "${OLLAMA_PRUNE_OTHERS:-false}" =~ ^(1|true|yes|on)$ ]] && command -v node >/dev/null 2>&1; then
   other_models="$(curl --fail --silent "$api_base/api/tags" | node -e '
     const target = (process.argv[1] || "").trim().toLowerCase();
     const norm = (s) => (s.includes(":") ? s : s + ":latest");
@@ -92,4 +92,4 @@ curl --fail --silent --show-error --max-time 180 \
 
 printf 'Ollama gotowa i skonfigurowana. Aktywny wyłączny model: %s\n' "$model"
 curl --fail --silent --show-error "$api_base/api/tags"
-printf '\n%s\n' 'Lista modeli potwierdzona. Pozostałe modele zostały usunięte.'
+printf '\n%s\n' 'Lista modeli potwierdzona. Pozostałe modele zachowano, chyba że jawnie ustawiono OLLAMA_PRUNE_OTHERS=true.'
