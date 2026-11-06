@@ -1,4 +1,4 @@
-import { configuredProviders, type LlmChainConfig } from './llmChain';
+import { configuredProviders, type LlmChainConfig } from './llmChain.ts';
 
 /** Explicit chat provider selection cannot silently cross API/Ollama boundary. */
 export type ChatProviderMode = 'api' | 'ollama';
