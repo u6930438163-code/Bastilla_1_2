@@ -6258,12 +6258,15 @@ app.post('/api/triad/free-voice', async (req, res) => {
     );
 
     const spoken = evaluations.filter((item) => !item.skipped && item.text.trim().length > 0);
+    // Provider/model is public metadata. Do not expose credentials or raw upstream errors.
+    const engines = Object.fromEntries(evaluations.map(item => [item.agent, item.engine]));
     if (spoken.length === 0) {
       return res.json({
         success: true,
         skipped: true,
         spokenAgents: [],
         replies: {},
+        engines,
         state: currentState,
       });
     }
@@ -6303,6 +6306,7 @@ app.post('/api/triad/free-voice', async (req, res) => {
       skipped: false,
       spokenAgents: spoken.map((item) => item.agent),
       replies,
+      engines,
       state: finalState,
     });
   } catch (error: any) {
