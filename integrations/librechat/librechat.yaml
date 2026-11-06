@@ -12,4 +12,3 @@ endpoints:
         fetch: false
       modelDisplayLabel: "Bastilla Agents"
       titleConvo: false
-      dropParams: ["stream"]
