@@ -5,6 +5,8 @@ import { Sparkles, ShieldCheck, RefreshCw, Image as ImageIcon, FileText, Message
 import { WorkChatMessage, WorkChatDemo } from './WorkChatMessage';
 import { TerminalWorkCard, type TerminalCardEntry, type TerminalCardStatus } from './TerminalWorkCard';
 import { WorkspaceCommandCenter } from './WorkspaceCommandCenter';
+import { ChatAvatar, ChatReactionBar, type ChatVotes } from './ChatReactionBar';
+import { chatReactionKeys } from '../lib/chatReactionKeys.mjs';
 import { LiveWorkspaceSession } from './LiveWorkspaceSession';
 import {
   ASTYRIA_MISSION_ACTIONS,
@@ -114,14 +116,9 @@ export const AgentCommsView: React.FC<AgentCommsViewProps> = ({
   const [liveBusy, setLiveBusy] = useState(false);
   const [liveEvents, setLiveEvents] = useState<LiveChatEvent[]>([]);
 
-  const [messageReactions, setMessageReactions] = useState<Record<string, 'up' | 'down'>>(() => {
-    try {
-      const raw = localStorage.getItem(REACTION_STORAGE_KEY);
-      const stored: unknown = raw ? JSON.parse(raw) : {};
-      if (!stored || typeof stored !== 'object' || Array.isArray(stored)) return {};
-      return Object.fromEntries(Object.entries(stored).filter(([, value]) => value === 'up' || value === 'down')) as Record<string, 'up' | 'down'>;
-    } catch { return {}; }
-  });
+  const [reactionVotes, setReactionVotes] = useState<Record<string, ChatVotes>>({});
+  const [reactionPending, setReactionPending] = useState<string | null>(null);
+  const reactionKeys = React.useMemo(() => chatReactionKeys(dataStore.chat_history), [dataStore.chat_history]);
   const [isFullViewport, setIsFullViewport] = useState(false);
   const [twoWayEnabled, setTwoWayEnabled] = useState<boolean>(() => {
     try {
@@ -167,14 +164,45 @@ export const AgentCommsView: React.FC<AgentCommsViewProps> = ({
     }
   };
 
-  const setReaction = (key: string, value: 'up' | 'down') => {
-    setMessageReactions((current) => {
-      const next = { ...current };
-      if (next[key] === value) delete next[key];
-      else next[key] = value;
-      try { localStorage.setItem(REACTION_STORAGE_KEY, JSON.stringify(next)); } catch {}
-      return next;
-    });
+  // Shared reactions are fetched from the server, so other devices see the same votes.
+  useEffect(() => {
+    let active = true;
+    const refresh = async () => {
+      try {
+        const response = await fetch('/api/chat/reactions', { credentials: 'same-origin', cache: 'no-store' });
+        if (!response.ok) return;
+        const payload = await response.json() as { reactions?: Record<string, ChatVotes> };
+        if (active && payload.reactions && typeof payload.reactions === 'object') setReactionVotes(payload.reactions);
+      } catch { /* Remain usable when server is offline. */ }
+    };
+    const onSync = (event: Event) => {
+      const topic = (event as CustomEvent<{ topic?: string }>).detail?.topic;
+      if (topic === 'chat' || topic === 'workspace') void refresh();
+    };
+    void refresh();
+    window.addEventListener('bastilla:workspace-event', onSync);
+    return () => { active = false; window.removeEventListener('bastilla:workspace-event', onSync); };
+  }, [dataStore.chat_history.length]);
+
+  const submitReaction = async (messageKey: string, value: 'up' | 'down') => {
+    if (!messageKey || reactionPending) return;
+    setReactionPending(messageKey);
+    try {
+      const response = await fetch('/api/chat/reactions/vote', {
+        method: 'POST',
+        credentials: 'same-origin',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ messageKey, vote: value }),
+      });
+      const result = await response.json() as { success?: boolean; votes?: ChatVotes; error?: string };
+      if (!response.ok || !result.success || !result.votes) throw new Error(result.error || 'Nie udało się zapisać głosu.');
+      setReactionVotes(current => ({ ...current, [messageKey]: result.votes! }));
+      window.dispatchEvent(new CustomEvent('bastilla:workspace-local', { detail: { topic: 'chat' } }));
+    } catch (error) {
+      setWorkNotice('Ocena nie została zapisana: ' + (error instanceof Error ? error.message : 'Błąd połączenia.'));
+    } finally {
+      setReactionPending(null);
+    }
   };
 
   const exportConversation = () => {
@@ -802,6 +830,7 @@ export const AgentCommsView: React.FC<AgentCommsViewProps> = ({
                 {/* Compact Message Header */}
                 <div className="flex items-center justify-between gap-2 mb-1.5 pb-1 border-b border-slate-800/70">
                   <div className="flex flex-wrap items-center gap-1.5">
+                    <ChatAvatar actor={msg.agent} />
                     <span
                       className={`font-bold px-2 py-0.5 rounded text-[11px] tracking-wide ${
                         isOperator
@@ -828,19 +857,12 @@ export const AgentCommsView: React.FC<AgentCommsViewProps> = ({
                 {/* Message Body with KaTeX LaTeX formulas and Markdown */}
                 <WorkChatMessage content={msg.tekst} onPrompt={prepareWorkPrompt} onOpenTerminal={onOpenTerminal} />
                 <div className="mt-2 flex flex-wrap items-center justify-end gap-1">
+                  <ChatReactionBar
+                    votes={reactionVotes[reactionKeys[idx]] || {}}
+                    disabled={reactionPending === reactionKeys[idx]}
+                    onVote={vote => void submitReaction(reactionKeys[idx], vote)}
+                  />
                   {!isOperator && <>
-                    <button type="button" aria-label="Dobra odpowiedź" title="Oceń pozytywnie"
-                      aria-pressed={messageReactions[String(idx) + ':' + msg.agent + ':' + msg.tekst.length] === 'up'}
-                      onClick={() => setReaction(String(idx) + ':' + msg.agent + ':' + msg.tekst.length, 'up')}
-                      className={'rounded-lg p-1.5 hover:bg-emerald-950 ' + (messageReactions[String(idx) + ':' + msg.agent + ':' + msg.tekst.length] === 'up' ? 'text-emerald-300' : 'text-slate-500')}>
-                      <ThumbsUp className="h-3.5 w-3.5" />
-                    </button>
-                    <button type="button" aria-label="Słaba odpowiedź" title="Oceń negatywnie"
-                      aria-pressed={messageReactions[String(idx) + ':' + msg.agent + ':' + msg.tekst.length] === 'down'}
-                      onClick={() => setReaction(String(idx) + ':' + msg.agent + ':' + msg.tekst.length, 'down')}
-                      className={'rounded-lg p-1.5 hover:bg-rose-950 ' + (messageReactions[String(idx) + ':' + msg.agent + ':' + msg.tekst.length] === 'down' ? 'text-rose-300' : 'text-slate-500')}>
-                      <ThumbsDown className="h-3.5 w-3.5" />
-                    </button>
                     <button type="button" title="Odpowiedz temu agentowi"
                       className="flex items-center gap-1 rounded-lg px-2 py-1 text-[10px] text-slate-400 hover:bg-slate-800 hover:text-cyan-200"
                       onClick={() => {
