@@ -6,7 +6,7 @@ import { WorkChatMessage, WorkChatDemo } from './WorkChatMessage';
 import { TerminalWorkCard, type TerminalCardEntry, type TerminalCardStatus } from './TerminalWorkCard';
 import { WorkspaceCommandCenter } from './WorkspaceCommandCenter';
 import { ChatAvatar, ChatReactionBar, type ChatVotes } from './ChatReactionBar';
-import { chatReactionKeys } from '../lib/chatReactionKeys.mjs';
+import { chatReactionKeys, liveReactionKey } from '../lib/chatReactionKeys.mjs';
 import { LiveWorkspaceSession } from './LiveWorkspaceSession';
 import {
   ASTYRIA_MISSION_ACTIONS,
@@ -961,6 +961,13 @@ export const AgentCommsView: React.FC<AgentCommsViewProps> = ({
                   </span>
                 </div>
                 <WorkChatMessage content={item.text} onPrompt={prepareWorkPrompt} onOpenTerminal={onOpenTerminal}/>
+                <div className="mt-2 border-t border-slate-800/60 pt-2">
+                  <ChatReactionBar
+                    votes={reactionVotes[liveReactionKey(item)] || {}}
+                    disabled={!liveReactionKey(item) || reactionPending === liveReactionKey(item)}
+                    onVote={vote => void submitReaction(liveReactionKey(item), vote)}
+                  />
+                </div>
               </article>
             ))}
           </section>
