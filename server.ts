@@ -6278,6 +6278,19 @@ app.post('/api/triad/message', async (req, res) => {
     });
   }
 
+  const wantsStream = String(req.get('accept') || '').includes('text/event-stream');
+  let streamStarted = false;
+  const emit = (event: string, payload: unknown) => {
+    if (!wantsStream || res.writableEnded || res.destroyed) return;
+    if (!streamStarted) {
+      res.status(200).setHeader('Content-Type', 'text/event-stream; charset=utf-8');
+      res.setHeader('Cache-Control', 'no-cache, no-transform');
+      res.setHeader('X-Accel-Buffering', 'no');
+      res.flushHeaders();
+      streamStarted = true;
+    }
+    res.write('event: ' + event + '\n' + 'data: ' + JSON.stringify(payload) + '\n\n');
+  };
   try {
     const currentState = await getPythonKernelState(true);
     const store = currentState?.store && typeof currentState.store === 'object'
@@ -6294,7 +6307,12 @@ app.post('/api/triad/message', async (req, res) => {
     // Lokalna Ollama obsługuje agentów po kolei, więc limit rośnie z liczbą agentów.
     const deadline = AbortSignal.timeout(LLM_CHAT_TIMEOUT_MS * (usesOllama() ? targetAgents.length : 1));
 
-    const results = await Promise.all(targetAgents.map(async (agent) => {
+    const results: Array<{ agent: ChatAgentName; text: string; engine: string; llm: boolean; error?: string }> = [];
+    // Agents now answer one at a time; each can send actual Ollama deltas.
+    for (const agent of targetAgents) {
+      emit('agent_start', { agent });
+      let streamed = false;
+      const currentResult = await (async () => {
       if (llmProviders.length > 0) {
         try {
           const result = await generateWithChain(LLM_CHAIN_CONFIG, {
@@ -6304,7 +6322,7 @@ app.post('/api/triad/message', async (req, res) => {
             history: hasImageAttachment ? [] : usesOllama() && !CLOUD_LLM_ENABLED ? buildLlmHistory(chatHistory, agent, 4, 800) : buildLlmHistory(chatHistory, agent),
             message: cleanMessage,
             attachments: binaryAttachments,
-          }, deadline);
+          }, deadline, (fragment: string) => { streamed = true; emit('agent_delta', { agent, text: fragment }); });
           if (result.failures.length) {
             pushSystemLog('warn', 'KERNEL', `[CZAT] ${agent}: ${result.failures.join(' | ')} — odpowiedział ${result.provider} (${result.model}).`);
           }
@@ -6328,12 +6346,20 @@ app.post('/api/triad/message', async (req, res) => {
         llm: false,
         error: undefined as string | undefined,
       };
-    }));
+      })();
+      results.push(currentResult);
+      if (!currentResult.error) {
+        if (!streamed) emit('agent_delta', { agent, text: currentResult.text });
+        emit('agent_done', { agent, text: currentResult.text });
+      } else emit('agent_error', { agent, error: currentResult.error });
+    }
 
     const failed = results.filter((result) => result.error);
     if (failed.length > 0) {
       // Bez awaryjnego silnika nic nie zapisujemy do historii — operator widzi prawdziwy powód awarii.
-      return sendChatError(req, res, 502, `Model AI nie odpowiedział. ${failed.map((result) => result.error).join(' | ')}`.slice(0, 900));
+      const errorMessage = `Model AI nie odpowiedział. ${failed.map((result) => result.error).join(' | ')}`.slice(0, 900);
+      if (streamStarted) { emit('failure', { error: errorMessage }); return res.end(); }
+      return sendChatError(req, res, 502, errorMessage);
     }
 
     const replyMap = {} as Record<ChatAgentName, string>;
@@ -6370,7 +6396,7 @@ app.post('/api/triad/message', async (req, res) => {
     if (!hasPersistedAgentProtocolTranscript(finalState, transcript, previousChatHistoryLength)) {
       throw new Error('Jądro nie potwierdziło zapisu wiadomości i odpowiedzi agentów.');
     }
-    return res.json({
+    const responsePayload = {
       success: true,
       agent: target,
       engines,
@@ -6380,9 +6406,13 @@ app.post('/api/triad/message', async (req, res) => {
       replies: replyMap,
       analysis,
       state: finalState,
-    });
+    };
+    if (wantsStream) { emit('complete', responsePayload); return res.end(); }
+    return res.json(responsePayload);
   } catch (error: any) {
-    return sendChatError(req, res, 500, error?.message || 'Nie udało się uzyskać odpowiedzi agentów.');
+    const errorMessage = error?.message || 'Nie udało się uzyskać odpowiedzi agentów.';
+    if (streamStarted) { emit('failure', { error: errorMessage }); return res.end(); }
+    return sendChatError(req, res, 500, errorMessage);
   }
 });
 
