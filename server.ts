@@ -88,11 +88,14 @@ import {
   isAgentPassResponse,
 } from './src/kernel/freeVoiceChat';
 
+// Deployment secrets (Codespaces / hosting) always take precedence over local
+// files. Previously .env.local silently replaced injected keys with stale ones.
+const injectedEnvNames = new Set(Object.keys(process.env));
 dotenv.config();
-// .env.local nadpisuje .env, ale puste wartości nie kasują kluczy z sekretów Codespaces / .env.
+// .env.local may override .env, but must NEVER override injected host secrets.
 if (fs.existsSync('.env.local')) {
   for (const [name, value] of Object.entries(dotenv.parse(fs.readFileSync('.env.local')))) {
-    if (value.trim()) process.env[name] = value;
+    if (value.trim() && !injectedEnvNames.has(name)) process.env[name] = value;
   }
 }
 
