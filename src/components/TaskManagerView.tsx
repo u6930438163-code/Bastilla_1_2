@@ -178,7 +178,7 @@ export function TaskManagerView({ initialSection = 'processes', onPrepareMainCha
     ].join('\n');
     onPrepareMainChat(task.slice(0, 7800), selectedAgent);
     setSendingKey(null);
-    setSubmission('Otworzono główny czat ze zgłoszeniem dla ' + selectedAgent + '. Sprawdź i zatwierdź polecenie przez Wyślij.');
+    setSubmission('Przekazano zgłoszenie do obsługi przez ' + selectedAgent + ' bez ręcznego wysyłania z czatu. Stan sprawdź w rozmowie.');
 
   };
 
@@ -316,7 +316,7 @@ export function TaskManagerView({ initialSection = 'processes', onPrepareMainCha
                 <pre>{item.message}</pre>
                 {item.category === 'error' && <button type="button" className="bastilla-ops-send"
                   disabled={Boolean(sendingKey)}
-                  onClick={() => void sendToAgent('log', item)}><Send className="w-4 h-4" /> {sendingKey === item.id ? 'Przekazuję…' : 'Przygotuj błąd dla ' + selectedAgent}</button>}
+                  onClick={() => void sendToAgent('log', item)}><Send className="w-4 h-4" /> {sendingKey === item.id ? 'Przekazuję…' : 'Zleć diagnozę ' + selectedAgent}</button>}
               </article>)}
           </div>
           <p className="bastilla-ops-footnote">„Sukces” oznacza wpis typu healed zgłoszony przez aplikację, a nie niezależny dowód naprawy. Dziennik jest ograniczony do ostatnich 300 wpisów.</p>
@@ -358,12 +358,12 @@ export function TaskManagerView({ initialSection = 'processes', onPrepareMainCha
           </div>
           <button type="button" className="bastilla-ops-send" disabled={Boolean(sendingKey) || !ollamaReport}
             onClick={() => void sendToAgent('ollama')}><Bot className="w-4 h-4" />
-            {sendingKey === 'ollama' ? 'Przekazuję…' : 'Przygotuj diagnostykę Ollamy dla ' + selectedAgent}</button>
+            {sendingKey === 'ollama' ? 'Przekazuję…' : 'Zleć diagnostykę Ollamy · ' + selectedAgent}</button>
           <p className="bastilla-ops-footnote">{ollamaReport?.note || 'Dane pamięci są dostępne tylko, jeśli odpowiada /api/ps.'} Przydzielona pamięć modelu nie jest pomiarem zużycia całego procesu ani hosta.</p>
         </section>}
 
         <section className="bastilla-ops-agent-bar" aria-label="Wybór agenta diagnostycznego">
-          <div className="flex items-center gap-2"><Bot className="w-5 h-5 text-cyan-300" /><div><strong>Diagnostyka przez Twój główny czat AI</strong><p>Wybierz agenta. Zgłoszenie zostanie przygotowane w rozmowie; wyślesz je po sprawdzeniu.</p></div></div>
+          <div className="flex items-center gap-2"><Bot className="w-5 h-5 text-cyan-300" /><div><strong>Diagnostyka AI jednym kliknięciem</strong><p>Wybierz agenta. Zgłoszenie zostanie przekazane bez wypełniania pola czatu; naprawy wymagają osobnej zgody.</p></div></div>
           <div className="bastilla-ops-agent-controls">
             <select value={selectedAgent} onChange={event => setSelectedAgent(event.target.value as AgentName)}
               aria-label="Wybierz agenta AI do diagnozy">{AGENTS.map(name => <option key={name} value={name}>{name}</option>)}</select>
