@@ -1201,8 +1201,8 @@ export const AgentCommsView: React.FC<AgentCommsViewProps> = ({
                 <select aria-label="Wybierz silnik AI" value={providerMode}
                   onChange={event => setProviderMode(event.target.value as 'api' | 'ollama')}
                   disabled={isLoading}
-                  className="max-w-[120px] appearance-none bg-transparent py-1 pl-1 pr-4 text-[14px] font-medium text-slate-100 outline-none">
-                  <option value="api" className="bg-slate-900">API</option>
+                  className="max-w-[112px] rounded-lg border border-slate-600/60 bg-slate-900 px-2 py-2 text-[13px] font-medium text-slate-100 outline-none focus:border-cyan-400">
+                  <option value="api" className="bg-slate-900">OpenAI API</option>
                   <option value="ollama" className="bg-slate-900">Ollama</option>
                 </select>
                 <span aria-hidden="true" className="pointer-events-none -ml-4 text-[10px] text-slate-400">▾</span>
