@@ -2,10 +2,8 @@ import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react'
 import {
   DataStore,
   INITIAL_DATA_STORE,
-  SYS_VERSION,
   normalizeDataStore,
 } from './kernel/svlKernel';
-import { Header } from './components/Header';
 import { LiveProgressBar } from './components/LiveProgressBar';
 import { SystemResourceMeters } from './components/SystemResourceMeters';
 import { OllamaModelManager } from './components/OllamaModelManager';
@@ -18,7 +16,6 @@ import { MonolithView } from './components/MonolithView';
 import { DataStoreView } from './components/DataStoreView';
 import { ChronolithView } from './components/ChronolithView';
 import { DiagnosticsView } from './components/DiagnosticsView';
-import { ReportModal } from './components/ReportModal';
 import { TaskManagerView } from './components/TaskManagerView';
 import { MemorySchemaGraph } from './components/MemorySchemaGraph';
 import { TemporalMatrix } from './components/TemporalMatrix';
@@ -89,7 +86,6 @@ export default function App() {
   const terminalPendingRef = useRef(0);
   const [agentError, setAgentError] = useState<string | null>(null);
   const [chatSystemChange, setChatSystemChange] = useState<ChatSystemChange | null>(null);
-  const [showReportModal, setShowReportModal] = useState(false);
 
   // Expose navigation to window for internal component linking
   useEffect(() => {
@@ -677,37 +673,18 @@ export default function App() {
     }
   };
 
-  const handleResetToDefault = () => {
-    if (confirm(`Czy na pewno chcesz przywrócić stan bazowy jądra SVL v${SYS_VERSION}?`)) {
-      setDataStore(INITIAL_DATA_STORE);
-      try {
-        localStorage.removeItem(LOCAL_STORAGE_KEY);
-      } catch (e) {
-        console.error(e);
-      }
-    }
-  };
-
   return (
     <ErrorBoundary>
       <div className="app-shell flex h-dvh max-h-dvh min-w-0 max-w-full flex-col overflow-hidden bg-[#050b18] font-sans text-slate-100 selection:bg-cyan-400/30 selection:text-cyan-100">
-        {!['comms', 'terminal', 'task_manager', 'ollama_manager'].includes(activeTab) && (
-          <Header
-            dataStore={dataStore}
-            activeTab={activeTab}
-            onSelectTab={setActiveTab}
-            onReset={handleResetToDefault}
-            onShowReport={() => setShowReportModal(true)}
-            onSyncSystem={handleSyncSystem}
-          />
-        )}
-
-        {!['terminal', 'task_manager', 'ollama_manager'].includes(activeTab) && <div className="bastilla-workspace-sync-strip" role="status" aria-live="polite">
+        {/* Jeden kompaktowy nagłówek Workspace na wszystkich kartach — bez dużego bannera systemu. */}
+        <div className="bastilla-workspace-sync-strip" role="status" aria-live="polite">
           <span className={workspaceLive ? 'bastilla-workspace-sync-dot is-live' : 'bastilla-workspace-sync-dot'} />
           <span className="font-semibold">{workspaceLive ? 'WORKSPACE LIVE' : 'WORKSPACE · ODSWIEZANIE 4s'}</span>
           <span className="bastilla-workspace-sync-detail">{workspaceLive ? 'Czat · terminal · jądro: zmiany na żywo' : 'Zaloguj się w Czat AI · LIVE, aby włączyć synchronizację SSE'}</span>
-          <button type="button" onClick={() => setActiveTab('terminal')}>Otwórz terminal</button>
-        </div>}
+          <button type="button" onClick={() => setActiveTab(activeTab === 'comms' ? 'terminal' : 'comms')}>
+            {activeTab === 'comms' ? 'Otwórz terminal' : 'Otwórz czat'}
+          </button>
+        </div>
 
         {(isAgentLoading || terminalBusy) && activeTab !== 'comms' && (
           <div className="px-3 py-2 shrink-0">
@@ -892,12 +869,6 @@ export default function App() {
           )}
         </main>
         </div>
-
-        <ReportModal
-          isOpen={showReportModal}
-          onClose={() => setShowReportModal(false)}
-          dataStore={dataStore}
-        />
 
         <SystemHealthDock />
       </div>
