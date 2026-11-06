@@ -7,6 +7,10 @@ Wideo, Kod i Raport są w jego polu tworzenia wiadomości. Przełącznik Work
 pokazuje demonstrację możliwości wewnątrz tej samej historii. Osobny interfejs
 "Czat AI · LIVE" został usunięty — nie ma dodatkowego wyskakującego okna.
 
+## Pole wiadomości i wybór silnika
+
+Główny composer ma dwurzędowy, responsywny układ: pole wpisywania, przycisk dodawania załącznika, selektor silnika i wysyłanie. Wybór **API** lub **Ollama** jest zapamiętywany lokalnie i przekazywany jako `providerMode` do `/api/triad/message`. Serwer filtruje skonfigurowanych dostawców do wybranego rodzaju. Brak wybranego silnika zwraca czytelny błąd zamiast cichego przełączenia na inny. Klucze API pozostają wyłącznie po stronie serwera. Transport workerów LIVE jest odrębny od wyboru LLM.
+
 ## Co obsługujemy
 
 - Tradycyjne odpowiedzi Markdown (nagłówki, tabele, kod, matematyka, SVG,
