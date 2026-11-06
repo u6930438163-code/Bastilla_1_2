@@ -26,7 +26,8 @@ const EXPANDED = Object.freeze({
 });
 export const INSTALL_MAP = Object.freeze({ ...CORE, ...EXPANDED });
 
-export function selectDiagnosticTools({ profile = 'core', names = [] } = {}) {
+export function selectDiagnosticTools({ profile = 'core', names = [], agent = null } = {}) {
+  if (agent !== null && !['Aria', 'Alex', 'Astyria', 'Aurelius'].includes(agent)) throw new Error('Nieznany agent: ' + agent);
   if (!['core', 'expanded'].includes(profile)) throw new Error('Nieznany profil: ' + profile);
   const catalog = new Map(DIAGNOSTIC_TOOLS.map(tool => [tool.name.toLowerCase(), tool]));
   const selected = names.length ? names.map(name => {
@@ -34,7 +35,7 @@ export function selectDiagnosticTools({ profile = 'core', names = [] } = {}) {
     if (!tool) throw new Error('Nieznane narzędzie: ' + name);
     return tool;
   }) : DIAGNOSTIC_TOOLS;
-  return selected.map(tool => {
+  return selected.filter(tool => agent === null || tool.agent === agent).map(tool => {
     const pkg = INSTALL_MAP[tool.name] || null;
     const eligible = Boolean(pkg && (names.length || profile === 'expanded' || Object.hasOwn(CORE, tool.name)));
     return { name: tool.name, github: tool.github, category: tool.category,
@@ -43,18 +44,19 @@ export function selectDiagnosticTools({ profile = 'core', names = [] } = {}) {
   });
 }
 export function parseOptions(argv) {
-  const opts = { apply: false, profile: 'core', names: [], json: false, update: true, report: null };
+  const opts = { apply: false, profile: 'core', names: [], agent: null, json: false, update: true, report: null };
   for (let i = 0; i < argv.length; i++) {
     const flag = argv[i];
     if (flag === '--apply') opts.apply = true;
     else if (flag === '--plan') opts.apply = false;
     else if (flag === '--json') opts.json = true;
     else if (flag === '--no-update') opts.update = false;
-    else if (['--profile', '--tool', '--report'].includes(flag)) {
+    else if (['--profile', '--tool', '--report', '--agent'].includes(flag)) {
       const value = argv[++i];
       if (!value || value.startsWith('--')) throw new Error('Brak wartości dla ' + flag);
       if (flag === '--profile') opts.profile = value;
       else if (flag === '--tool') opts.names.push(value);
+      else if (flag === '--agent') opts.agent = value;
       else opts.report = value;
     } else if (flag === '--help' || flag === '-h') opts.help = true;
     else throw new Error('Nieznany parametr: ' + flag);
@@ -67,6 +69,7 @@ const HELP = [
   'Instaluj podstawowe: npm run setup:diagnostics -- --apply',
   'Instaluj rozszerzone: npm run setup:diagnostics -- --apply --profile expanded',
   'Wybrane: npm run setup:diagnostics -- --apply --tool Nmap',
+  'Dla agenta: npm run setup:diagnostics -- --apply --profile expanded --agent Astyria',
   'Opcje: --plan, --json, --no-update, --report PLIK, --help',
 ].join('\n');
 function command(binary, args, { inherit = false, environment = {} } = {}) {
@@ -104,9 +107,9 @@ export function isSafeAptSimulation(result) {
     !/^(?:Remv|Purg)\s/m.test(result.stdout || '') &&
     !/^(?:Remv|Purg)\s/m.test(result.stderr || ''));
 }
-export function buildPlan({ profile = 'core', names = [], distroSupported = true,
+export function buildPlan({ profile = 'core', names = [], agent = null, distroSupported = true,
   installed = () => false, candidate = () => false, executable = () => false } = {}) {
-  return selectDiagnosticTools({ profile, names }).map(tool => {
+  return selectDiagnosticTools({ profile, names, agent }).map(tool => {
     const inPath = Boolean(tool.binary && executable(tool.binary));
     const aptInstalled = Boolean(tool.aptPackage && installed(tool.aptPackage));
     const aptAvailable = Boolean(tool.eligible && distroSupported && (aptInstalled || candidate(tool.aptPackage)));
@@ -140,7 +143,7 @@ export function main(argv = process.argv.slice(2)) {
       return 2;
     }
   }
-  const getPlan = () => buildPlan({ profile: opts.profile, names: opts.names,
+  const getPlan = () => buildPlan({ profile: opts.profile, names: opts.names, agent: opts.agent,
     distroSupported: supported, installed: packageInstalled,
     candidate: packageCandidate, executable: findExecutable });
   let rows = getPlan();
@@ -168,7 +171,7 @@ export function main(argv = process.argv.slice(2)) {
     readyToInstall: rows.filter(x => x.status === 'ready-to-install').length,
     manualOrUnsupported: rows.filter(x => ['manual', 'expanded-only', 'not-in-apt', 'unsupported-distro'].includes(x.status)).length,
     failed: failures.length };
-  const report = { mode: opts.apply ? 'apply' : 'plan', profile: opts.profile,
+  const report = { mode: opts.apply ? 'apply' : 'plan', profile: opts.profile, agent: opts.agent,
     generatedAt: new Date().toISOString(), distroSupported: supported,
     notes: ['APT tylko z aktywnych repozytoriów systemu; brak skanów lub uruchamiania narzędzi diagnostycznych.',
       'Najpierw apt --simulate; każda planowana operacja usuwania pakietów blokuje instalację. Skrypty postinstalacyjne APT mogą uruchomić usługi.',
@@ -182,7 +185,7 @@ export function main(argv = process.argv.slice(2)) {
   }
   if (opts.json) process.stdout.write(JSON.stringify(report, null, 2) + '\n');
   else {
-    process.stdout.write('Bastilla diagnostics: ' + report.mode + ' / ' + opts.profile + '\n');
+    process.stdout.write('Bastilla diagnostics: ' + report.mode + ' / ' + opts.profile + (opts.agent ? ' / ' + opts.agent : '') + '\n');
     process.stdout.write('Katalog ' + summary.catalog + ', PATH ' + summary.inPath +
       ', APT ' + summary.aptInstalled + ', do instalacji ' + summary.readyToInstall +
       ', osobne ' + summary.manualOrUnsupported + ', błędy ' + summary.failed + '\n');
