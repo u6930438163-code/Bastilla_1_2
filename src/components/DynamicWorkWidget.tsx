@@ -123,7 +123,7 @@ export function DynamicWorkWidget({
     const onVisible = () => { if (!document.hidden) void poll(); };
     const onWorkspace = (event: Event) => {
       const topic = (event as CustomEvent<{topic?: string}>).detail?.topic;
-      if (topic === 'system' || topic === 'telemetry') void poll();
+      if (['terminal', 'kernel', 'agents', 'workspace', 'system', 'telemetry'].includes(String(topic))) void poll();
     };
     document.addEventListener('visibilitychange', onVisible);
     window.addEventListener('bastilla:workspace-event', onWorkspace);
