@@ -31,6 +31,8 @@ export function createLiveChatRouter(options = {}) {
     }
   }
 
+  router.get('/setup', session.setupStatus);
+  router.post('/setup', session.setup);
   router.post('/session', session.login);
   router.get('/session', requireUser, session.session);
   router.delete('/session', requireUser, session.logout);
