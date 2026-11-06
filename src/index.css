@@ -519,3 +519,18 @@ input, select, textarea {
  .bastilla-ops-agent-controls select {flex:1}
  .bastilla-ops-send {width:100%}
 }
+
+
+.bastilla-ops-jobs-section {display:flex;flex-direction:column;gap:12px;border:1px solid #28516b;border-radius:13px;background:#091c2d;padding:14px}
+.bastilla-ops-job-metrics {display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}
+.bastilla-ops-job-metrics>div {border:1px solid #26465a;border-radius:10px;background:#102a3c;padding:11px;display:flex;flex-direction:column;gap:4px}
+.bastilla-ops-job-metrics small {color:#87a8bb;font-size:10px;letter-spacing:.065em}
+.bastilla-ops-job-metrics strong {color:#c8f6ff;font-size:20px;font-weight:800}
+.bastilla-ops-worker-list {display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px}
+.bastilla-ops-worker-list>div {display:flex;align-items:center;gap:6px;flex-wrap:wrap;border-radius:10px;border:1px solid #284758;background:#0b2636;padding:10px;min-width:0}
+.bastilla-ops-worker-list strong {font-size:11px;color:#e7f5ff}
+.bastilla-ops-worker-list span {font-size:10px}
+.bastilla-ops-worker-list small {flex-basis:100%;font-size:10px;color:#88a9b9}
+.ops-led.is-offline {background:#fbbf24;box-shadow:none;flex:0 0 auto}
+@media (max-width:900px) {.bastilla-ops-worker-list {grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media (max-width:420px) {.bastilla-ops-jobs-section {padding:10px}.bastilla-ops-worker-list>div {padding:8px}.bastilla-ops-job-metrics>div {padding:8px}}
