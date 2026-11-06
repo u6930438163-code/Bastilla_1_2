@@ -6308,6 +6308,7 @@ app.post('/api/work-actions/ask', async (req, res) => {
   if (!isSameOriginApprovalRequest(req)) {
     return res.status(403).json({ success: false, error: 'Akcje kart dostępne tylko z interfejsu Bastilla.' });
   }
+  res.setHeader('Cache-Control', 'no-store');
   const prompt = req.body?.prompt;
   const requestedAgent: unknown = req.body?.agent ?? 'Alex';
   const providerMode: unknown = req.body?.providerMode;
