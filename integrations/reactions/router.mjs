@@ -32,6 +32,16 @@ export function createChatReactionsRouter({ store, getHistory, sameOrigin, requi
     res.setHeader('Cache-Control', 'no-store');
     return res.json({ reactions: store.list(), actors: ['Operator','Aria','Alex','Astyria','Aurelius'] });
   });
+  router.delete('/', (req, res) => {
+    if (!sameOrigin(req)) return res.status(403).json({ error: 'Czyszczenie ocen wymaga żądania z tej aplikacji.' });
+    try {
+      store.clear();
+      notify();
+      return res.json({ success: true, reactions: {} });
+    } catch (error) {
+      return res.status(503).json({ error: error?.message || 'Nie udało się usunąć ocen.' });
+    }
+  });
   // Browser can only cast the operator vote. No caller-supplied actor.
   router.post('/vote', (req, res) => {
     if (!sameOrigin(req)) return res.status(403).json({ error: 'Głos operatora wymaga żądania z tej aplikacji.' });
