@@ -5807,9 +5807,17 @@ function generateLocalTriadReplyMap(
 const CHAT_AGENT_CONVERSATION_STYLE = 'Odpowiadaj bezpośrednio po polsku, naturalnie i konkretnie. Gdy użytkownik prosi o wykres, formularz, kartę terminala, cURL lub panel, zwracaj również zgodny blok bastilla-ui.';
 const CHAT_AGENT_RICH_UI_STYLE = [
   'Główny czat potrafi renderować deklaratywny JSON w bloku Markdown ```bastilla-ui. Struktura: {"title":"Tytuł","blocks":[{"type":"metric","label":"CPU","value":"Brak danych"},{"type":"actions","actions":[{"label":"Zdiagnozuj","prompt":"Sprawdź realne logi"}]}]}.',
-  'Wspierane bloki: text, metric, chart, table, image, video, actions, terminal, progress, steps, files, model_config, diagram3d, pdf, alert, timeline, accordion, tabs, checklist, form, code, handoff, curl, http, json, diff, logs.',
+  'Wspierane bloki: text, metric, chart, table, image, video, actions, guide, rich_inline, terminal, progress, steps, files, model_config, diagram3d, pdf, alert, timeline, accordion, tabs, checklist, form, code, handoff, curl, http, json, diff, logs.',
   'Dla curl/http użyj method, url, headers, body, response. Dla form użyj fields [{type:"text|select|checkbox",label,options}]. Dla progress użyj value 0-100 i label. Dla logs użyj entries [{level,text}].',
   'Generuj UI tylko wtedy, gdy poprawia odpowiedź lub użytkownik tego wymaga. Nie wymyślaj danych ani linków. Nie dołączaj haseł. Bloki UI i ich akcje nie wykonują poleceń — mogą przygotować tekst do zatwierdzenia przez operatora.',
+].join(' ');
+
+const CHAT_AGENT_FREEDOM_STYLE = [
+  'TRYB DOWOLNOŚĆ AI: dobierz samodzielnie naturalny ton, strukturę, Markdown i format odpowiedzi, bez wymuszania jednego widżetu.',
+  'Jeżeli rozmowa wymaga następnych kroków, dołącz kartę bastilla-ui type guide, np.: {"type":"guide","title":"Co dalej?","description":"Wyjaśnienie","steps":["Krok 1","Krok 2"],"actions":[{"label":"Pokaż raport","prompt":"Przygotuj raport z rzeczywistych danych"},{"label":"Zobacz logi","prompt":"Pokaż realne logi"},{"label":"Otwórz terminal","kind":"terminal"}]}.',
+  'Przyciski prompt tworzą szkic do edycji, terminal otwiera tylko widok. Nie wykonuj żadnych działań z samego widżetu.',
+  'Możesz łączyć: guide, text, rich_inline, metric, chart, code, logs, accordion, form, timeline, wideo i grafiki. Nie przeciążaj krótkich odpowiedzi.',
+  'Nie deklaruj wykonanych działań, pomiarów lub zewnętrznych zasobów bez potwierdzenia i nie podawaj sekretów.',
 ].join(' ');
 
 function buildLlmHistory(
@@ -6304,6 +6312,7 @@ app.post('/api/triad/message', async (req, res) => {
     return res.status(400).json({ success: false, error: 'Nieznany agent czatu.' });
   }
   const target = requestedTarget as ChatTarget;
+  const freedomMode = req.body?.freedomMode === true;
   const persistedMessage = approvalCommand?.type === 'propose' && approvalCommand.action.type === 'write-file'
     ? message
     : cleanMessage;
@@ -6513,7 +6522,7 @@ app.post('/api/triad/message', async (req, res) => {
       if (llmProviders.length > 0) {
         try {
           const result = await generateWithChain(LLM_CHAIN_CONFIG, {
-            system: `${CHAT_AGENT_MISSIONS[agent]} ${CHAT_AGENT_CONVERSATION_STYLE} ${CHAT_AGENT_RICH_UI_STYLE} ${CHAT_AGENT_SAFETY_BOUNDARIES}${hasImageAttachment ? ' Do wiadomości dołączono zdjęcie — obejrzyj je i opisz konkretnie, co faktycznie na nim widać (obiekty, osoby, światło, zmiany). Nie powtarzaj wcześniejszych odpowiedzi i nie odpowiadaj ogólnikami o systemie.' : ''}`,
+            system: `${CHAT_AGENT_MISSIONS[agent]} ${CHAT_AGENT_CONVERSATION_STYLE} ${CHAT_AGENT_RICH_UI_STYLE} ${freedomMode ? CHAT_AGENT_FREEDOM_STYLE : ""} ${CHAT_AGENT_SAFETY_BOUNDARIES}${hasImageAttachment ? ' Do wiadomości dołączono zdjęcie — obejrzyj je i opisz konkretnie, co faktycznie na nim widać (obiekty, osoby, światło, zmiany). Nie powtarzaj wcześniejszych odpowiedzi i nie odpowiadaj ogólnikami o systemie.' : ''}`,
             // Lokalny model: krótsza historia = mniej tokenów do przetworzenia przed odpowiedzią.
             // Przy zdjęciu pomijamy historię, by model nie powielał poprzednich, identycznych odpowiedzi.
             history: hasImageAttachment ? [] : usesOllama() && !CLOUD_LLM_ENABLED ? buildLlmHistory(chatHistory, agent, 4, 800) : buildLlmHistory(chatHistory, agent),
@@ -6565,18 +6574,9 @@ app.post('/api/triad/message', async (req, res) => {
       let text = result.text;
       // Rich chat streaming must never execute commands merely because the model
       // rendered an action, cURL example, code block or proposed operation.
-      // Preserve the legacy non-streaming contract for older API consumers.
-      if (result.llm && !wantsStream) {
-        try {
-          const execNote = await autoExecuteAgentReplyCommands(text);
-          if (execNote) {
-            text = `${text}\n\n[AUTO-EXEC · ROOT UNLIMITED] Wykonano natychmiast:\n\`\`\`\n${execNote.slice(0, 2000)}\n\`\`\``;
-            pushSystemLog('healed', 'KERNEL', `[AUTO-EXEC] Polecenie z odpowiedzi agenta ${result.agent} wykonane natychmiast.`);
-          }
-        } catch (err: any) {
-          pushSystemLog('warn', 'KERNEL', `[AUTO-EXEC] Błąd wykonania polecenia z odpowiedzi ${result.agent}: ${err?.message || err}`);
-        }
-      }
+      // Model-generated text and JSON UI are presentation only.
+      // Never run commands merely because an agent printed them.
+      // Explicit operator terminal commands are handled by separate APIs.
       replyMap[result.agent] = text;
       engines[result.agent] = result.engine;
     }
