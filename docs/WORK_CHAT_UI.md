@@ -84,3 +84,43 @@ zdolności agenta do wygenerowania obrazu/filmu — źródło musi rzeczywiście
 zwrócić zasób. Dla statusu workerów i prywatnego panelu diagnostyki wymagane
 są działające API, logowanie operatora i poprawna konfiguracja
 (patrz `docs/LIVE_CHAT_SETUP.md`).
+
+
+## Rozszerzenie: techniczne formatowanie inline
+
+W tej samej historii czatu można użyć bloku `rich_inline`. Agent przesyła
+wyłącznie dane (nie HTML/JS); React automatycznie wyświetla tekst bez wykonywania.
+Formatowanie obsługuje: `text`, `code`, `path`, `command`, `success`,
+`warning`, `error`, `info`, `badge`, `highlight`, `kbd`, `copy`, `break`.
+
+Przykładowa zawartość bloku ```bastilla-ui``` (jeden blok typu `rich_inline`):
+
+```json
+{
+  "title": "Wynik analizy",
+  "blocks": [
+    {
+      "type": "rich_inline",
+      "title": "Podświetlone elementy odpowiedzi",
+      "items": [
+        {"kind": "text", "value": "Użyto polecenia"},
+        {"kind": "code", "value": "curl"},
+        {"kind": "path", "value": "/api/v1/mcp"},
+        {"kind": "success", "value": "Odpowiedź 200"},
+        {"kind": "break"},
+        {"kind": "kbd", "value": "Ctrl"},
+        {"kind": "kbd", "value": "K"},
+        {"kind": "copy", "label": "Kopiuj", "value": "curl -I https://api.openai.com"}
+      ],
+      "caption": "Status na podstawie danych z faktycznego testu."
+    }
+  ]
+}
+```
+
+Wpis `copy` kopiuje tekst dopiero po kliknięciu; `command` tylko go
+wyświetla. Żaden z tych elementów nie uruchamia terminala, nie wywołuje API ani
+nie deklaruje sukcesu bez danych. Maksymalnie 48 elementów w karcie i 320 znaków
+na fragment; wartości spoza dozwolonych typów są wyświetlane jako zwykłe
+etykiety. Przykład w czacie: **Work → Inline + status**.
+
