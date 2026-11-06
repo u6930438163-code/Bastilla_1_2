@@ -1,6 +1,7 @@
 import { createLiveChatRouter } from './integrations/live-chat/router.mjs';
 import { createLiveChatSessionAuth, createLiveChatWorkerAuth } from './integrations/live-chat/auth.mjs';
 import { LiveChatStore } from './integrations/live-chat/store.mjs';
+import { createWorkspaceSyncHub } from './integrations/workspace-sync/hub.mjs';
 import express from 'express';
 import { registerGptActions } from './src/lib/gptActions.mjs';
 import { sendChatError } from './src/lib/chatTransport.mjs';
@@ -197,6 +198,35 @@ app.use((err: any, _req: express.Request, res: express.Response, next: express.N
     });
   }
   next(err);
+});
+
+// Push metadata-only invalidation after successful operations. Never stream payloads,
+// chat transcripts, terminal output or credentials to other devices.
+const workspaceSync = createWorkspaceSyncHub({ requireUser: liveChatAuth.requireUser });
+app.use('/api/workspace', workspaceSync.router);
+const workspaceTopics: Record<string, 'chat' | 'terminal' | 'kernel' | 'agents' | 'workspace'> = {
+  '/api/kernel/command': 'terminal',
+  '/api/kernel/save-store': 'kernel',
+  '/api/triad/message': 'chat',
+  '/api/triad/command': 'agents',
+  '/api/astyria/mission': 'chat',
+  '/api/triad/free-voice': 'chat',
+  '/api/hyperos/console': 'terminal',
+  '/api/apps/execute': 'terminal',
+  '/api/apps/command': 'terminal',
+  '/api/apps/create': 'workspace',
+  '/api/live-chat/messages': 'chat',
+};
+app.use((req, res, next) => {
+  const topic = req.method === 'POST' ? workspaceTopics[req.path] : undefined;
+  if (topic) {
+    res.once('finish', () => {
+      if (res.statusCode >= 200 && res.statusCode < 300) {
+        workspaceSync.publish(topic);
+      }
+    });
+  }
+  next();
 });
 
 // Track API key health globally to avoid repeated failing Pro requests
