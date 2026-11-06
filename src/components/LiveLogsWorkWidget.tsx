@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { AlertTriangle, CheckCircle2, FileText, Pause, Play, RefreshCw } from 'lucide-react';
+import { useLiveCardVisibility } from '../hooks/useLiveCardVisibility';
 
 type LogLevel = 'error' | 'success' | 'info';
 type LogItem = { id: string; timestamp: string; level: string; category: LogLevel; source: string; message: string };
@@ -41,6 +42,7 @@ export function LiveLogsWorkWidget({
 }: {
   onPrompt: (prompt: string) => void;
 }) {
+  const { cardRef, cardVisible } = useLiveCardVisibility<HTMLElement>();
   const [enabled, setEnabled] = useState(true);
   const [snapshot, setSnapshot] = useState<LogSnapshot | null>(null);
   const [status, setStatus] = useState<'loading' | 'ready' | 'error' | 'locked'>('loading');
@@ -53,13 +55,15 @@ export function LiveLogsWorkWidget({
   const [expanded, setExpanded] = useState<string | null>(null);
 
   useEffect(() => {
-    if (!enabled) return;
+    if (!enabled || !cardVisible) return;
     let disposed = false;
     let active: AbortController | null = null;
     const poll = async () => {
       if (document.hidden || disposed || active) return;
       const controller = new AbortController();
       active = controller;
+      let timedOut = false;
+      const timeout = window.setTimeout(() => { timedOut = true; controller.abort(); }, 8000);
       try {
         const response = await fetch(ENDPOINT, { method: 'GET', credentials: 'same-origin', cache: 'no-store', signal: controller.signal });
         if (response.status === 401 || response.status === 403 || response.status === 503) {
@@ -79,11 +83,11 @@ export function LiveLogsWorkWidget({
           setLastUpdated(new Date().toLocaleTimeString('pl-PL'));
         }
       } catch (cause) {
-        if (!disposed && !controller.signal.aborted) {
-          setError(cause instanceof Error ? cause.message.slice(0, 180) : 'Błąd odczytu logów');
+        if (!disposed && (!controller.signal.aborted || timedOut)) {
+          setError(timedOut ? 'Serwer nie odpowiedział w ciągu 8 sekund.' : cause instanceof Error ? cause.message.slice(0, 180) : 'Błąd odczytu logów');
           setStatus('error');
         }
-      } finally { if (active === controller) active = null; }
+      } finally { window.clearTimeout(timeout); if (active === controller) active = null; }
     };
     void poll();
     const timer = window.setInterval(() => { void poll(); }, 9000);
@@ -99,7 +103,7 @@ export function LiveLogsWorkWidget({
       document.removeEventListener('visibilitychange', onVisible);
       window.removeEventListener('bastilla:workspace-event', onWorkspace);
     };
-  }, [enabled, refreshToken]);
+  }, [enabled, refreshToken, cardVisible]);
 
   const query = search.trim().toLowerCase();
   const entries = (snapshot?.logs || []).filter(log =>
@@ -110,7 +114,7 @@ export function LiveLogsWorkWidget({
       JSON.stringify({ time: log.timestamp, level: log.level, source: log.source, message: log.message }));
   };
 
-  return <section aria-label="Dynamiczne logi systemowe" className="min-w-0 space-y-3 rounded-xl border border-cyan-800/60 bg-[#071827] p-3 text-slate-100">
+  return <section ref={cardRef} aria-label="Dynamiczne logi systemowe" className="min-w-0 space-y-3 rounded-xl border border-cyan-800/60 bg-[#071827] p-3 text-slate-100">
     <header className="flex flex-wrap items-center gap-2">
       <FileText size={16} className="text-cyan-300"/>
       <strong className="flex-1 text-sm">Logi serwera · LIVE</strong>
