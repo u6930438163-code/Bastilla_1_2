@@ -6,11 +6,10 @@ import { WorkChatMessage, WorkChatDemo } from './WorkChatMessage';
 import { TerminalWorkCard, type TerminalCardEntry, type TerminalCardStatus } from './TerminalWorkCard';
 import { WorkspaceCommandCenter } from './WorkspaceCommandCenter';
 import { ChatAvatar, ChatReactionBar, type ChatVotes } from './ChatReactionBar';
-import { chatReactionKeys, liveReactionKey } from '../lib/chatReactionKeys.mjs';
+import { chatReactionKeys } from '../lib/chatReactionKeys.mjs';
 import { loadPendingReactionVotes, mergePendingReactionVotes, nextOperatorReaction } from '../lib/chatReactionFallback.mjs';
 import { draftAgentTarget } from '../lib/workChatRouting.mjs';
 import { summarizeFreeVoiceEngines } from '../lib/freeVoiceEngine.mjs';
-import { LiveWorkspaceSession } from './LiveWorkspaceSession';
 import {
   ASTYRIA_MISSION_ACTIONS,
   ASTYRIA_MISSION_LABELS,
@@ -72,16 +71,7 @@ interface AgentCommsViewProps {
 const TWO_WAY_STORAGE_KEY = 'bastilla_two_way_chat_enabled';
 const FREEDOM_STORAGE_KEY = 'bastilla_ai_freedom_enabled';
 const PROVIDER_MODE_STORAGE_KEY = 'bastilla_chat_provider_mode_v1';
-const LIVE_TRANSPORT_STORAGE_KEY = 'bastilla_chat_live_transport_v1';
 const REACTION_STORAGE_KEY = 'bastilla_chat_message_reactions_v1';
-type LiveChatEvent = { id: string; type: string; channel: string; sender: string; text: string; at: string };
-function validLiveEvent(value: unknown): value is LiveChatEvent {
-  if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
-  const event = value as Record<string, unknown>;
-  return ['id', 'type', 'channel', 'sender', 'text', 'at'].every((key) =>
-    typeof event[key] === 'string' && (event[key] as string).length <= 100000);
-}
-
 type ReactionSelection = 'up' | 'down' | null;
 
 async function saveReactionOnServer(messageKey: string, vote: ReactionSelection): Promise<ChatVotes> {
@@ -140,13 +130,6 @@ export const AgentCommsView: React.FC<AgentCommsViewProps> = ({
   const [quickBusy, setQuickBusy] = useState(false);
   const [quickResult, setQuickResult] = useState<{ title: string; lines: string[]; at: string; failed?: boolean; reply?: string } | null>(null);
   const handledDraftRef = useRef<number | null>(null);
-  const [liveAuthenticated, setLiveAuthenticated] = useState(false);
-  // Prefer the existing real-agent LIVE transport for authenticated sessions.
-  // An explicit choice of the model transport survives app reloads.
-  const [liveMode, setLiveMode] = useState<boolean>(() => {
-    try { return localStorage.getItem(LIVE_TRANSPORT_STORAGE_KEY) !== 'false'; }
-    catch { return true; }
-  });
   const [providerMode, setProviderMode] = useState<'api' | 'ollama'>(() => {
     try { return localStorage.getItem(PROVIDER_MODE_STORAGE_KEY) === 'ollama' ? 'ollama' : 'api'; }
     catch { return 'api'; }
@@ -155,12 +138,6 @@ export const AgentCommsView: React.FC<AgentCommsViewProps> = ({
   useEffect(() => {
     try { localStorage.setItem(PROVIDER_MODE_STORAGE_KEY, providerMode); } catch {}
   }, [providerMode]);
-  useEffect(() => {
-    try { localStorage.setItem(LIVE_TRANSPORT_STORAGE_KEY, String(liveMode)); } catch {}
-  }, [liveMode]);
-  const [liveBusy, setLiveBusy] = useState(false);
-  const [liveEvents, setLiveEvents] = useState<LiveChatEvent[]>([]);
-
   const pendingReactionVotesRef = useRef<Record<string, ReactionSelection>>(
     loadPendingReactionVotes(typeof localStorage !== 'undefined' ? localStorage : null, REACTION_STORAGE_KEY)
   );
@@ -434,44 +411,6 @@ export const AgentCommsView: React.FC<AgentCommsViewProps> = ({
     void runQuickAction(preparedDraft.text, preparedDraft.agent);
   }, [preparedDraft?.id, isLoading]);
 
-  // One real worker transport, shown within the existing conversation rather than a
-  // second floating chat. GET /history includes all channels when channel=Wszyscy.
-  useEffect(() => {
-    if (!liveAuthenticated) { setLiveEvents([]); return; }
-    let disposed = false;
-    const refreshLive = async () => {
-      try {
-        const response = await fetch('/api/live-chat/history?channel=Wszyscy', { cache: 'no-store', credentials: 'same-origin' });
-        if (!response.ok || disposed) return;
-        const result = await response.json() as { messages?: unknown };
-        if (Array.isArray(result.messages)) {
-          const events = result.messages.filter(validLiveEvent).slice(-200);
-          if (!disposed) setLiveEvents(events);
-        }
-      } catch { /* The session panel shows connection health. */ }
-    };
-    void refreshLive();
-    const stream = new EventSource('/api/live-chat/events', { withCredentials: true });
-    stream.onmessage = (event) => {
-      try {
-        const item: unknown = JSON.parse(event.data);
-        if (!disposed && validLiveEvent(item)) {
-          setLiveEvents((current) => current.some((entry) => entry.id === item.id)
-            ? current : [...current, item].slice(-200));
-        }
-      } catch { /* Malformed events are ignored. */ }
-    };
-    const onWorkspaceEvent = () => { void refreshLive(); };
-    window.addEventListener('bastilla:workspace-event', onWorkspaceEvent);
-    const timer = window.setInterval(() => { if (!document.hidden) void refreshLive(); }, 10000);
-    return () => {
-      disposed = true;
-      stream.close();
-      window.clearInterval(timer);
-      window.removeEventListener('bastilla:workspace-event', onWorkspaceEvent);
-    };
-  }, [liveAuthenticated]);
-
   const transmissionStatus = sendError
     ? { label: 'BŁĄD', color: 'rose' }
     : isLoading
@@ -641,41 +580,8 @@ export const AgentCommsView: React.FC<AgentCommsViewProps> = ({
     const message = messageText.startsWith('/propose write-file ')
       ? messageText
       : messageText.trim();
-    if ((!message && chatAttachments.length === 0) || isLoading || liveBusy) return;
+    if ((!message && chatAttachments.length === 0) || isLoading) return;
     const attachmentsSnapshot = [...chatAttachments];
-    if (liveAuthenticated && liveMode) {
-      if (attachmentsSnapshot.length) {
-        setWorkNotice('Kanał workerów LIVE przyjmuje aktualnie tylko tekst. Przełącz na Modele LLM, aby wysłać załączniki.');
-        return;
-      }
-      if (!message || message.length > 8000) {
-        setWorkNotice('Kanał LIVE przyjmuje tekst o długości od 1 do 8000 znaków.');
-        return;
-      }
-      setLiveBusy(true);
-      try {
-        const channel = selectedTarget === 'triad' ? 'Wszyscy' : selectedTarget === 'si_1' ? 'Aria' : selectedTarget;
-        const response = await fetch('/api/live-chat/messages', {
-          method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ channel, text: message }),
-        });
-        const result = await response.json() as { error?: string; event?: LiveChatEvent; queuedFor?: string[] };
-        if (!response.ok) throw new Error(result.error || 'Serwer LIVE odrzucił wiadomość.');
-        if (result.event && validLiveEvent(result.event)) {
-          setLiveEvents((current) => current.some((item) => item.id === result.event!.id)
-            ? current : [...current, result.event!].slice(-200));
-        }
-        setWorkNotice('Przyjęto do kolejki agentów: ' + (result.queuedFor || []).join(', ') + '. To nie oznacza wykonania zadania.');
-        setMessageText('');
-        setChatAttachments([]);
-        setAttachmentError(null);
-      } catch (cause) {
-        setWorkNotice('Błąd LIVE: ' + (cause instanceof Error ? cause.message : 'brak odpowiedzi serwera'));
-      } finally {
-        setLiveBusy(false);
-      }
-      return;
-    }
     try {
       await onSendMessage(message, selectedTarget, attachmentsSnapshot, freedomEnabled, providerMode);
       const images = attachmentsSnapshot.filter((attachment) => attachment.mimeType?.startsWith('image/'));
@@ -882,7 +788,6 @@ export const AgentCommsView: React.FC<AgentCommsViewProps> = ({
         </div>
       </div>
 
-      <LiveWorkspaceSession onChange={setLiveAuthenticated} />
       {showMoreMenu && <WorkspaceCommandCenter
         history={dataStore.chat_history}
         streamingChat={streamingChat}
@@ -1137,35 +1042,6 @@ export const AgentCommsView: React.FC<AgentCommsViewProps> = ({
           })
         )}
 
-        {liveAuthenticated && liveEvents.filter((item) => item.type === 'message').length > 0 && (
-          <section className="space-y-2 border-t border-cyan-900/60 pt-3" aria-label="Wiadomości od oryginalnych workerów LIVE">
-            <div className="flex flex-wrap items-center gap-2 px-1 text-xs font-bold text-cyan-100">
-              <span className="h-2 w-2 rounded-full bg-emerald-400"/>
-              Oryginalni agenci · transport LIVE
-              <span className="font-normal text-slate-400">Odebrane zdarzenia serwera, nie symulacja</span>
-            </div>
-            {liveEvents.filter((item) => item.type === 'message').map((item) => (
-              <article key={item.id} className={'bastilla-chat-card bastilla-chat-card--live rounded-xl border p-3 sm:p-4 ' +
-                (item.sender === 'user' ? 'ml-2 border-purple-500/40 bg-purple-950/25 sm:ml-14' : 'mr-2 border-cyan-800/65 bg-slate-900 sm:mr-14')}>
-                <div className="bastilla-chat-card__header mb-2 flex flex-wrap items-center justify-between gap-2 border-b border-slate-800 pb-1.5">
-                  <span className="inline-flex items-center gap-2 text-[11px] font-bold text-cyan-200"><ChatAvatar actor={item.sender === 'user' ? 'Operator' : item.sender} size="sm" />{item.sender === 'user' ? 'Operator · LIVE' : item.sender + ' · LIVE'}</span>
-                  <span className="text-[10px] text-slate-400">
-                    {item.channel} · {Number.isFinite(Date.parse(item.at)) ? new Date(item.at).toLocaleTimeString('pl-PL') : 'czas nieznany'}
-                  </span>
-                </div>
-                <WorkChatMessage content={item.text} onPrompt={prompt => { void runQuickAction(prompt); }} onPreparePrompt={prepareWorkPrompt} onOpenTerminal={onOpenTerminal}/>
-                <div className="mt-2 border-t border-slate-800/60 pt-2">
-                  <ChatReactionBar
-                    votes={reactionVotes[liveReactionKey(item)] || {}}
-                    disabled={!liveReactionKey(item) || reactionPending === liveReactionKey(item)}
-                    onVote={vote => void submitReaction(liveReactionKey(item), vote)}
-                  />
-                </div>
-              </article>
-            ))}
-          </section>
-        )}
-
         {streamingChat && (
           <section className="space-y-3" aria-label="Bieżąca rozmowa z agentami">
             <div className="bastilla-chat-card bastilla-chat-card--user ml-2 rounded-xl border border-purple-500/50 bg-purple-950/30 p-3 sm:ml-14 sm:p-4">
@@ -1222,20 +1098,6 @@ export const AgentCommsView: React.FC<AgentCommsViewProps> = ({
             <button type="button" onClick={()=>setTerminalCardVisible(false)} className="rounded border border-slate-700 px-2 py-1 text-slate-200 hover:bg-slate-800">Zamknij kartę</button>
           </div>
         </div>
-      </div>}
-      {showMoreMenu && liveAuthenticated && <div className="flex shrink-0 items-center gap-2 border-t border-cyan-900/60 bg-[#091b2b] px-3 py-1.5" aria-label="Wybierz transport czatu">
-        <span className="text-[10px] text-slate-400">Transport:</span>
-        <button type="button" aria-pressed={liveMode} disabled={liveBusy} onClick={() => setLiveMode(true)}
-          className={'rounded-lg border px-2.5 py-1 text-[11px] font-semibold ' +
-            (liveMode ? 'border-emerald-500/60 bg-emerald-950 text-emerald-200' : 'border-slate-700 text-slate-400')}>
-          Workery LIVE
-        </button>
-        <button type="button" aria-pressed={!liveMode} disabled={liveBusy} onClick={() => setLiveMode(false)}
-          className={'rounded-lg border px-2.5 py-1 text-[11px] font-semibold ' +
-            (!liveMode ? 'border-cyan-500/60 bg-cyan-950 text-cyan-200' : 'border-slate-700 text-slate-400')}>
-          Modele LLM
-        </button>
-        {liveBusy && <span role="status" className="animate-pulse text-[10px] text-cyan-300">Kolejkowanie…</span>}
       </div>}
       {/* Single-click Work actions: read-only diagnostics or isolated AI analysis in the results panel. */}
       {showMoreMenu && <div className="bastilla-chat-actions flex w-full shrink-0 gap-1.5 overflow-x-auto border-t border-cyan-900/60 bg-[#071625] px-3 py-2" aria-label="Akcje AI Work">
@@ -1316,7 +1178,7 @@ export const AgentCommsView: React.FC<AgentCommsViewProps> = ({
               }}
               maxLength={20_500}
               rows={2}
-              disabled={isLoading || liveBusy}
+              disabled={isLoading}
               placeholder="Wiadomość do agentów…"
               className="block max-h-40 min-h-[62px] w-full resize-y bg-transparent px-4 pt-4 pb-2 text-[16px] leading-6 text-white outline-none placeholder:text-slate-400 disabled:opacity-50 sm:px-5"
             />
@@ -1334,32 +1196,23 @@ export const AgentCommsView: React.FC<AgentCommsViewProps> = ({
                   aria-label="Dołącz pliki tekstowe, DOCX, PDF lub zdjęcia"/>
               </div>
               <div className="min-w-0 flex-1"/>
-              {(!liveAuthenticated || !liveMode) && (
-                <label className="flex shrink-0 items-center gap-1.5 rounded-full px-2 py-1 text-sm text-slate-300 hover:bg-white/5">
-                  <span className="hidden text-xs text-slate-500 sm:inline">Silnik</span>
-                  <select aria-label="Wybierz silnik AI" value={providerMode}
-                    onChange={event => setProviderMode(event.target.value as 'api' | 'ollama')}
-                    disabled={isLoading}
-                    className="max-w-[120px] appearance-none bg-transparent py-1 pl-1 pr-4 text-[14px] font-medium text-slate-100 outline-none">
-                    <option value="api" className="bg-slate-900">API</option>
-                    <option value="ollama" className="bg-slate-900">Ollama</option>
-                  </select>
-                  <span aria-hidden="true" className="pointer-events-none -ml-4 text-[10px] text-slate-400">▾</span>
-                </label>
-              )}
-              {liveAuthenticated && (
-                <button type="button" aria-label={liveMode ? 'Przełącz na modele API lub Ollama' : 'Przełącz na workery LIVE'}
-                  onClick={() => setLiveMode(value => !value)} disabled={liveBusy}
-                  className="shrink-0 rounded-full px-2 py-1 text-xs font-medium text-slate-300 hover:bg-white/10">
-                  {liveMode ? 'Workery LIVE' : providerMode === 'ollama' ? 'Ollama' : 'API'} ▾
-                </button>
-              )}
+              <label className="flex shrink-0 items-center gap-1.5 rounded-full px-2 py-1 text-sm text-slate-300 hover:bg-white/5">
+                <span className="hidden text-xs text-slate-500 sm:inline">Silnik</span>
+                <select aria-label="Wybierz silnik AI" value={providerMode}
+                  onChange={event => setProviderMode(event.target.value as 'api' | 'ollama')}
+                  disabled={isLoading}
+                  className="max-w-[120px] appearance-none bg-transparent py-1 pl-1 pr-4 text-[14px] font-medium text-slate-100 outline-none">
+                  <option value="api" className="bg-slate-900">API</option>
+                  <option value="ollama" className="bg-slate-900">Ollama</option>
+                </select>
+                <span aria-hidden="true" className="pointer-events-none -ml-4 text-[10px] text-slate-400">▾</span>
+              </label>
               <button type="submit"
-                aria-label={isLoading || liveBusy ? 'Wysyłanie wiadomości' : `Wyślij wiadomość do ${{ triad: 'wszystkich agentów', si_1: 'Arii', Alex: 'Alexa', Astyria: 'Astyrii', Aurelius: 'Aureliusa' }[selectedTarget]}`}
-                disabled={(!messageText.trim() && chatAttachments.length === 0) || isLoading || liveBusy}
+                aria-label={isLoading ? 'Wysyłanie wiadomości' : `Wyślij wiadomość do ${{ triad: 'wszystkich agentów', si_1: 'Arii', Alex: 'Alexa', Astyria: 'Astyrii', Aurelius: 'Aureliusa' }[selectedTarget]}`}
+                disabled={(!messageText.trim() && chatAttachments.length === 0) || isLoading}
                 className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-white text-slate-950 transition hover:bg-slate-200 disabled:bg-slate-600 disabled:text-slate-400"
                 title="Wyślij (Enter)">
-                {isLoading || liveBusy ? <RefreshCw className="h-5 w-5 animate-spin"/> : <Send className="h-5 w-5"/>}
+                {isLoading ? <RefreshCw className="h-5 w-5 animate-spin"/> : <Send className="h-5 w-5"/>}
               </button>
             </div>
           </div>
