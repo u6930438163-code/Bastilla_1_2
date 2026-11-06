@@ -4,6 +4,7 @@ import { FormattedMessage } from './FormattedMessage';
 import { RichInlineWidget } from './RichInlineWidget';
 import { AgentChoiceWidget } from './AgentChoiceWidget';
 import { AdvancedWorkWidget } from './AdvancedWorkWidget';
+import { DynamicWorkWidget, getLiveWorkSpec } from './DynamicWorkWidget';
 import { TerminalWorkCard, type TerminalCardEntry, type TerminalCardStatus } from './TerminalWorkCard';
 import { ProgressWorkWidget, StepsWorkWidget, FileExplorerWorkWidget, ModelSettingsWorkWidget, ThreeDWorkWidget, PdfWorkWidget } from './AdvancedWorkWidgets';
 
@@ -100,6 +101,11 @@ function VideoPlayer({ src, title }: { src: string; title: string }) {
 
 function Widget({ block, onPrompt, onOpenTerminal }: { block: WorkBlock; onPrompt: (prompt: string) => void; onOpenTerminal?: () => void }) {
   const kind = block.type;
+  // Only allowlisted, read-only data bindings can become live; all other cards stay static.
+  if (block.__bastillaLiveApplied !== true && getLiveWorkSpec(block)) {
+    return <DynamicWorkWidget block={block} render={updated =>
+      <Widget block={{ ...updated, __bastillaLiveApplied: true }} onPrompt={onPrompt} onOpenTerminal={onOpenTerminal}/>}/>;
+  }
   if (kind === 'rich_inline') return <RichInlineWidget block={block}/>;
   if (kind === 'guide') return <AgentChoiceWidget block={block} onPrompt={onPrompt} onOpenTerminal={onOpenTerminal}/>;
   if (kind === 'progress') return <ProgressWorkWidget block={block}/>;
@@ -257,6 +263,15 @@ const examples = {
       { type: 'chart', title: 'Wykres obciążenia CPU', labels: ['08:00','09:00','10:00','11:00','12:00','13:00'], values: [23,34,47,31,58,42], unit: '%', caption: 'Przykładowe dane, nie odczyt z komputera.' },
     ],
   },
+  live: {
+    title: 'Elementy dynamiczne · odczyt z serwera Bastilla',
+    blocks: [
+      { type: 'text', content: 'Włącz lub wstrzymaj LIVE, wybierz CPU/RAM i odśwież dane. Wartości są pobierane tylko z **/api/system/metrics**. Jeśli backend jest niedostępny, nie pokazujemy wymyślonych pomiarów.' },
+      { type: 'metric', label: 'CPU', value: '—', live: { source: 'system_metrics', field: 'cpuPercent', intervalMs: 5000 } },
+      { type: 'chart', title: 'Historia CPU', chart: 'line', labels: [], values: [], live: { source: 'system_metrics', field: 'cpuPercent', intervalMs: 5000 } },
+      { type: 'progress', title: 'Użycie RAM', value: 0, live: { source: 'system_metrics', field: 'ramPercent', intervalMs: 5000 } },
+    ],
+  },
   image: {
     title: 'Wizualizacje i grafiki',
     blocks: [{ type: 'text', content: 'Agent może odesłać grafikę jako **HTTPS** lub lokalny plik **/assets/...**. Obrazy będą wyświetlane w wiadomościach z podpisem. Obsługiwane są również obrazy Markdown i wektorowe SVG.' }],
@@ -342,11 +357,12 @@ export function WorkChatDemo({ onPrompt, onOpenTerminal }: { onPrompt: (prompt: 
           ['formatting', Code2, 'cURL / JSON'],
           ['form', Sparkles, 'Formularze'],
           ['advanced', Sparkles, 'Zaawansowane'],
+          ['live', BarChart3, 'Dynamiczne LIVE'],
         ] as const).map(([key, Icon, label]) =>
           <button key={key} type="button" onClick={() => setTab(key)} aria-pressed={tab === key} className={'px-3 py-2 rounded-lg text-xs flex gap-1.5 items-center border ' + (tab === key ? 'bg-cyan-900/70 border-cyan-500 text-white' : 'bg-slate-900 border-slate-700 text-slate-300')}><Icon size={14}/>{label}</button>)}
       </div>
       <RichCard raw={JSON.stringify(examples[tab])} onPrompt={onPrompt} onOpenTerminal={onOpenTerminal}/>
-      <p className="text-[11px] text-slate-400">To podgląd możliwości. Rzeczywiste dane i multimedia muszą pochodzić z wiadomości agenta.</p>
+      <p className="text-[11px] text-slate-400">Podgląd możliwości: statyczne przykłady są oznaczone jako DEMO. W zakładce Dynamiczne LIVE pomiary pobierane są z działającego backendu Bastilla; brak połączenia jest wyraźnie sygnalizowany.</p>
     </div>}
   </div>;
 }
