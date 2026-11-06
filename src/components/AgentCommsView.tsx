@@ -1135,7 +1135,7 @@ export const AgentCommsView: React.FC<AgentCommsViewProps> = ({
                   aria-label="Dołącz pliki tekstowe, DOCX, PDF lub zdjęcia"/>
               </div>
               <div className="min-w-0 flex-1"/>
-              {!liveAuthenticated && (
+              {(!liveAuthenticated || !liveMode) && (
                 <label className="flex shrink-0 items-center gap-1.5 rounded-full px-2 py-1 text-sm text-slate-300 hover:bg-white/5">
                   <span className="hidden text-xs text-slate-500 sm:inline">Silnik</span>
                   <select aria-label="Wybierz silnik AI" value={providerMode}
