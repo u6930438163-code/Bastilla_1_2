@@ -74,5 +74,6 @@ test('per-agent installations only select assigned tools', () => {
   assert.ok(astyria.some(tool => tool.name === 'ClamAV'));
   assert.ok(!astyria.some(tool => tool.name === 'Nmap'));
   assert.throws(() => selectDiagnosticTools({ agent: 'unknown' }), /Nieznany agent/);
+  assert.throws(() => selectDiagnosticTools({ names: ['Nmap'], agent: 'Astyria' }), /nie należy do agenta/);
   assert.equal(parseOptions(['--agent', 'Alex']).agent, 'Alex');
 });
