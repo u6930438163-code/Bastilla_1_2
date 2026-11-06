@@ -178,7 +178,7 @@ export function TaskManagerView({ initialSection = 'processes', onPrepareMainCha
     ].join('\n');
     onPrepareMainChat(task.slice(0, 7800), selectedAgent);
     setSendingKey(null);
-    setSubmission('Przekazano zgłoszenie do obsługi przez ' + selectedAgent + ' bez ręcznego wysyłania z czatu. Stan sprawdź w rozmowie.');
+    setSubmission('Uruchomiono akcję dla ' + selectedAgent + '. Wynik lub błąd pojawi się w panelu akcji na karcie czatu.');
 
   };
 
@@ -363,7 +363,7 @@ export function TaskManagerView({ initialSection = 'processes', onPrepareMainCha
         </section>}
 
         <section className="bastilla-ops-agent-bar" aria-label="Wybór agenta diagnostycznego">
-          <div className="flex items-center gap-2"><Bot className="w-5 h-5 text-cyan-300" /><div><strong>Diagnostyka AI jednym kliknięciem</strong><p>Wybierz agenta. Zgłoszenie zostanie przekazane bez wypełniania pola czatu; naprawy wymagają osobnej zgody.</p></div></div>
+          <div className="flex items-center gap-2"><Bot className="w-5 h-5 text-cyan-300" /><div><strong>Diagnostyka AI jednym kliknięciem</strong><p>Wybierz agenta. Wynik analizy pojawi się w panelu akcji, bez dopisywania wiadomości do czatu. Naprawy wymagają osobnej zgody.</p></div></div>
           <div className="bastilla-ops-agent-controls">
             <select value={selectedAgent} onChange={event => setSelectedAgent(event.target.value as AgentName)}
               aria-label="Wybierz agenta AI do diagnozy">{AGENTS.map(name => <option key={name} value={name}>{name}</option>)}</select>
