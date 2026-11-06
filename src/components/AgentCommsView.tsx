@@ -39,6 +39,7 @@ interface AgentCommsViewProps {
     agent: 'triad' | 'Alex' | 'Astyria' | 'Aurelius' | 'si_1',
     attachments?: ChatAttachment[],
     freedomMode?: boolean,
+    providerMode?: 'api' | 'ollama',
   ) => Promise<void>;
   onRunAstyriaMission: (action: AstyriaMissionAction) => Promise<void>;
   isLoading: boolean;
