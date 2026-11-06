@@ -180,14 +180,18 @@ Adresy odczytu:
   pobiera oczekujące wiadomości do Astyrii.
 - `POST /api/agents/inbox/ack` z tokenem odbiorcy i ciałem
   `{"agent":"Astyria","id":"<id odebranej wiadomości>"}` potwierdza odbiór.
-- `GET /api/agents/channel/status` pokazuje tryb, liczbę zdarzeń i
-  **rzeczywiste** aktualne heartbeat-y klientów.
-- `POST /api/agents/channel/settings` (wyłącznie ten sam origin z interfejsu
-  operatora) włącza i wyłącza przesyłanie wiadomości.
+- `GET /api/agents/channel/status` udostępnia publicznie jedynie informację,
+  czy kanał jest włączony (bez prywatnych wiadomości ani nazw workerów).
+- `GET /api/agents/channel/detail` wymaga zalogowanej sesji operatora LIVE
+  i pokazuje liczbę zdarzeń oraz heartbeat-y rzeczywistych klientów.
+- `GET /api/agents/inbox` wymaga zalogowanej sesji operatora LIVE —
+  bez sesji zwraca 401, a przy braku konfiguracji LIVE zwraca 503.
+- `POST /api/agents/channel/settings` wymaga sesji operatora LIVE i
+  dozwolonego origin; włącza lub wyłącza przesyłanie wiadomości.
 
 Cel `to` akceptuje `Operator`, `all`, `Aria`, `Alex`, `Astyria`,
 `Aurelius`; pole jest opcjonalne (domyślnie Operator).
-Nie należy wysyłać tej samej wypowiedzi jednocześnie obydwoma transportami.
+Nie należy wysyłać tej samej wypowiedzi jednocześnie obydwoma transportami.\nWybór trybu API/Ollama w głównym czacie jest rozdzielony po stronie serwera:\ntryb API nie wywoła Ollamy, a tryb Ollama nie wywoła API. Gdy wybrany\ndostawca jest niedostępny, zwracany jest błąd bez cichego przełączenia.
 
 Opcjonalny zastępczy model LLM **nie jest oryginalnym agentem**. Z tego
 powodu automatyczne odpowiedzi LLM w pomocniczym kanale są domyślnie
