@@ -9,12 +9,18 @@
   },
   "postCreateCommand": "npm ci",
   "forwardPorts": [
-    3000
+    3000,
+    3080
   ],
   "portsAttributes": {
     "3000": {
       "label": "Bastilla OS 2",
       "onAutoForward": "notify"
+    },
+    "3080": {
+      "label": "LibreChat (private)",
+      "onAutoForward": "notify",
+      "visibility": "private"
     }
   },
   "customizations": {
