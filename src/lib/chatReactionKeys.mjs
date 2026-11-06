@@ -29,3 +29,11 @@ export function chatReactionKeys(history) {
     return base + '_' + occurrence.toString(36);
   });
 }
+
+/** Reaction identity for a real live-chat event, stable across refresh and channels. */
+export function liveReactionKey(event) {
+  const id = event && typeof event.id === 'string' ? event.id : '';
+  // Real worker/user event IDs are UUIDs. Never accept an untrusted, arbitrary key.
+  if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id)) return '';
+  return 'l_' + fnv64(id.toLowerCase());
+}
