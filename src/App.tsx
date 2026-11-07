@@ -433,7 +433,7 @@ export default function App() {
     chatAgent: AgentProtocolRequest['agent'] = 'triad',
     attachments: ChatAttachment[] = [],
     freedomMode = true,
-    providerMode: 'api' | 'ollama' = 'api',
+    providerMode: 'api' | 'ollama' = 'ollama',
   ) => {
     const protocolCommand = attachments.length === 0
       ? parseChatProtocolCommand(message, chatAgent)

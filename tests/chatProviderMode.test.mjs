@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { selectChatProviderConfig } from '../src/kernel/chatProviderMode.ts';
+import { resolveDefaultChatProviderMode, selectChatProviderConfig } from '../src/kernel/chatProviderMode.ts';
 import { configuredProviders, generateWithChain, LlmChainError } from '../src/kernel/llmChain.ts';
 
 const mockResponse = (status, body) => new Response(JSON.stringify(body), {
@@ -17,6 +17,12 @@ const allConfigured = {
   ollamaBaseUrl: 'http://127.0.0.1:11434',
 };
 const input = { system: 'System', history: [], message: 'Hello' };
+
+test('default chat provider prefers local Ollama when available', () => {
+  assert.equal(resolveDefaultChatProviderMode(['ollama', 'openai']), 'ollama');
+  assert.equal(resolveDefaultChatProviderMode(['openai']), 'api');
+  assert.equal(resolveDefaultChatProviderMode([]), 'ollama');
+});
 
 test('operator API mode never selects an Ollama provider', () => {
   const selected = selectChatProviderConfig(allConfigured, 'api');

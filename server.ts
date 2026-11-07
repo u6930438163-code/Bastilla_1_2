@@ -6561,8 +6561,10 @@ app.post('/api/triad/message', async (req, res) => {
     }
   }
 
-  // BEST-FIT (natychmiast): krótkie pytania o stan systemu dostają odpowiedź z prawdziwych danych, bez modelu.
-  if (attachments.length === 0) {
+  // BEST-FIT (natychmiast): krótkie pytania o stan systemu dostają odpowiedź z prawdziwych danych,
+  // ale nie wolno tego używać, gdy operator jawnie wybrał konkretny model AI. Wtedy należy
+  // próbować tylko wybranego dostawcy i ewentualnie zwrócić błąd, a nie ukryty fallback systemowy.
+  if (attachments.length === 0 && requestedProviderMode === undefined) {
     const bestFit = await tryBestFitReply(message);
     if (bestFit) {
       const fitAgents: ChatAgentName[] = target === 'triad' ? [...CHAT_AGENT_NAMES] : [target];

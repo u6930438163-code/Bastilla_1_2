@@ -140,8 +140,11 @@ export const AgentCommsView: React.FC<AgentCommsViewProps> = ({
   const [quickResult, setQuickResult] = useState<{ title: string; lines: string[]; at: string; failed?: boolean; reply?: string } | null>(null);
   const handledDraftRef = useRef<number | null>(null);
   const [providerMode, setProviderMode] = useState<'api' | 'ollama'>(() => {
-    try { return localStorage.getItem(PROVIDER_MODE_STORAGE_KEY) === 'ollama' ? 'ollama' : 'api'; }
-    catch { return 'api'; }
+    try {
+      return localStorage.getItem(PROVIDER_MODE_STORAGE_KEY) === 'api' ? 'api' : 'ollama';
+    } catch {
+      return 'ollama';
+    }
   });
 
   useEffect(() => {
