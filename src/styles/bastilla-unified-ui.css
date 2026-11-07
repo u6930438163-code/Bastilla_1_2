@@ -328,3 +328,340 @@
     padding: 11px;
   }
 }
+
+
+/*
+ * Bastilla Studio — complete app-wide visual replacement.
+ * Keeps existing routes and actions; the visual language is a prompt-first
+ * creative workspace with interactive cards, previews, controls and clear states.
+ */
+:root {
+  color-scheme: dark;
+  --studio-bg: #080d18;
+  --studio-surface: #101827;
+  --studio-raised: #172235;
+  --studio-border: rgba(148, 163, 184, .16);
+  --studio-ink: #f1f5fb;
+  --studio-muted: #97a6ba;
+  --studio-cyan: #7ee7e6;
+  --studio-violet: #b8a5ff;
+  --studio-blue: #7e9dff;
+  --studio-green: #83e6bd;
+}
+.app-shell {
+  color: var(--studio-ink);
+  background:
+    radial-gradient(ellipse at 14% 0%, rgba(105, 117, 255, .13), transparent 36%),
+    radial-gradient(ellipse at 90% 18%, rgba(38, 197, 193, .10), transparent 32%),
+    linear-gradient(155deg, #0a1020 0%, #080e18 58%, #0c1321 100%) !important;
+  font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  letter-spacing: .005em;
+}
+.app-shell :where(button, a, input, textarea, select, [role="button"]) {
+  transition: color .18s ease, background-color .18s ease, border-color .18s ease,
+    box-shadow .18s ease, transform .18s ease, opacity .18s ease;
+}
+.app-shell :where(button, select, input, textarea) { font-family: inherit; }
+.app-shell :where(button):not(:disabled):active { transform: translateY(1px) scale(.99); }
+.app-shell :where(button, a, select, input, textarea):focus-visible {
+  outline: 2px solid var(--studio-cyan) !important;
+  outline-offset: 3px;
+}
+.app-shell :where(button, a):disabled { cursor: not-allowed; opacity: .55; }
+
+/* Compact shared workspace bar and navigation rail. */
+.app-shell .bastilla-workspace-sync-strip {
+  min-height: 54px; display: flex; flex-wrap: wrap; align-items: center; gap: 7px 11px;
+  padding: 8px clamp(12px, 2vw, 24px);
+  color: #dce7ff; background: rgba(12, 19, 33, .88);
+  border-bottom: 1px solid var(--studio-border);
+  box-shadow: 0 8px 28px rgba(0, 0, 0, .14);
+  backdrop-filter: blur(18px);
+}
+.app-shell .bastilla-workspace-sync-strip > span:nth-child(2) {
+  color: #f1f5fb; font-size: 11px; letter-spacing: .09em;
+}
+.app-shell .bastilla-workspace-sync-detail { color: var(--studio-muted); font-size: 11px; }
+.app-shell .bastilla-workspace-sync-dot {
+  width: 9px; height: 9px; border-radius: 50%;
+  background: #f7bd70; box-shadow: 0 0 14px rgba(247, 189, 112, .45);
+}
+.app-shell .bastilla-workspace-sync-dot.is-live {
+  background: var(--studio-green); box-shadow: 0 0 14px rgba(131, 230, 189, .6);
+}
+.app-shell .bastilla-workspace-sync-strip button {
+  min-height: 36px; padding: 7px 11px; border: 1px solid rgba(146, 163, 190, .24);
+  border-radius: 11px; color: #e8efff; background: rgba(28, 40, 61, .92);
+}
+.app-shell .bastilla-workspace-sync-strip button:hover {
+  border-color: rgba(126, 157, 255, .62); background: #263451;
+}
+.app-shell .app-navigation {
+  background: rgba(12, 19, 32, .88) !important;
+  border-color: var(--studio-border) !important;
+  backdrop-filter: blur(20px);
+}
+.app-shell .app-navigation > div { gap: 7px; padding: 12px; }
+.app-shell .app-navigation button {
+  min-height: 52px; border: 1px solid transparent; border-radius: 15px;
+  color: #aab7ca; background: transparent;
+}
+.app-shell .app-navigation button:hover:not([aria-current="page"]) {
+  color: #f1f5fb; background: rgba(125, 147, 192, .11);
+}
+.app-shell .app-navigation button[aria-current="page"] {
+  color: #fff; border-color: rgba(126, 157, 255, .38);
+  background: linear-gradient(115deg, rgba(96, 111, 220, .25), rgba(46, 172, 173, .15));
+  box-shadow: inset 3px 0 #91a2ff, 0 7px 24px rgba(28, 39, 79, .25);
+}
+.app-shell .app-navigation button[aria-current="page"] :where(svg, span) { color: #e4e6ff; }
+.app-shell .app-main { scrollbar-gutter: stable; }
+.app-shell .app-main > :where(section, .bastilla-chat-shell) {
+  border-color: var(--studio-border);
+}
+.app-shell .app-main > section.cyber-grid {
+  background-image:
+    radial-gradient(ellipse at 85% 0%, rgba(87, 119, 220, .08), transparent 32%),
+    linear-gradient(rgba(255,255,255,.012) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255,255,255,.012) 1px, transparent 1px) !important;
+  background-size: auto, 28px 28px, 28px 28px;
+}
+
+/* Chat becomes the primary prompt-and-results canvas. */
+.app-shell .bastilla-chat-shell {
+  color: var(--studio-ink); background: rgba(8, 14, 25, .97) !important;
+  background-image: radial-gradient(ellipse at 50% -12%, rgba(103, 114, 239, .14), transparent 46%) !important;
+  font-family: inherit;
+}
+.app-shell .bastilla-chat-toolbar {
+  min-height: 54px; padding: 8px clamp(10px, 2vw, 22px) !important;
+  background: rgba(15, 23, 39, .94) !important; border-bottom: 1px solid var(--studio-border) !important;
+  box-shadow: 0 8px 24px rgba(0,0,0,.12) !important; backdrop-filter: blur(18px);
+}
+.app-shell .bastilla-chat-toolbar :where(button, select) {
+  min-height: 38px; border: 1px solid rgba(159, 174, 207, .22);
+  border-radius: 12px; color: #e8eefb; background: rgba(30, 42, 64, .86);
+}
+.app-shell .bastilla-chat-toolbar :where(button, select):hover:not(:disabled) {
+  border-color: rgba(126, 157, 255, .6); background: #293653;
+}
+.app-shell .bastilla-chat-scroller {
+  width: 100%; max-width: none !important; padding: clamp(14px, 2.6vw, 30px) clamp(12px, 4vw, 52px) 24px;
+  background: transparent; scrollbar-color: #435477 #0b1220;
+}
+.app-shell .bastilla-chat-scroller > :where(.bastilla-chat-card, section) {
+  width: 100%; max-width: 1120px; margin-inline: auto;
+}
+.app-shell .bastilla-chat-card {
+  --studio-card-accent: #9ba9ff;
+  padding: clamp(14px, 2vw, 20px) !important;
+  border: 1px solid rgba(151, 169, 205, .19) !important;
+  border-left: 3px solid var(--studio-card-accent) !important;
+  border-radius: 18px !important; color: #e9eef8;
+  background: linear-gradient(145deg, rgba(24, 34, 53, .94), rgba(15, 23, 38, .96)) !important;
+  box-shadow: 0 14px 40px rgba(0,0,0,.19) !important;
+  backdrop-filter: blur(14px) !important;
+}
+.app-shell .bastilla-chat-card--user { --studio-card-accent: #c3a8ff; }
+.app-shell .bastilla-chat-card--stream { --studio-card-accent: #73dfd8; }
+.app-shell .bastilla-chat-card:hover {
+  border-color: rgba(151, 169, 205, .38) !important;
+  box-shadow: 0 18px 46px rgba(0,0,0,.27) !important;
+}
+.app-shell .bastilla-chat-card__header {
+  min-height: 36px; margin-bottom: 12px; padding-bottom: 10px;
+  border-bottom-color: rgba(151, 169, 205, .15) !important;
+}
+.app-shell .bastilla-chat-card__header > div { gap: 8px; }
+.app-shell .bastilla-chat-card__header :where(span.rounded, span.rounded-md) {
+  border-radius: 9px; background: rgba(110, 130, 195, .14) !important;
+  border-color: rgba(155, 171, 219, .22) !important; color: #e4e9ff !important;
+}
+.app-shell .bastilla-chat-card :where(p, li, blockquote) { line-height: 1.7; }
+.app-shell .bastilla-chat-card__actions {
+  display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+  margin-top: 14px; padding-top: 12px; border-top-color: rgba(151, 169, 205, .14);
+}
+.app-shell .bastilla-chat-card__actions > button {
+  min-height: 36px; padding: 7px 10px; border: 1px solid rgba(151, 169, 205, .18);
+  border-radius: 11px; color: #b8c5d8; background: rgba(35, 47, 68, .72);
+}
+.app-shell .bastilla-chat-card__actions > button:hover {
+  color: #fff; border-color: rgba(115, 223, 216, .5); background: rgba(41, 68, 83, .86);
+}
+
+/* Composer and DALL·E-inspired prompt controls: choose, attach, preview and refine. */
+.app-shell .bastilla-chat-composer {
+  padding: 12px clamp(10px, 2vw, 24px) max(12px, var(--sab)) !important;
+  background: rgba(12, 19, 31, .96) !important; border-color: var(--studio-border) !important;
+  backdrop-filter: blur(20px);
+}
+.app-shell .bastilla-chat-composer-panel {
+  max-width: 1120px; margin-inline: auto;
+  border: 1px solid rgba(160, 177, 212, .25) !important;
+  border-radius: 22px !important;
+  background: linear-gradient(145deg, rgba(29, 40, 60, .98), rgba(19, 28, 44, .98)) !important;
+  box-shadow: 0 12px 40px rgba(0,0,0,.25) !important;
+}
+.app-shell .bastilla-chat-composer-panel:focus-within {
+  border-color: rgba(126, 157, 255, .72) !important;
+  box-shadow: 0 0 0 3px rgba(126, 157, 255, .13), 0 16px 48px rgba(0,0,0,.3) !important;
+}
+.app-shell .bastilla-chat-composer-panel textarea {
+  min-height: 68px; color: #f5f7fc; line-height: 1.6;
+}
+.app-shell .bastilla-chat-composer-panel textarea::placeholder { color: #9aa8bc; }
+.app-shell .bastilla-chat-composer-panel button[type="submit"] {
+  min-height: 42px; border: 0; border-radius: 14px; color: #101327;
+  background: linear-gradient(125deg, #b8a5ff, #86e5dc);
+  box-shadow: 0 5px 20px rgba(128, 158, 255, .22);
+}
+.app-shell .bastilla-chat-composer-panel button[type="submit"]:hover:not(:disabled) {
+  filter: brightness(1.08); box-shadow: 0 8px 26px rgba(128, 158, 255, .33);
+}
+.app-shell .bastilla-chat-actions {
+  padding: 10px clamp(10px, 2vw, 24px) !important;
+  background: rgba(13, 20, 34, .96) !important; border-color: var(--studio-border) !important;
+  scrollbar-width: thin;
+}
+.app-shell .bastilla-chat-actions button,
+.app-shell .bastilla-chat-shell section[aria-label="Interaktywne centrum czatu"] button {
+  min-height: 40px; border: 1px solid rgba(151, 169, 205, .2);
+  border-radius: 13px; color: #e3e9f7; background: rgba(35, 47, 68, .84);
+}
+.app-shell .bastilla-chat-actions button:hover:not(:disabled),
+.app-shell .bastilla-chat-shell section[aria-label="Interaktywne centrum czatu"] button:hover:not(:disabled) {
+  border-color: rgba(131, 230, 189, .54); background: rgba(37, 68, 73, .9);
+  transform: translateY(-1px);
+}
+.app-shell .bastilla-chat-shell section[aria-label="Interaktywne centrum czatu"] {
+  background: rgba(17, 27, 44, .95) !important; border-color: var(--studio-border) !important;
+  border-radius: 20px !important; box-shadow: 0 16px 44px rgba(0,0,0,.22);
+}
+.app-shell .bastilla-chat-shell [role="region"][aria-label="Wynik akcji"] {
+  border-radius: 18px; border-color: rgba(126, 157, 255, .38);
+  background: linear-gradient(145deg, rgba(23, 33, 54, .98), rgba(13, 21, 35, .98));
+}
+.app-shell .bastilla-chat-shell :where([role="dialog"], [role="tabpanel"]) {
+  border-color: var(--studio-border);
+}
+
+/* Image, chart, video, code and form artifacts share a polished, usable canvas. */
+.app-shell .bastilla-chat-card :where(figure, [data-bastilla-ui], .bastilla-rich-widget) {
+  border-radius: 16px; overflow: hidden;
+}
+.app-shell .bastilla-chat-card :where(img, video, iframe, canvas) {
+  border-radius: 13px; border-color: rgba(159, 174, 207, .2);
+}
+.app-shell .bastilla-chat-card :where(pre, .bastilla-terminal-info-card) {
+  border: 1px solid rgba(151, 169, 205, .18); border-radius: 13px;
+  background: #0a111e;
+}
+.app-shell .bastilla-chat-card :where(button[aria-pressed], button[role="tab"]) {
+  min-height: 38px; border: 1px solid rgba(151, 169, 205, .25);
+  border-radius: 11px; color: #dbe4f4; background: rgba(35, 47, 68, .8);
+}
+.app-shell .bastilla-chat-card :where(button[aria-pressed="true"], button[role="tab"][aria-selected="true"]) {
+  border-color: rgba(184, 165, 255, .66); color: #fff;
+  background: linear-gradient(120deg, rgba(117, 105, 208, .35), rgba(53, 145, 148, .27));
+  box-shadow: inset 0 0 0 1px rgba(184, 165, 255, .12);
+}
+.app-shell .bastilla-chat-card :where(input:not([type="checkbox"]):not([type="range"]), textarea, select) {
+  min-height: 40px; border-radius: 11px; border-color: rgba(151, 169, 205, .25);
+  color: #f0f4fb; background: #101827;
+}
+.app-shell .bastilla-chat-card :where(progress, input[type="range"]) { accent-color: #92a0ff; }
+
+/* Terminal, task manager, Ollama manager and diagnostic panels use one card system. */
+.app-shell :is(
+  .bastilla-terminal-shell, .bastilla-ops-shell, .bastilla-ops-panel,
+  .bastilla-ops-kpi, .bastilla-ops-jobs-section, .bastilla-ops-job-metrics > div,
+  .bastilla-ops-worker-list > div, .bastilla-ops-log-item, .bastilla-ops-agent-bar,
+  .bastilla-ops-model, .bastilla-ops-chain, .bastilla-ops-status-line,
+  .bastilla-terminal-inspector, .bastilla-work-terminal-card
+) {
+  border-color: var(--studio-border);
+  border-radius: 18px;
+  box-shadow: 0 12px 36px rgba(0,0,0,.18);
+}
+.app-shell .bastilla-terminal-shell,
+.app-shell .bastilla-ops-shell {
+  color: var(--studio-ink); background: rgba(10, 17, 30, .97) !important;
+}
+.app-shell .bastilla-terminal-shell :where(header, nav, footer),
+.app-shell .bastilla-ops-shell :where(header, nav) {
+  border-color: var(--studio-border) !important;
+}
+.app-shell .bastilla-terminal-shell button,
+.app-shell .bastilla-ops-shell button {
+  min-height: 38px; border-radius: 12px;
+}
+.app-shell .bastilla-ops-tabs button.is-active,
+.app-shell .bastilla-terminal-shell button[aria-pressed="true"] {
+  color: #fff; border-color: rgba(131, 230, 189, .5);
+  background: linear-gradient(125deg, rgba(60, 132, 142, .42), rgba(88, 89, 169, .32));
+}
+.app-shell .bastilla-ops-log-item { border-left-width: 3px; }
+.app-shell .bastilla-ops-log-item.is-success { border-left-color: var(--studio-green); }
+.app-shell .bastilla-ops-log-item.is-error { border-left-color: #ff8f9f; }
+.app-shell .bastilla-terminal-output { background: #080e18; }
+.app-shell .bastilla-terminal-line {
+  border-color: rgba(151, 169, 205, .16); border-left-color: #7286db;
+  border-radius: 12px; background: rgba(18, 27, 43, .94);
+}
+.app-shell .bastilla-terminal-line:hover { background: rgba(28, 40, 62, .96); }
+.app-shell .bastilla-terminal-composer,
+.app-shell .bastilla-terminal-quickbar,
+.app-shell .bastilla-terminal-console-toolbar {
+  background: rgba(17, 27, 44, .95); border-color: var(--studio-border);
+}
+.app-shell :where(.cyber-card, .bastilla-ops-panel, .bastilla-ops-model, .bastilla-ops-kpi) {
+  backdrop-filter: blur(12px);
+}
+
+/* Shared interaction states for the rest of the app's module cards and controls. */
+.app-shell .app-main :where(article, [role="tabpanel"], [role="region"]) {
+  overflow-wrap: anywhere;
+}
+.app-shell .app-main :where(button, a[role="button"]) {
+  touch-action: manipulation;
+}
+.app-shell .app-main :where(button:not([class*="bg-"]), [role="button"]) {
+  border-radius: 12px;
+}
+.app-shell .app-main :where(input, textarea, select) {
+  color: #eff4fc; border-color: rgba(151, 169, 205, .26);
+  background-color: rgba(13, 21, 35, .96);
+}
+.app-shell .app-main :where(input, textarea, select)::placeholder { color: #92a0b3; }
+.app-shell .app-main :where(details, .rounded-xl.border, .rounded-2xl.border) {
+  border-color: var(--studio-border);
+}
+.app-shell .app-main :where(table) { border-color: var(--studio-border); }
+.app-shell .app-main :where(th) { background: rgba(40, 54, 82, .8); }
+.app-shell .app-main :where(td) { border-color: rgba(151, 169, 205, .14); }
+.app-shell .app-main :where(a) { text-underline-offset: 3px; }
+.app-shell .app-main :where(a:hover) { color: #d7deff; }
+.app-shell .app-main :where(img, video, iframe, canvas) { max-width: 100%; }
+
+/* Responsive workspace: keep the prompt, controls and navigation easy to reach. */
+@media (max-width: 639px) {
+  .app-shell .bastilla-workspace-sync-strip { min-height: 48px; gap: 5px 8px; padding: 7px 10px; }
+  .app-shell .bastilla-workspace-sync-detail { display: none; }
+  .app-shell .bastilla-workspace-sync-strip button { min-height: 34px; padding: 6px 8px; font-size: 11px; }
+  .app-shell .app-navigation { box-shadow: 0 -10px 28px rgba(0,0,0,.3); }
+  .app-shell .app-navigation > div { gap: 5px; padding: 7px max(7px, var(--sal)); }
+  .app-shell .app-navigation button { min-height: 58px; border-radius: 13px; }
+  .app-shell .bastilla-chat-toolbar { flex-wrap: wrap; }
+  .app-shell .bastilla-chat-toolbar :where(button, select) { min-height: 36px; }
+  .app-shell .bastilla-chat-card { border-radius: 16px !important; }
+  .app-shell .bastilla-chat-composer-panel { border-radius: 18px !important; }
+  .app-shell .bastilla-chat-composer-panel textarea { min-height: 58px; }
+  .app-shell .bastilla-chat-actions { gap: 7px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .app-shell *, .app-shell *::before, .app-shell *::after {
+    animation-duration: .01ms !important; animation-iteration-count: 1 !important;
+    scroll-behavior: auto !important; transition-duration: .01ms !important;
+  }
+}
