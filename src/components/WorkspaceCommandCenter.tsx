@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import {
   Activity, BarChart3, BrainCircuit, CheckSquare, ChevronDown, ChevronUp, ClipboardList,
   Code2, Copy, Cpu, FileText, Image as ImageIcon, LayoutGrid, ListChecks, MessageSquare,
@@ -90,6 +90,21 @@ export function WorkspaceCommandCenter({
   history, streamingChat, isLoading, onPreparePrompt, onToggleTerminal, onOpenTerminal, onSync,
 }: Props) {
   const [expanded, setExpanded] = useState(false);
+  const [ollamaStates, setOllamaStates] = useState<Array<{ id: number; connected: boolean; configured: boolean }>>([]);
+  useEffect(() => {
+    let active = true;
+    const refresh = async () => {
+      try {
+        const response = await fetch('/api/ollama/instances', { cache: 'no-store' });
+        if (!response.ok) throw new Error('unavailable');
+        const data = await response.json();
+        if (active) setOllamaStates(Array.isArray(data.instances) ? data.instances : []);
+      } catch { if (active) setOllamaStates([]); }
+    };
+    void refresh();
+    const timer = window.setInterval(() => void refresh(), 10000);
+    return () => { active = false; window.clearInterval(timer); };
+  }, []);
   const [category, setCategory] = useState<Category>('Wszystkie');
   const [search, setSearch] = useState('');
   const [selectedPane, setSelectedPane] = useState<'tools' | 'activity'>('tools');
@@ -112,6 +127,16 @@ export function WorkspaceCommandCenter({
             {isLoading ? (activeAgent ? 'Generuje: ' + (activeAgent.agent === 'si_1' ? 'Aria' : activeAgent.agent) : 'Żądanie w toku…') :
               'Historia: ' + history.length + ' wiadomości · ostatni agent: ' + (latest?.agent === 'si_1' ? 'Aria' : latest?.agent || 'brak')}
           </p>
+        </div>
+        <div className="flex items-center gap-1.5" aria-label="Rzeczywisty status Ollama 1 i 2">
+          {[1, 2].map(id => {
+            const instance = ollamaStates.find(item => item.id === id);
+            const online = instance?.connected === true;
+            return <span key={id} title={!instance ? 'Brak odczytu' : !instance.configured ? 'Nie skonfigurowano' : online ? 'Serwer odpowiada' : 'Serwer nie odpowiada'}
+              className={`inline-flex items-center gap-1 rounded-md border px-1.5 py-1 text-[10px] font-semibold ${online ? 'border-emerald-700 text-emerald-300' : 'border-rose-800 text-rose-300'}`}>
+              <span className={`h-2 w-2 rounded-full ${online ? 'bg-emerald-400' : 'bg-rose-500'}`} />Ollama {id}
+            </span>;
+          })}
         </div>
         {isLoading && <span className="flex items-center gap-1 text-[10px] text-cyan-300" role="status">
           <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-cyan-400" />Generowanie
