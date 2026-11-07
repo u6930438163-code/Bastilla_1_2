@@ -18,6 +18,7 @@ type TerminalWorkCardProps = {
   onOpenTerminal?: () => void;
   onCommandRequested?: (command: string) => void;
   compact?: boolean;
+  verified?: boolean;
 };
 
 const styles: Record<TerminalCardStatus, { label: string; className: string }> = {
@@ -41,6 +42,7 @@ export function TerminalWorkCard({
   onOpenTerminal,
   onCommandRequested,
   compact = false,
+  verified = true,
 }: TerminalWorkCardProps) {
   const [section, setSection] = useState<'all' | 'errors' | 'system'>('all');
   const [expanded, setExpanded] = useState(true);
@@ -56,7 +58,7 @@ export function TerminalWorkCard({
     section === 'all' || (section === 'errors' ? entry.type === 'error' : entry.type === 'system'));
   const errors = normalizedEntries.filter(entry => entry.type === 'error').length;
   const success = normalizedEntries.filter(entry => entry.type === 'success').length;
-  const current = styles[status] ?? styles.idle;
+  const current = verified ? (styles[status] ?? styles.idle) : { label: 'Dane od AI · niezweryfikowane', className: 'text-amber-200 border-amber-800 bg-amber-950/60' };
   const actualProgress = typeof progress === 'number' && Number.isFinite(progress)
     ? Math.max(0, Math.min(100, progress)) : null;
 
@@ -100,7 +102,7 @@ export function TerminalWorkCard({
         <TerminalSquare className="h-4 w-4 text-cyan-300"/>
         <strong className="flex-1 text-[11px] tracking-wider truncate">{short(title, 110)}</strong>
         <span role="status" className={'rounded-full border px-2 py-0.5 text-[10px] flex items-center gap-1 ' + current.className}>
-          {status === 'running' ? <LoaderCircle className="h-3 w-3 animate-spin"/> :
+          {!verified ? <AlertCircle className="h-3 w-3"/> : status === 'running' ? <LoaderCircle className="h-3 w-3 animate-spin"/> :
             status === 'error' ? <AlertCircle className="h-3 w-3"/> :
             status === 'success' ? <CheckCircle2 className="h-3 w-3"/> : <Activity className="h-3 w-3"/>}
           {current.label}
@@ -111,6 +113,7 @@ export function TerminalWorkCard({
         </button>
       </header>
       {expanded && <>
+        {!verified && <p className="mx-3 mt-2 rounded-lg border border-amber-800/60 bg-amber-950/30 px-3 py-2 text-[11px] text-amber-100">To treść wiadomości AI, nie rzeczywisty wynik wykonania polecenia. Otwórz terminal, aby sprawdzić stan systemu.</p>}
         <div className="flex flex-wrap gap-2 items-center justify-between px-3 py-2 text-[10px] text-slate-400">
           <span className="flex items-center gap-1"><ShieldCheck className="h-3 w-3 text-cyan-300"/>{short(source, 90)}</span>
           <span>{normalizedEntries.length} wpisów · {success} sukcesów · {errors} błędów</span>
@@ -143,7 +146,7 @@ export function TerminalWorkCard({
             <button type="button" onClick={download} aria-label="Pobierz logi" title="Pobierz log" className="p-2 text-slate-300 hover:text-cyan-200"><Download className="h-4 w-4"/></button>
           </div>
         </nav>
-        <div role="log" aria-live={status === 'running' ? 'off' : 'polite'} className={'overflow-auto bg-[#030d18] p-3 font-mono text-[11px] leading-relaxed ' + (compact ? 'max-h-48 min-h-20' : 'max-h-72 min-h-28')}>
+        <div role="log" aria-live={status === 'running' ? 'off' : 'polite'} className={'min-w-0 max-w-full overflow-auto overscroll-x-contain bg-[#030d18] p-3 font-mono text-[11px] leading-relaxed ' + (compact ? 'max-h-48 min-h-20' : 'max-h-72 min-h-28')}>
           {visible.length ? visible.map((entry, index) => (
             <div key={index} className={'whitespace-pre-wrap break-words py-0.5 ' +
               (entry.type === 'error' ? 'text-rose-300' : entry.type === 'success' ? 'text-emerald-300' :
