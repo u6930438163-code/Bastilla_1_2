@@ -3,18 +3,20 @@ import { Bot, Check, X, GitPullRequest, Activity, Wrench, Send } from 'lucide-re
 
 export type WorkspaceAgent = 'triad'|'si_1'|'Alex'|'Astyria'|'Aurelius';
 type TaskKind = 'review'|'diagnose'|'fix';
-type Props = { disabled?:boolean; onPrepare:(agent:WorkspaceAgent,prompt:string)=>void };
+type Props = { disabled?:boolean; history?: Array<{agent:string;tekst:string}>; onPrepare:(agent:WorkspaceAgent,prompt:string)=>void };
 const tasks:Record<TaskKind,{title:string;prompt:string;icon:typeof Bot}>={
   review:{title:'Przegląd GitHub',prompt:'Przeprowadź przegląd wskazanego repozytorium, pliku lub PR. Najpierw poproś o link. Zwróć ryzyka, testy i propozycje zmian. Nie scalaj bez zgody.',icon:GitPullRequest},
   diagnose:{title:'Diagnostyka',prompt:'Przygotuj diagnostykę dostępnych usług, logów i narzędzi. Pokaż rzeczywiste wyniki, a brak dostępu oznacz jawnie. Nie wykonuj zmian.',icon:Activity},
   fix:{title:'Propozycja naprawy',prompt:'Przygotuj propozycję naprawy z diffem, uzasadnieniem i testami. Zaczekaj na zatwierdzenie przed modyfikacją plików.',icon:Wrench}
 };
-export function AgentWorkspaceCard({disabled,onPrepare}:Props){
+export function AgentWorkspaceCard({disabled,history=[],onPrepare}:Props){
   const [agent,setAgent]=useState<WorkspaceAgent>('Alex');
   const [kind,setKind]=useState<TaskKind>('review');
   const [detail,setDetail]=useState('');
   const [approved,setApproved]=useState(false);
   const [expanded,setExpanded]=useState(false);
+  const agentHistory = history.filter(item => agent === 'triad' ? true : item.agent === agent || (agent === 'si_1' && item.agent === 'Aria'));
+  const lastMessage = agentHistory.length ? agentHistory[agentHistory.length - 1] : null;
   const current=tasks[kind];
   const Icon=current.icon;
   return <section className="rounded-2xl border border-cyan-500/30 bg-[#10283a] p-3 text-slate-100" aria-label="Interaktywny panel zadań AI">
@@ -28,6 +30,17 @@ export function AgentWorkspaceCard({disabled,onPrepare}:Props){
         {([['triad','Wszyscy'],['si_1','Aria'],['Alex','Alex'],['Astyria','Astyria'],['Aurelius','Aurelius']] as const).map(([id,name])=>
           <button type="button" key={id} aria-pressed={agent===id} onClick={()=>{setAgent(id);setApproved(false);}}
             className={`rounded-xl border px-2 py-2 text-xs ${agent===id?'border-cyan-300 bg-cyan-900/40 text-cyan-100':'border-slate-600 bg-[#19394e] text-slate-300'}`}>{name}</button>)}
+      </div>
+      <div className="rounded-xl border border-cyan-800/50 bg-[#091d2c] p-3" aria-live="polite">
+        <div className="mb-2 flex items-center justify-between gap-2">
+          <strong className="text-xs text-cyan-200">{agent === 'triad' ? 'Wszyscy agenci' : agent === 'si_1' ? 'Aria' : agent} · historia czatu</strong>
+          <span className="text-[11px] text-slate-400">{agentHistory.length} wiadomości</span>
+        </div>
+        {lastMessage ? <div className="space-y-2">
+          <p className="line-clamp-4 whitespace-pre-wrap break-words text-xs text-slate-200">{lastMessage.tekst}</p>
+          <button type="button" onClick={() => setDetail(lastMessage.tekst.slice(0, 500))}
+            className="rounded-lg border border-cyan-700 px-2 py-1 text-[11px] text-cyan-200 hover:bg-cyan-900/40">Użyj ostatniej wiadomości jako kontekstu</button>
+        </div> : <p className="text-xs text-slate-400">Brak wiadomości w dostępnej historii. To nie oznacza, że agent jest offline.</p>}
       </div>
       <div className="grid grid-cols-3 gap-2">{(Object.entries(tasks) as [TaskKind,typeof current][]).map(([id,item])=>{
         const TaskIcon=item.icon;return <button type="button" key={id} aria-pressed={kind===id} onClick={()=>{setKind(id);setApproved(false);}}
