@@ -408,6 +408,30 @@ function persistOllamaModelConfig(model: string) {
   }
 }
 
+// Two independently checked Ollama instances. Instance 2 is optional and is never guessed.
+app.get('/api/ollama/instances', async (_req, res) => {
+  res.setHeader('Cache-Control', 'no-store');
+  const configured = [
+    { id: 1, base: process.env.OLLAMA_1_BASE_URL || LLM_CHAIN_CONFIG.ollamaBaseUrl || DEFAULT_OLLAMA_BASE_URL },
+    { id: 2, base: process.env.OLLAMA_2_BASE_URL || '' },
+  ];
+  const instances = await Promise.all(configured.map(async ({ id, base }) => {
+    if (!base.trim()) return { id, configured: false, connected: false, status: 'not_configured' };
+    try {
+      const url = new URL(base);
+      if (!['http:', 'https:'].includes(url.protocol) || url.username || url.password)
+        throw new Error('Nieprawidłowy adres serwera');
+      const response = await fetch(url.toString().replace(/\\/$/, '') + '/api/version', { signal: AbortSignal.timeout(3000) });
+      if (!response.ok) throw new Error('HTTP ' + response.status);
+      const body = await response.json() as { version?: string };
+      return { id, configured: true, connected: true, status: 'online', version: body.version || null };
+    } catch {
+      return { id, configured: true, connected: false, status: 'offline' };
+    }
+  }));
+  res.json({ instances, checkedAt: new Date().toISOString() });
+});
+
 // Ollama model inventory. Uses the configured local Ollama API; no shell commands.
 app.get('/api/ollama/models', async (_req, res) => {
   const base = (LLM_CHAIN_CONFIG.ollamaBaseUrl || DEFAULT_OLLAMA_BASE_URL).replace(/\/+$/, '');
