@@ -35,6 +35,28 @@ const formatSize = (bytes?: number) =>
 
 export function OllamaModelManager() {
   const [inventory, setInventory] = useState<Inventory | null>(null);
+  const [instances, setInstances] = useState<Array<{ id: number; connected: boolean; configured: boolean; status: string; version?: string | null }>>([]);
+  const [lastChecked, setLastChecked] = useState('');
+  useEffect(() => {
+    let active = true;
+    const check = async () => {
+      try {
+        const response = await fetch('/api/ollama/instances', { cache: 'no-store' });
+        if (!response.ok) throw new Error('Health endpoint unavailable');
+        const data = await response.json();
+        if (active) {
+          setInstances(Array.isArray(data.instances) ? data.instances : []);
+          setLastChecked(typeof data.checkedAt === 'string' ? data.checkedAt : '');
+        }
+      } catch {
+        if (active) { setInstances([]); setLastChecked(''); }
+      }
+    };
+    void check();
+    const timer = window.setInterval(() => void check(), 10000);
+    return () => { active = false; window.clearInterval(timer); };
+  }, []);
+
   const [loading, setLoading] = useState(true);
   const [busyAction, setBusyAction] = useState<string | null>(null);
   const [error, setError] = useState('');
@@ -179,6 +201,23 @@ export function OllamaModelManager() {
       aria-label="Menedżer modeli Ollama"
       className="space-y-3 rounded-xl border border-cyan-800/40 bg-slate-950/80 p-4 text-slate-100"
     >
+      <div className="grid grid-cols-1 gap-2 sm:grid-cols-2" aria-label="Stan dwóch serwerów Ollama">
+        {[1, 2].map(id => {
+          const instance = instances.find(item => item.id === id);
+          const online = instance?.connected === true;
+          return <div key={id} className="flex min-w-0 items-center justify-between rounded-xl border border-slate-700 bg-slate-900 p-3">
+            <div className="flex items-center gap-2">
+              <span aria-hidden="true" className={`h-3 w-3 rounded-full ${online ? 'bg-emerald-400' : 'bg-rose-500'}`} />
+              <div>
+                <div className="text-sm font-semibold text-white">Ollama {id}</div>
+                <div className="text-[11px] text-slate-400">{!instance ? 'Brak odczytu' : !instance.configured ? 'Nie skonfigurowano' : online ? 'Włączona' : 'Wyłączona / brak odpowiedzi'}</div>
+              </div>
+            </div>
+            <span className={`rounded-md px-2 py-1 text-xs font-bold ${online ? 'bg-emerald-950 text-emerald-300' : 'bg-rose-950 text-rose-300'}`}>{online ? 'ONLINE' : 'OFFLINE'}</span>
+          </div>;
+        })}
+        <p className="col-span-full text-[10px] text-slate-500">Odczyt co 10 s z backendu · {lastChecked ? new Date(lastChecked).toLocaleTimeString('pl-PL') : 'oczekiwanie na diagnostykę'}. Ollama 2: OLLAMA_2_BASE_URL.</p>
+      </div>
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div className="flex items-center gap-2">
           <h2 className="font-semibold text-cyan-100">Menedżer modeli Ollama</h2>
