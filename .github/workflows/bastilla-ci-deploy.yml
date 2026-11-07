@@ -1,0 +1,86 @@
+name: Bastilla CI and approved deployment
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: bastilla-ci-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - name: Install locked dependencies
+        run: npm ci
+      - name: Typecheck
+        run: npm run lint
+      - name: Automated tests
+        run: npm test
+      - name: Build frontend
+        run: npm run build
+      - name: Build backend
+        run: npm run build:server
+      - name: Check deployment files
+        run: |
+          test -f dist/index.html
+          test -f bastillaos/build/server.mjs
+      - name: Upload application bundle
+        uses: actions/upload-artifact@v4
+        with:
+          name: bastilla-build
+          path: |
+            dist/
+            bastillaos/build/server.mjs
+          retention-days: 7
+  deployment:
+    name: Approved server deployment
+    if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main'
+    needs: verify
+    runs-on: ubuntu-latest
+    environment: production
+    timeout-minutes: 15
+    steps:
+      - name: Download verified build
+        uses: actions/download-artifact@v4
+        with:
+          name: bastilla-build
+          path: bundle
+      - name: Validate deployment configuration
+        env:
+          DEPLOY_HOST: ${{ secrets.BASTILLA_DEPLOY_HOST }}
+          DEPLOY_USER: ${{ secrets.BASTILLA_DEPLOY_USER }}
+          DEPLOY_KEY: ${{ secrets.BASTILLA_DEPLOY_SSH_KEY }}
+          DEPLOY_PATH: ${{ vars.BASTILLA_DEPLOY_PATH }}
+        run: |
+          test -n "$DEPLOY_HOST" && test -n "$DEPLOY_USER" && test -n "$DEPLOY_KEY"
+          test -n "$DEPLOY_PATH"
+          case "$DEPLOY_PATH" in /opt/bastilla/*) ;; *) echo 'Path must be under /opt/bastilla/'; exit 1;; esac
+      - name: Deploy over SSH (no sudo or remote scripts)
+        env:
+          DEPLOY_HOST: ${{ secrets.BASTILLA_DEPLOY_HOST }}
+          DEPLOY_USER: ${{ secrets.BASTILLA_DEPLOY_USER }}
+          DEPLOY_KEY: ${{ secrets.BASTILLA_DEPLOY_SSH_KEY }}
+          DEPLOY_KNOWN_HOSTS: ${{ secrets.BASTILLA_DEPLOY_KNOWN_HOSTS }}
+          DEPLOY_PATH: ${{ vars.BASTILLA_DEPLOY_PATH }}
+        run: |
+          set -euo pipefail
+          test -n "$DEPLOY_KNOWN_HOSTS"
+          mkdir -p ~/.ssh
+          chmod 700 ~/.ssh
+          printf '%s\n' "$DEPLOY_KEY" > ~/.ssh/bastilla_deploy
+          printf '%s\n' "$DEPLOY_KNOWN_HOSTS" > ~/.ssh/known_hosts
+          chmod 600 ~/.ssh/bastilla_deploy ~/.ssh/known_hosts
+          SSH_OPTS=(-i ~/.ssh/bastilla_deploy -o StrictHostKeyChecking=yes -o BatchMode=yes)
+          ssh "${SSH_OPTS[@]}" "$DEPLOY_USER@$DEPLOY_HOST" "test -d '$DEPLOY_PATH' && test -w '$DEPLOY_PATH'"
+          rsync -az --delete -e "ssh ${SSH_OPTS[*]}" bundle/dist/ "$DEPLOY_USER@$DEPLOY_HOST:$DEPLOY_PATH/dist/"
+          rsync -az -e "ssh ${SSH_OPTS[*]}" bundle/bastillaos/build/server.mjs "$DEPLOY_USER@$DEPLOY_HOST:$DEPLOY_PATH/server.mjs"
+          echo 'Files transferred. Service restart and runtime configuration remain operator-managed.'
