@@ -1,10 +1,11 @@
 /**
- * Łańcuch modeli językowych dla czatu triady (Alex, Astyria, Aurelius).
+ * Łańcuch modeli językowych czatu Bastilla.
  *
- *   1. Google Gemini (GEMINI_API_KEY, model główny + modele zapasowe)
- *   2. xAI Grok   (XAI_API_KEY, API zgodne z OpenAI, automatyczny dobór modelu)
- *   3. Ollama     (OLLAMA_MODEL, lokalny model na serwerze, działa bez internetu)
- *   4. brak modelu → wywołujący przechodzi na deterministyczny without_nlp
+ *   1. OpenAI API (OPENAI_CHAT_API_KEY)
+ *   2. Ollama (lokalny model)
+ *   3. Brak modelu → wywołujący może użyć deterministycznego without_nlp.
+ * Starsze adaptery Gemini/xAI pozostają wyłącznie dla zgodności kodu;
+ * configuredProviders nigdy nie dopuszcza ich do obsługi czatu.
  *
  * Moduł używa wyłącznie fetch (bez SDK), więc jest w pełni testowalny
  * z podstawionym fetch i nie dodaje zależności npm.
@@ -88,7 +89,7 @@ export class LlmChainError extends Error {
   constructor(failures: string[]) {
     super(failures.length
       ? `Żaden model nie odpowiedział: ${failures.join(' | ')}`
-      : 'Brak skonfigurowanych modeli (GEMINI_API_KEY, XAI_API_KEY, OPENAI_CHAT_API_KEY, OLLAMA_MODEL).');
+      : 'Brak dostępnych dostawców czatu (OpenAI API lub Ollama). Sprawdź OPENAI_CHAT_API_KEY i stan serwera Ollama.');
     this.name = 'LlmChainError';
     this.failures = failures;
   }
@@ -621,7 +622,7 @@ export function configuredProviders(config: LlmChainConfig): Array<LlmProvider> 
       || Boolean((config.openaiChatApiKey || '').trim())));
 }
 
-/** Gemini → xAI → Ollama. Rzuca LlmChainError, gdy żaden dostawca nie odpowiedział. */
+/** Tylko OpenAI API i Ollama; legacy Gemini/xAI są wykluczone przez configuredProviders. */
 export async function generateWithChain(
   config: LlmChainConfig,
   request: LlmRequest,
