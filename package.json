@@ -24,7 +24,8 @@
     "start:mcp": "bash scripts/start-bastilla-mcp.sh",
     "mcp:client": "python integrations/mcp/client.py",
     "verify": "node scripts/verify.mjs",
-    "setup:diagnostics": "node scripts/setup-diagnostics.mjs"
+    "setup:diagnostics": "node scripts/setup-diagnostics.mjs",
+    "setup:all": "node scripts/setup-all.mjs"
   },
   "dependencies": {
     "@google/genai": "^2.30.0",
