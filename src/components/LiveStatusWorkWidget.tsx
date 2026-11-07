@@ -70,6 +70,7 @@ export function LiveStatusWorkWidget({
       } catch (cause) {
         if (!disposed && (!controller.signal.aborted || timedOut)) {
           setStatus('error');
+          setResult(null);
           setError(timedOut ? 'Serwer nie odpowiedział w ciągu 8 sekund.' : cause instanceof Error ? cause.message.slice(0, 160) : 'Brak połączenia');
         }
       } finally {
@@ -100,7 +101,7 @@ export function LiveStatusWorkWidget({
   const offline = status === 'error';
   const sourceResult = result?.source === selectedSource ? result : null;
   const agents = sourceResult?.source === 'agent_monitor' ? sourceResult.agents : [];
-  const visibleAgents = onlyProblems ? agents.filter(agent => agent.status !== 'online') : agents;
+  const visibleAgents = onlyProblems ? agents.filter(agent => !agent.enabled || agent.status !== 'online' || Boolean(agent.error)) : agents;
   const ollama = sourceResult?.source === 'ollama_inventory' ? sourceResult : null;
 
   const diagnosticsDraft = selectedSource === 'ollama_inventory'
@@ -170,7 +171,7 @@ export function LiveStatusWorkWidget({
           <div className="flex flex-wrap items-center justify-between gap-2 text-xs">
             <strong>{agent.name}</strong>
             <span className={agent.status === 'online' ? 'text-emerald-300' : agent.status === 'offline' ? 'text-rose-300' : 'text-amber-300'}>
-              {agent.status === 'online' ? 'Ollama odpowiada' : agent.status === 'offline' ? 'Ollama offline' : 'Niezweryfikowany'}
+              {!agent.enabled ? 'Monitoring wyłączony' : agent.status === 'online' ? 'Połączenie Ollama OK' : agent.status === 'offline' ? 'Połączenie Ollama offline' : 'Niezweryfikowany'}
             </span>
           </div>
           <p className="mt-1 text-[11px] text-slate-400">Odczyt: {showTime(agent.lastCheck)}</p>
