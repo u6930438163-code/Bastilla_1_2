@@ -19,7 +19,6 @@ type OllamaReport = {
   runningModels: LoadedModel[] | null;
   installedModels: Array<{ name: string; sizeBytes: number | null }> | null;
   configuredProviders: string[];
-  fallbackModels: string[];
   localFallback: boolean;
   keepAlive: string;
   error: string | null;
@@ -364,7 +363,6 @@ export function TaskManagerView({ initialSection = 'processes', onPrepareMainCha
           <div className="bastilla-ops-subheading"><Wrench className="w-4 h-4" /><h3>Łańcuch dostawców i fallback</h3></div>
           <div className="bastilla-ops-chain">
             <p><strong>Kolejność:</strong> {ollamaReport?.configuredProviders?.join(' → ') || 'Brak skonfigurowanych dostawców'}</p>
-            <p><strong>Modele zapasowe Gemini:</strong> {ollamaReport?.fallbackModels?.length ? ollamaReport.fallbackModels.join(' · ') : 'Brak aktywnego łańcucha zapasowych modeli Gemini'}</p>
             <p><strong>Fallback lokalny without_nlp:</strong> {ollamaReport?.localFallback ? 'WŁĄCZONY' : 'WYŁĄCZONY'}</p>
           </div>
           <button type="button" className="bastilla-ops-send" disabled={Boolean(sendingKey) || !ollamaReport}

@@ -1,8 +1,8 @@
 {
   "name": "Bastilla OS 2",
-  "description": "Aplikacja Bastilla OS 2: interfejs webowy, jądro SVL, agenci Aria, Alex, Astyria i Aurelius, trasowanie modeli Gemini oraz MCP.",
+  "description": "Aplikacja Bastilla OS 2: interfejs webowy, jądro SVL, agenci Aria, Alex, Astyria i Aurelius, lokalna Ollama oraz MCP.",
   "requestFramePermissions": [],
   "majorCapabilities": [
-    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+    "MAJOR_CAPABILITY_LOCAL_OLLAMA_CHAT"
   ]
 }

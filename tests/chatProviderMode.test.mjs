@@ -7,12 +7,8 @@ const mockResponse = (status, body) => new Response(JSON.stringify(body), {
   status, headers: { 'Content-Type': 'application/json' },
 });
 const allConfigured = {
-  providers: ['gemini', 'ollama', 'xai', 'openai'],
+  providers: ['ollama', 'openai'],
   openaiChatApiKey: 'test-openai',
-  geminiApiKey: 'test-g',
-  geminiModel: 'test-gemini',
-  xaiApiKey: 'test-x',
-  xaiModel: 'test-xai',
   ollamaModel: 'test-ollama',
   ollamaBaseUrl: 'http://127.0.0.1:11434',
 };
@@ -27,7 +23,7 @@ test('default chat provider prefers local Ollama when available', () => {
 test('operator API mode never selects an Ollama provider', () => {
   const selected = selectChatProviderConfig(allConfigured, 'api');
   assert.deepEqual(configuredProviders(selected), ['openai']);
-  assert.deepEqual(allConfigured.providers, ['gemini', 'ollama', 'xai', 'openai'], 'source config stays unchanged');
+  assert.deepEqual(allConfigured.providers, ['ollama', 'openai'], 'source config stays unchanged');
 });
 
 test('operator Ollama mode never selects API providers', () => {

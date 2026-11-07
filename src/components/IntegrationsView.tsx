@@ -4,7 +4,6 @@ type Service = { name: string; status: 'potwierdzone' | 'wymaga konfiguracji' | 
 const services: Service[] = [
   { name:'GitHub (ChatGPT)', status:'potwierdzone', details:'Połączenie ChatGPT z repozytorium BastillaOS zostało zweryfikowane. Nie oznacza to automatycznego połączenia kont w BastillaOS.' },
   { name:'Ollama (BastillaOS)', status:'wymaga konfiguracji', details:'Aplikacja zawiera obsługę lokalnych modeli; stan działającego serwera należy sprawdzić w diagnostyce.' },
-  { name:'Google AI Studio / Gemini', status:'wymaga konfiguracji', details:'Projekt ma komponenty Gemini; połączenie produkcyjne i klucze należy zweryfikować na serwerze.' },
   { name:'LibreChat · Bastilla', status:'wymaga konfiguracji', details:'Oddzielny interfejs LibreChat ze sprawdzanym połączeniem do istniejących czterech workerów Bastilla LIVE. Wymaga Docker, sekretów i uruchomionych oryginalnych agentów.', url:'https://github.com/LibreChat-AI/LibreChat' },
   { name:'ChatGPT / OpenAI API', status:'wymaga konfiguracji', details:'Wymaga osobnej konfiguracji API lub MCP. Subskrypcja ChatGPT nie zapewnia automatycznie kredytów API.' },
   { name:'Google Zdjęcia', status:'wymaga konfiguracji', details:'Import ręczny jest dostępny w module Zdjęcia i notatki. Bezpośredni Picker wymaga OAuth i backendu.', url:'https://photos.google.com/' },

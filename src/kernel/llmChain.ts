@@ -4,16 +4,11 @@
  *   1. OpenAI API (OPENAI_CHAT_API_KEY)
  *   2. Ollama (lokalny model)
  *   3. Brak modelu → wywołujący może użyć deterministycznego without_nlp.
- * Starsze adaptery Gemini/xAI pozostają wyłącznie dla zgodności kodu;
- * configuredProviders nigdy nie dopuszcza ich do obsługi czatu.
- *
  * Moduł używa wyłącznie fetch (bez SDK), więc jest w pełni testowalny
  * z podstawionym fetch i nie dodaje zależności npm.
  */
-import { parseGeminiModelChain, runWithGeminiFallback } from './geminiVm.ts';
-
 export type LlmRole = 'user' | 'assistant';
-export type LlmProvider = 'gemini' | 'xai' | 'openai' | 'ollama';
+export type LlmProvider = 'openai' | 'ollama';
 
 export interface LlmTurn {
   role: LlmRole;
@@ -37,13 +32,6 @@ export interface LlmRequest {
 }
 
 export interface LlmChainConfig {
-  geminiApiKey?: string;
-  geminiModel?: string;
-  geminiFallbackModels?: string;
-  geminiBaseUrl?: string;
-  xaiApiKey?: string;
-  xaiModel?: string;
-  xaiBaseUrl?: string;
   /** Separate server-side secret for OpenAI chat (not the OpenAI image API key). */
   openaiChatApiKey?: string;
   openaiChatModel?: string;
@@ -52,7 +40,7 @@ export interface LlmChainConfig {
   ollamaBaseUrl?: string;
   /** Jak długo model zostaje w pamięci po odpowiedzi (np. "24h", "-1" = na stałe). Domyślnie 24h. */
   ollamaKeepAlive?: string;
-  /** Okno kontekstu w tokenach — mniejsze = szybszy start odpowiedzi i mniej RAM (domyślnie 4096). */
+  /** Okno kontekstu w tokenach — mniejsze = szybszy start odpowiedzi i mniej RAM. */
   ollamaNumCtx?: number;
   /** Maksymalna długość odpowiedzi w tokenach — mniejsza = szybsza odpowiedź (domyślnie 2048). */
   ollamaNumPredict?: number;
@@ -95,16 +83,13 @@ export class LlmChainError extends Error {
   }
 }
 
-export const DEFAULT_GEMINI_BASE_URL = 'https://generativelanguage.googleapis.com/v1beta';
-export const DEFAULT_XAI_BASE_URL = 'https://api.x.ai/v1';
 export const OPENAI_CHAT_COMPLETIONS_URL = 'https://api.openai.com/v1/chat/completions';
 export const DEFAULT_OPENAI_CHAT_MODEL = 'gpt-4o';
-export const DEFAULT_XAI_MODEL = 'grok-3-mini';
 export const DEFAULT_OLLAMA_BASE_URL = 'http://127.0.0.1:11434';
-/** Domyślny limit pozwala na długie odpowiedzi w oknie kontekstu 4096 tokenów. */
+/** Maksymalny bezwzględny limit odpowiedzi dla dostawców lokalnych. */
 export const OLLAMA_MAX_OUTPUT_TOKENS = 3072;
 export const OLLAMA_DEFAULT_KEEP_ALIVE = '24h';
-export const OLLAMA_DEFAULT_NUM_CTX = 4096;
+export const OLLAMA_DEFAULT_NUM_CTX = 2048;
 const OLLAMA_MIN_NUM_CTX = 512;
 
 /** keep_alive: liczba (sekundy / ujemna = na stałe) albo tekst typu "24h". */
@@ -131,7 +116,7 @@ function trimBase(url: string): string {
 }
 
 function describeStatus(provider: LlmProvider, status: number): string {
-  const name = provider === 'gemini' ? 'Google Gemini' : provider === 'xai' ? 'xAI' : provider === 'openai' ? 'OpenAI' : 'Ollama';
+  const name = provider === 'openai' ? 'OpenAI' : 'Ollama';
   if (status === 401 || status === 403) return `${name}: klucz API odrzucony (HTTP ${status}).`;
   if (status === 402) return `${name}: brak środków na koncie (HTTP 402).`;
   if (status === 429) return `${name}: limit żądań wyczerpany (HTTP 429).`;
@@ -157,111 +142,6 @@ function describeOllamaErrorBody(body: string): string {
     // Keep non-JSON provider error text as-is.
   }
   return body.trim();
-}
-
-/** Czy błąd uzasadnia próbę kolejnego modelu Gemini (limit, brak modelu, awaria). */
-export function shouldTryNextGeminiModel(error: unknown): boolean {
-  return error instanceof LlmProviderError
-    && error.provider === 'gemini'
-    && (error.status === 404 || error.status === 429 || error.status >= 500);
-}
-
-export async function generateGemini(
-  config: LlmChainConfig,
-  request: LlmRequest,
-  signal?: AbortSignal,
-): Promise<{ text: string; model: string }> {
-  const apiKey = (config.geminiApiKey || '').trim();
-  if (!apiKey) throw new Error('Brak GEMINI_API_KEY.');
-  const doFetch = config.fetchImpl ?? fetch;
-  const base = trimBase(config.geminiBaseUrl || DEFAULT_GEMINI_BASE_URL);
-  const chain = parseGeminiModelChain(config.geminiModel || '', config.geminiFallbackModels || '');
-  if (!chain.valid) throw new Error('Nieprawidłowa nazwa modelu Gemini (GEMINI_MODEL / GEMINI_FALLBACK_MODELS).');
-
-  const contents = [
-    ...request.history.map((turn) => ({
-      role: turn.role === 'user' ? 'user' : 'model',
-      parts: [{ text: turn.text }],
-    })),
-    {
-      role: 'user',
-      parts: [
-        { text: request.message },
-        ...(request.attachments ?? []).map((attachment) => ({
-          inlineData: { mimeType: attachment.mimeType, data: attachment.content },
-        })),
-      ],
-    },
-  ];
-
-  const { model, result } = await runWithGeminiFallback(chain.models, async (candidate) => {
-    const response = await doFetch(`${base}/models/${encodeURIComponent(candidate)}:generateContent`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'x-goog-api-key': apiKey },
-      body: JSON.stringify({
-        systemInstruction: { parts: [{ text: request.system }] },
-        contents,
-        generationConfig: {
-          temperature: request.temperature ?? 0.7,
-          maxOutputTokens: request.maxOutputTokens ?? OLLAMA_MAX_OUTPUT_TOKENS,
-        },
-      }),
-      signal,
-    });
-    if (!response.ok) {
-      await readErrorText(response);
-      throw new LlmProviderError('gemini', response.status, `${describeStatus('gemini', response.status)} [${candidate}]`);
-    }
-    const data: any = await response.json();
-    const parts = data?.candidates?.[0]?.content?.parts;
-    const text = Array.isArray(parts)
-      ? parts.map((part: any) => (typeof part?.text === 'string' ? part.text : '')).join('').trim()
-      : '';
-    if (!text) {
-      const reason = data?.candidates?.[0]?.finishReason || data?.promptFeedback?.blockReason || 'pusta odpowiedź';
-      throw new LlmProviderError('gemini', 502, `Google Gemini: brak treści (${reason}) [${candidate}]`);
-    }
-    return text;
-  }, (error) => shouldTryNextGeminiModel(error)
-    || (error instanceof LlmProviderError && error.provider === 'gemini' && error.status === 502));
-
-  return { text: result, model };
-}
-
-/** Wybiera model czatu Grok z listy /v1/models (bez modeli obrazów i wideo). */
-export function pickXaiChatModel(ids: string[]): string | null {
-  const chat = ids.filter((id) => /grok/i.test(id) && !/(image|imagine|vision|video|embed)/i.test(id));
-  if (chat.length === 0) return null;
-  const score = (id: string) => (/fast|mini/i.test(id) ? 0 : 1);
-  return [...chat].sort((a, b) => score(a) - score(b) || b.localeCompare(a))[0];
-}
-
-const discoveredXaiModels = new Map<string, string>();
-
-export function resetXaiModelCache(): void {
-  discoveredXaiModels.clear();
-}
-
-async function discoverXaiModel(
-  base: string,
-  apiKey: string,
-  doFetch: typeof fetch,
-  signal?: AbortSignal,
-): Promise<string | null> {
-  const cached = discoveredXaiModels.get(base);
-  if (cached) return cached;
-  const response = await doFetch(`${base}/models`, {
-    headers: { Authorization: `Bearer ${apiKey}` },
-    signal,
-  });
-  if (!response.ok) return null;
-  const data: any = await response.json();
-  const ids = Array.isArray(data?.data)
-    ? data.data.map((model: any) => model?.id).filter((id: unknown): id is string => typeof id === 'string')
-    : [];
-  const picked = pickXaiChatModel(ids);
-  if (picked) discoveredXaiModels.set(base, picked);
-  return picked;
 }
 
 /**
@@ -318,75 +198,6 @@ export async function generateOpenai(
     : '').trim();
   if (!text) throw new LlmProviderError('openai', 502, `OpenAI: pusta odpowiedź [${model}]`);
   return { text, model };
-}
-
-export async function generateXai(
-  config: LlmChainConfig,
-  request: LlmRequest,
-  signal?: AbortSignal,
-): Promise<{ text: string; model: string }> {
-  const apiKey = (config.xaiApiKey || '').trim();
-  if (!apiKey) throw new Error('Brak XAI_API_KEY.');
-  const doFetch = config.fetchImpl ?? fetch;
-  const base = trimBase(config.xaiBaseUrl || DEFAULT_XAI_BASE_URL);
-  const imageParts = (request.attachments ?? [])
-    .filter((attachment) => attachment.mimeType.startsWith('image/'))
-    .map((attachment) => ({
-      type: 'image_url',
-      image_url: { url: `data:${attachment.mimeType};base64,${attachment.content}` },
-    }));
-  const messages = [
-    { role: 'system', content: request.system },
-    ...request.history.map((turn) => ({ role: turn.role, content: turn.text })),
-    {
-      role: 'user',
-      content: imageParts.length ? [{ type: 'text', text: request.message }, ...imageParts] : request.message,
-    },
-  ];
-
-  const call = async (model: string) => {
-    const response = await doFetch(`${base}/chat/completions`, {
-      method: 'POST',
-      headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        model,
-        messages,
-        temperature: request.temperature ?? 0.7,
-        max_tokens: request.maxOutputTokens ?? OLLAMA_MAX_OUTPUT_TOKENS,
-      }),
-      signal,
-    });
-    if (!response.ok) {
-      const body = await readErrorText(response);
-      const modelProblem = response.status === 404
-        || (response.status === 400 && /model/i.test(body));
-      throw Object.assign(
-        new LlmProviderError('xai', response.status, `${describeStatus('xai', response.status)} [${model}]`),
-        { modelProblem },
-      );
-    }
-    const data: any = await response.json();
-    const content = data?.choices?.[0]?.message?.content;
-    const text = typeof content === 'string'
-      ? content.trim()
-      : Array.isArray(content)
-      ? content.map((part: any) => (typeof part?.text === 'string' ? part.text : '')).join('').trim()
-      : '';
-    if (!text) throw new LlmProviderError('xai', 502, `xAI: pusta odpowiedź [${model}]`);
-    return text;
-  };
-
-  const configured = (config.xaiModel || '').trim() || discoveredXaiModels.get(base) || DEFAULT_XAI_MODEL;
-  try {
-    return { text: await call(configured), model: configured };
-  } catch (error: any) {
-    if (!error?.modelProblem) throw error;
-    // Model wycofany lub błędna nazwa → pobierz aktualną listę modeli i spróbuj raz jeszcze.
-    discoveredXaiModels.delete(base);
-    const discovered = await discoverXaiModel(base, apiKey, doFetch, signal);
-    if (!discovered || discovered === configured) throw error;
-    return { text: await call(discovered), model: discovered };
-  }
 }
 
 /** Usuwa bloki rozumowania modeli „thinking” (<think>…</think>) z odpowiedzi. */
@@ -609,8 +420,6 @@ export async function warmupOllama(
 }
 
 export function configuredProviders(config: LlmChainConfig): Array<LlmProvider> {
-  // Bastilla policy: only OpenAI and Ollama may serve chat requests.
-  // Legacy Gemini/xAI credentials or provider entries must never activate them.
   const allowed: Array<LlmProvider> = ['openai', 'ollama'];
   const configured = Array.isArray(config.providers)
     ? config.providers
@@ -622,7 +431,7 @@ export function configuredProviders(config: LlmChainConfig): Array<LlmProvider> 
       || Boolean((config.openaiChatApiKey || '').trim())));
 }
 
-/** Tylko OpenAI API i Ollama; legacy Gemini/xAI są wykluczone przez configuredProviders. */
+/** Generuje odpowiedź wyłącznie przez aktywne provider'y OpenAI API lub Ollama. */
 export async function generateWithChain(
   config: LlmChainConfig,
   request: LlmRequest,
@@ -634,11 +443,7 @@ export async function generateWithChain(
   for (const provider of providers) {
     if (signal?.aborted) break;
     try {
-      const { text, model } = provider === 'gemini'
-        ? await generateGemini(config, request, signal)
-        : provider === 'xai'
-        ? await generateXai(config, request, signal)
-        : provider === 'openai'
+      const { text, model } = provider === 'openai'
         ? await generateOpenai(config, request, signal)
         : await generateOllama(config, request, signal, providers.length === 1 ? onDelta : undefined);
       return { text, provider, model, failures };

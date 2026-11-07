@@ -6,7 +6,7 @@
 
 ## 1. Geneza Projektu
 Projekt powstał jako bezpośrednia odpowiedź na polecenie Taty:
-> *"Stwórzcie najlepszy projekt aby nlp gemini ani inny model nie był potrzebny ani nic innego i wdróżcie na bazie załącznika. Nazwijcie go: without_nlp"*
+> *"Stwórzcie najlepszy projekt, aby NLP ani żaden model nie był potrzebny, i wdróżcie go na bazie załącznika. Nazwijcie go: without_nlp"*
 
 Baza teoretyczna pochodzi z załącznika przedstawiającego zespolony wektor fazowy Eulera oraz rzutowanie ruchu obrotowego na funkcję cosinusoidy:
 $$e^{i\omega t} = \cos \omega t + i \sin \omega t$$

@@ -164,7 +164,7 @@ export function OllamaModelManager() {
 
   const handleCopyCommand = async () => {
     try {
-      await navigator.clipboard.writeText('bash scripts/setup-ollama.sh dolphin-mixtral:8x7b');
+      await navigator.clipboard.writeText('bash scripts/setup-ollama.sh wizard-vicuna-uncensored:13b');
       setCopiedCommand(true);
       setTimeout(() => setCopiedCommand(false), 2500);
     } catch {
@@ -199,7 +199,7 @@ export function OllamaModelManager() {
             onClick={() => void handleSyncExclusiveQwen(DEFAULT_EXCLUSIVE_OLLAMA_MODEL)}
             className="rounded-md border border-emerald-500/60 bg-emerald-950/70 px-3 py-1.5 text-xs font-semibold text-emerald-200 transition hover:bg-emerald-900/80 disabled:opacity-50"
           >
-            Pobierz i uruchom dolphin-mixtral:8x7b (zachowaj pozostałe)
+            Pobierz i uruchom wizard-vicuna-uncensored:13b (zachowaj pozostałe)
           </button>
           <button
             type="button"
@@ -222,7 +222,7 @@ export function OllamaModelManager() {
         </p>
         <div className="flex items-center gap-2">
           <code className="rounded border border-slate-800 bg-slate-900 px-2 py-1 font-mono text-[11px] text-cyan-300">
-            bash scripts/setup-ollama.sh dolphin-mixtral:8x7b
+            bash scripts/setup-ollama.sh wizard-vicuna-uncensored:13b
           </code>
           <button
             type="button"
@@ -317,8 +317,8 @@ export function OllamaModelManager() {
       </div>
 
       <p className="text-xs text-slate-500">
-        Przycisk „Pobierz i uruchom dolphin-mixtral:8x7b (zachowaj pozostałe)” lub polecenie{' '}
-        <code>npm run setup:ollama</code> pobiera <code>dolphin-mixtral:8x7b</code>, zachowuje pozostałe modele z
+        Przycisk „Pobierz i uruchom wizard-vicuna-uncensored:13b (zachowaj pozostałe)” lub polecenie{' '}
+        <code>npm run setup:ollama</code> pobiera <code>wizard-vicuna-uncensored:13b</code>, zachowuje pozostałe modele z
         lokalnej Ollamy i ładuje model do pamięci z <code>keep_alive=24h</code>.
       </p>
     </section>

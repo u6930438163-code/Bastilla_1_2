@@ -21,7 +21,7 @@ Integracja korzysta z REST API, bez MCP. Obsługuje Arię (wewnętrzny profil si
 
    PUBLIC_URL musi być samym origin HTTPS, bez ścieżki, parametrów i danych logowania. Nie wpisuj adresu edytora AI Studio ani localhost. W TOKEN ustaw nowy losowy sekret (co najmniej 32 znaki), np. wygenerowany lokalnie przez `openssl rand -hex 32`. Nie zapisuj sekretu w repozytorium ani kodzie przeglądarki. Jest to token BastillaOS, a nie klucz API OpenAI lub Google.
 
-2. Skonfiguruj działający model przez istniejące zmienne LLM_PROVIDERS, OLLAMA_* lub GEMINI_*/XAI_*.
+2. Skonfiguruj działający model przez `LLM_PROVIDERS`, `OLLAMA_*` lub opcjonalne `OPENAI_CHAT_*`.
 3. Wdróż i zrestartuj pełną aplikację. Host musi udostępniać API dla żądań serwerowych bez interaktywnego logowania Google. Samo udostępnienie podglądu AI Studio może nie wystarczyć.
 4. Pod adresem `https://TWOJ-PUBLICZNY-HOST/api/gpt-actions/openapi.json` powinien pojawić się JSON OpenAPI. Ścieżka nie zawiera MCP i nie wymaga tokenu do pobrania schematu.
 

@@ -28,7 +28,7 @@ Moduły **Zadania i logi** oraz **Ollama** są widoczne w głównej nawigacji ob
 - `GET /api/operations/ollama` sprawdza `/api/version`, `/api/tags` i `/api/ps` **prawdziwej skonfigurowanej** usługi Ollama.
 - **ONLINE**: co najmniej jedno z API odpowiedziało. **Model w pamięci TAK**: model wykryty w `/api/ps`; **NIE**: odczyt /api/ps powiódł się, modelu nie znaleziono; **NIEZNANY**: brak wiarygodnej odpowiedzi /api/ps.
 - Szacowana pamięć RAM modelu = `size - size_vram` według Ollama. **Nie jest to pełne zużycie RSS procesu ani pamięci całego hosta.**
-- `OLLAMA_MODEL` określa model w konfiguracji. Łańcuch dostawców jest odczytywany z istniejącej konfiguracji `LLM_PROVIDERS`; fallback modeli Gemini jest wyświetlany tylko, jeśli Gemini jest włączone. Wskaźnik `without_nlp` odzwierciedla `CHAT_LOCAL_FALLBACK`.
+- `OLLAMA_MODEL` określa model w konfiguracji. Łańcuch dostawców jest odczytywany z `LLM_PROVIDERS` i obejmuje OpenAI API oraz Ollama. Wskaźnik `without_nlp` odzwierciedla `CHAT_LOCAL_FALLBACK`.
 - Ten ekran nie pobiera, nie usuwa i nie przełącza modeli bez zgody użytkownika.
 
 ## 5. Wyślij zgłoszenie wybranemu agentowi

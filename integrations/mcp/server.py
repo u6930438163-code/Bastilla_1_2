@@ -41,18 +41,6 @@ async def agents_status() -> dict:
     """
     return await request("GET", "/api/agents/background/status")
 
-@mcp.tool()
-async def vm_status() -> dict:
-    """Read VM configuration and runtime status without starting a VM."""
-    configuration = await request("GET", "/api/vm-gemini-4/status")
-    try:
-        runtime = await request("GET", "/api/vm-gemini-4/runtime")
-    except httpx.HTTPStatusError as exc:
-        if exc.response.status_code != 503:
-            raise
-        runtime = {"success": False, "error": "Docker runtime unavailable"}
-    return {"configuration": configuration, "runtime": runtime}
-
 async def agent_command(agent: str = "triad", command: str = "SYSTEM_STATUS") -> dict:
     """Run an allowlisted diagnostic; the BastillaOS API records its transcript."""
     if agent not in {"triad", "Alex", "Astyria", "Aurelius"}:

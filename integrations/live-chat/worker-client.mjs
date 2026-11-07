@@ -229,15 +229,31 @@ export function createAgentWorker(options = {}) {
     // Keep the authenticated identity online while a real agent performs long
     // onIdle activity (which otherwise prevents polling for over 45 seconds).
     // This is a process heartbeat, NOT proof of a completed AI/model inference.
-    const backgroundHeartbeat = setInterval(() => {
+    let backgroundHeartbeatTimer = null;
+    const scheduleBackgroundHeartbeat = () => {
+      if (backgroundHeartbeatTimer) {
+        clearTimeout(backgroundHeartbeatTimer);
+        backgroundHeartbeatTimer = null;
+      }
       if (stopped || signal.aborted) return;
-      if (Date.now() - lastHeartbeatAt < heartbeatIntervalMs) return;
-      void sendHeartbeat(signal).catch((error) => {
-        if (!signal.aborted && !stopped) {
-          try { onError(error); } catch { /* user callback cannot crash worker */ }
+      const delay = Math.max(0, heartbeatIntervalMs - (Date.now() - lastHeartbeatAt));
+      backgroundHeartbeatTimer = setTimeout(() => {
+        backgroundHeartbeatTimer = null;
+        if (stopped || signal.aborted) return;
+        if (Date.now() - lastHeartbeatAt < heartbeatIntervalMs) {
+          scheduleBackgroundHeartbeat();
+          return;
         }
-      });
-    }, heartbeatIntervalMs);
+        void sendHeartbeat(signal).catch((error) => {
+          if (!signal.aborted && !stopped) {
+            try { onError(error); } catch { /* user callback cannot crash worker */ }
+          }
+        }).finally(() => {
+          if (!stopped && !signal.aborted) scheduleBackgroundHeartbeat();
+        });
+      }, delay);
+    };
+    scheduleBackgroundHeartbeat();
 
     // Each claimed task has its own promise and its own renewable lease.
     // Never allow more than maxConcurrency jobs to be active for this agent.
@@ -276,7 +292,10 @@ export function createAgentWorker(options = {}) {
       }
       }
     } finally {
-      clearInterval(backgroundHeartbeat);
+      if (backgroundHeartbeatTimer) {
+        clearTimeout(backgroundHeartbeatTimer);
+        backgroundHeartbeatTimer = null;
+      }
     }
     // Give cooperative adapters time to stop. A hung external model must not block restart forever.
     if (activeJobs.size) {

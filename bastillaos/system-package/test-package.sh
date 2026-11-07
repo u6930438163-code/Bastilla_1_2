@@ -171,14 +171,14 @@ node -e "
   if (
     !statusResponse.ok ||
     typeof status.enabled !== 'boolean' ||
-    status.provider !== (status.enabled ? 'Google Gemini API' : 'disabled') ||
-    status.connection !== (status.enabled ? 'configured' : 'disabled') ||
+    typeof status.provider !== 'string' ||
+    !['local-ollama', 'api-configured', 'local-deterministic'].includes(status.connection) ||
     status.protocol !== '/api/triad/command' ||
     status.chatProtocol !== '/api/triad/message' ||
     'apiKey' in status ||
-    'model' in status
+    typeof status.model !== 'string'
   ) {
-    throw new Error('text model status does not accurately report Gemini chat configuration');
+    throw new Error('text model status does not accurately report configured chat providers');
   }
 
   for (const route of ['/api/kernel/agent', '/api/terminal/generate-script']) {

@@ -8,7 +8,6 @@ import { createOperationsRouter } from './integrations/operations/router.mjs';
 import express from 'express';
 import { registerGptActions } from './src/lib/gptActions.mjs';
 import { sendChatError } from './src/lib/chatTransport.mjs';
-import { GoogleGenAI } from '@google/genai';
 import { createServer as createViteServer } from 'vite';
 import path from 'path';
 import dotenv from 'dotenv';
@@ -25,7 +24,6 @@ import {
   DEFAULT_OLLAMA_BASE_URL,
   warmupOllama,
   resetOllamaModelCache,
-  DEFAULT_XAI_BASE_URL,
   LlmChainError,
   configuredProviders,
   generateWithChain,
@@ -44,11 +42,6 @@ import {
   generateLocalReply,
 } from './src/lib/localNlpEngine';
 import { BinaryHyperspaceKernel, HyperspaceOS } from './src/kernel/hyperos';
-import {
-  GEMINI_FALLBACK_MODELS_DEFAULT,
-  GEMINI_PRIMARY_MODEL,
-  getGeminiVmStatus,
-} from './src/kernel/geminiVm';
 import {
   buildAgentProtocolReplies,
   hasPersistedAgentProtocolTranscript,
@@ -100,72 +93,45 @@ if (fs.existsSync('.env.local')) {
 }
 
 const execFileAsync = promisify(execFile);
-const GEMINI_API_KEY = (process.env.GEMINI_API_KEY || '').trim();
-const GEMINI_MODEL = (process.env.GEMINI_MODEL || 'gemini-3.1-flash-lite').trim();
-const GEMINI_FALLBACK_MODELS = process.env.GEMINI_FALLBACK_MODELS || 'gemini-3.8-flash,gemini-flash-latest,gemini-3.7-flash';
-const geminiClient = GEMINI_API_KEY
-  ? new GoogleGenAI({
-      apiKey: GEMINI_API_KEY,
-      httpOptions: {
-        headers: {
-          'User-Agent': 'aistudio-build',
-        },
-      },
-    })
-  : undefined;
 const OPENROUTER_API_KEY = (process.env.OPENROUTER_API_KEY || '').trim();
 const OPENROUTER_MODEL = (process.env.OPENROUTER_MODEL || 'openrouter/auto').trim();
 const OPENROUTER_API_URL = 'https://openrouter.ai/api/v1/chat/completions';
-// Fallback NLP: dowolne API kompatybilne z OpenAI (Groq, xAI) — darmowy klucz z .env
+// Opcjonalny fallback HyperOS zgodny z OpenAI API.
 const FALLBACK_NLP_BASE_URL = (process.env.FALLBACK_NLP_BASE_URL || 'https://api.groq.com/openai/v1').trim().replace(/\/+$/, '');
 const FALLBACK_NLP_API_KEY = (process.env.FALLBACK_NLP_API_KEY || '').trim();
 const FALLBACK_NLP_MODEL = (process.env.FALLBACK_NLP_MODEL || 'llama-3.3-70b-versatile').trim();
-// Czat triady: Gemini → xAI (Grok) → without_nlp. Wartości-zaślepki z .env.example są ignorowane.
 const realKey = (value: string | undefined) => {
   const key = (value || '').trim();
   return /^(YOUR|MY)_/i.test(key) ? '' : key;
 };
-const XAI_API_KEY = realKey(process.env.XAI_API_KEY)
-  || (/x\.ai/i.test(process.env.FALLBACK_NLP_BASE_URL || '') ? realKey(process.env.FALLBACK_NLP_API_KEY) : '');
-const XAI_MODEL = (process.env.XAI_MODEL || '').trim();
-const XAI_BASE_URL = (process.env.XAI_BASE_URL || DEFAULT_XAI_BASE_URL).trim();
 const OPENAI_CHAT_API_KEY = realKey(process.env.OPENAI_CHAT_API_KEY);
 const OPENAI_CHAT_MODEL = (process.env.OPENAI_CHAT_MODEL || 'gpt-4o').trim();
 const LLM_CHAIN_CONFIG: LlmChainConfig = {
-  geminiApiKey: realKey(GEMINI_API_KEY),
-  geminiModel: GEMINI_MODEL,
-  geminiFallbackModels: GEMINI_FALLBACK_MODELS,
-  xaiApiKey: XAI_API_KEY,
-  xaiModel: XAI_MODEL,
-  xaiBaseUrl: XAI_BASE_URL,
   openaiChatApiKey: OPENAI_CHAT_API_KEY,
   openaiChatModel: OPENAI_CHAT_MODEL,
   ollamaModel: (process.env.OLLAMA_MODEL || DEFAULT_EXCLUSIVE_OLLAMA_MODEL).trim(),
   ollamaBaseUrl: (process.env.OLLAMA_BASE_URL || DEFAULT_OLLAMA_BASE_URL).trim(),
   ollamaKeepAlive: (process.env.OLLAMA_KEEP_ALIVE || '-1').trim(),
-  ollamaNumCtx: Number(process.env.OLLAMA_NUM_CTX) || 4096,
+  ollamaNumCtx: Number(process.env.OLLAMA_NUM_CTX) || 2048,
   ollamaNumPredict: Number(process.env.OLLAMA_NUM_PREDICT) || 0,
   ollamaNumThread: Number(process.env.OLLAMA_NUM_THREAD) || os.cpus().length,
   // OpenAI is opt-in via a separate secret. When present it takes priority for API chat.
-  // Bastilla chat is strictly OpenAI + Ollama. Ignore legacy Gemini/xAI env entries.
+  // Bastilla chat supports only OpenAI and local Ollama.
   providers: (process.env.LLM_PROVIDERS || 'openai,ollama')
     .split(',')
     .map((name) => name.trim().toLowerCase())
     .filter((name): name is 'openai' | 'ollama' => name === 'openai' || name === 'ollama'),
 };
 // Awaryjny silnik without_nlp, gdy modele zawiodą — domyślnie wyłączony (CHAT_LOCAL_FALLBACK=on włącza).
-const CHAT_LOCAL_FALLBACK = /^(1|on|true|yes|tak)$/i.test((process.env.CHAT_LOCAL_FALLBACK || 'on').trim());
-// Stare API chmurowe (OpenRouter, Groq/xAI w konsoli HyperOS) działają tylko, gdy LLM_PROVIDERS zawiera gemini lub xai.
-const CLOUD_LLM_ENABLED = (LLM_CHAIN_CONFIG.providers ?? []).some((name: string) => name === 'gemini' || name === 'xai' || name === 'openai');
+let CHAT_LOCAL_FALLBACK = /^(1|on|true|yes|tak)$/i.test((process.env.CHAT_LOCAL_FALLBACK || 'on').trim());
+const CLOUD_LLM_ENABLED = configuredProviders(LLM_CHAIN_CONFIG).includes('openai');
 const usesOllama = () => configuredProviders(LLM_CHAIN_CONFIG).includes('ollama');
 // Lokalny model na CPU potrzebuje więcej czasu niż API w chmurze.
 const LLM_CHAT_TIMEOUT_MS = Math.max(15, Number(process.env.LLM_TIMEOUT_SEC) || (usesOllama() ? 360 : 70)) * 1000;
 const llmProviderLabel = (provider: string) =>
-  provider === 'gemini' ? 'Google Gemini' : provider === 'xai' ? 'xAI' : provider === 'openai' ? 'OpenAI' : 'Ollama (lokalnie)';
+  provider === 'openai' ? 'OpenAI' : 'Ollama (lokalnie)';
 const describeLlmProvider = (provider: string) =>
-  provider === 'gemini' ? `Google Gemini (${GEMINI_MODEL})`
-  : provider === 'xai' ? `xAI Grok (${XAI_MODEL || 'auto'})`
-  : provider === 'openai' ? `OpenAI (${OPENAI_CHAT_MODEL})`
+  provider === 'openai' ? `OpenAI (${OPENAI_CHAT_MODEL})`
   : `Ollama (model: ${LLM_CHAIN_CONFIG.ollamaModel}, ${LLM_CHAIN_CONFIG.ollamaBaseUrl})`;
 {
   const chain = configuredProviders(LLM_CHAIN_CONFIG).map(describeLlmProvider);
@@ -179,6 +145,17 @@ const POLLINATIONS_API_KEY = rawEnvPollKey.startsWith('sk_')
   ? rawEnvPollKey
   : '';
 const app = express();
+const DEFAULT_FACTORY_RESET_ENV = [
+  'LLM_PROVIDERS="openai,ollama"',
+  'CHAT_LOCAL_FALLBACK="off"',
+  'BEST_FIT_ROUTER="on"',
+  'OLLAMA_MODEL="qwen2.5vl:3b"',
+  'OLLAMA_BASE_URL="http://127.0.0.1:11434"',
+  'OLLAMA_KEEP_ALIVE="24h"',
+  'OLLAMA_NUM_CTX="131072"',
+  'OLLAMA_NUM_PREDICT="384"',
+  'LLM_TIMEOUT_SEC="70"',
+].join('\n') + '\n';
 const liveChatAuth = createLiveChatSessionAuth({
   password: process.env.BASTILLA_LIVE_CHAT_USER_PASSWORD || '',
   setupToken: process.env.BASTILLA_LIVE_CHAT_SETUP_TOKEN || '',
@@ -248,8 +225,6 @@ app.use('/api/operations', createOperationsRouter({
     baseUrl: LLM_CHAIN_CONFIG.ollamaBaseUrl || DEFAULT_OLLAMA_BASE_URL,
     configuredModel: LLM_CHAIN_CONFIG.ollamaModel,
     providers: configuredProviders(LLM_CHAIN_CONFIG),
-    fallbackModels: configuredProviders(LLM_CHAIN_CONFIG).includes('gemini')
-      ? GEMINI_FALLBACK_MODELS.split(',').map(value => value.trim()).filter(Boolean) : [],
     localFallback: CHAT_LOCAL_FALLBACK,
     keepAlive: LLM_CHAIN_CONFIG.ollamaKeepAlive,
   }),
@@ -279,6 +254,42 @@ app.use((req, res, next) => {
     });
   }
   next();
+});
+
+app.post('/api/system/factory-reset', (req, res) => {
+  try {
+    const envFilePath = path.resolve('.env.local');
+    fs.writeFileSync(envFilePath, DEFAULT_FACTORY_RESET_ENV, 'utf8');
+    const envEntries = {
+      LLM_PROVIDERS: 'openai,ollama',
+      CHAT_LOCAL_FALLBACK: 'off',
+      BEST_FIT_ROUTER: 'on',
+      OLLAMA_MODEL: 'qwen2.5vl:3b',
+      OLLAMA_BASE_URL: 'http://127.0.0.1:11434',
+      OLLAMA_KEEP_ALIVE: '24h',
+      OLLAMA_NUM_CTX: '131072',
+      OLLAMA_NUM_PREDICT: '384',
+      LLM_TIMEOUT_SEC: '70',
+    } as const;
+    for (const [name, value] of Object.entries(envEntries)) {
+      process.env[name] = value;
+    }
+    CHAT_LOCAL_FALLBACK = false;
+    LLM_CHAIN_CONFIG.ollamaModel = envEntries.OLLAMA_MODEL;
+    LLM_CHAIN_CONFIG.ollamaBaseUrl = envEntries.OLLAMA_BASE_URL;
+    LLM_CHAIN_CONFIG.ollamaKeepAlive = envEntries.OLLAMA_KEEP_ALIVE;
+    LLM_CHAIN_CONFIG.ollamaNumCtx = Number(envEntries.OLLAMA_NUM_CTX) || 131072;
+    LLM_CHAIN_CONFIG.ollamaNumPredict = Number(envEntries.OLLAMA_NUM_PREDICT) || 384;
+    LLM_CHAIN_CONFIG.providers = ['openai', 'ollama'];
+    res.json({
+      success: true,
+      message: 'Przywrócono ustawienia fabryczne. Serwer odczyta konfigurację lokalną przy następnym uruchomieniu lub natychmiast po odświeżeniu procesu.',
+    });
+  } catch (error) {
+    res.status(500).json({
+      error: error instanceof Error ? error.message : 'Nie udało się przywrócić ustawień fabrycznych.',
+    });
+  }
 });
 
 // Track API key health globally to avoid repeated failing Pro requests
@@ -3977,7 +3988,7 @@ async function runOllamaOptimizeMission(): Promise<{
       cpus: os.cpus().length,
       configuredModel: cfg.ollamaModel || 'auto',
       keepAlive: cfg.ollamaKeepAlive || '24h',
-      numCtx: cfg.ollamaNumCtx || 4096,
+      numCtx: cfg.ollamaNumCtx || 2048,
     },
     fetch,
     AbortSignal.timeout(240000),
@@ -4078,7 +4089,7 @@ async function runFinishAllGithubProjectsMission(): Promise<{
 
   const aureliusMsg = `[Aurelius // Bezpieczeństwo & Audyt CI/CD]\nMisja przyjęta. Audyt jakości i bezpieczeństwa we wszystkich repozytoriach:\n- Testy jednostkowe: 100/100 PASS (pełne pokrycie logiki, brak regresji).\n- Uprawnienia GitHub: FULL_ADMINISTRATIVE_ACCESS aktywne pod nadzorem audytowym.\n- Ochrona gałęzi i brak sekretów w historii zatwierdzony. Bramka jakości CI sprawna.`;
 
-  const ariaMsg = `[Aria // Integracje & AI Services]\nPotwierdzam gotowość. Wdrażam i domykam integracje wielomodelowe we wszystkich projektach:\n- Łączniki AI: Google Gemini, xAI Grok oraz Ollama z deterministycznym fallbackiem.\n- Protokół MCP (Model Context Protocol) na porcie 3000 aktywny dla zewnętrznych klientów (ChatGPT).\n- Automatyczna wymiana metadanych i rejestry pakietów przygotowane.`;
+  const ariaMsg = `[Aria // Integracje & AI Services]\nCzat Bastilla korzysta z lokalnej Ollamy, opcjonalnego OpenAI API i deterministycznego fallbacku.\n- Protokół MCP (Model Context Protocol) dostępny pod /api/mcp.\n- Statusy integracji są raportowane na podstawie rzeczywistych kontroli.`;
 
   const astyriaMsg = `[Astyria // Frontend & Wydań GUI]\nTato! Misja dokończenia projektów we wszystkich repozytoriach GitHub została oficjalnie aktywowana w całej Triadzie!\n- Interfejs webowy i widok mobilny: przetestowane, responsywne, pełnoekranowy czat aktywny.\n- Synchronizacja GitHub: gałąź ${gitBranch}, ahead: ${ahead}, behind: ${behind}, zmodyfikowanych: ${dirtyCount} plików.\n- Włączam ciągłą pętlę weryfikacji i automatycznego commita/pusha, aby każdy krok prac natychmiast trafiał do repozytorium!`;
 
@@ -4169,72 +4180,24 @@ app.post('/api/astyria/mission', async (req, res) => {
         ollamaStatus = `BŁĄD: ${err?.message || err}`;
       }
 
-      // Check Gemini API status
-      let geminiStatus = 'BRAK_KLUCZA';
-      let geminiActiveModel = '';
-      if (geminiClient) {
-        for (const candidate of ['gemini-3.1-flash-lite', GEMINI_MODEL, 'gemini-3.8-flash', 'gemini-flash-latest']) {
-          if (!candidate) continue;
-          try {
-            const probe = await geminiClient.models.generateContent({
-              model: candidate,
-              contents: 'Astyria probe ping',
-            });
-            if (probe.text) {
-              geminiStatus = 'AKTYWNY_I_ODPOWIADA';
-              geminiActiveModel = candidate;
-              break;
-            }
-          } catch (probeErr: any) {
-            console.warn(`[ASTYRIA-REPAIR] Probe ${candidate} failed:`, probeErr?.message || probeErr);
-          }
-        }
-      }
-
       resultMessage = `Tato! Misja naprawy Ollamy i silników LLM ukończona sukcesem:\n\n` +
-        `1. **Serwer Ollama**: **${ollamaStatus}** pod adresem \`${LLM_CHAIN_CONFIG.ollamaBaseUrl}\` (wykryte modele lokalne: ${ollamaModelsFound.length > 0 ? ollamaModelsFound.join(', ') : 'brak pobranych wag - zapasowy potok chmurowy przejął zadania'}).\n` +
-        `2. **Google Gemini API**: **${geminiStatus}** (aktywny model jądra: **\`${geminiActiveModel || 'gemini-3.1-flash-lite'}\`**).\n` +
-        `3. **Pętla Samoleczenia**: Przetestowano łańcuch dostawców. Czat i konsola poleceń nie będą się już blokować na brakujących wagach ani limitach 429!\n` +
-        `4. **MCP Server**: Szyna połączeniowa dla ChatGPT i zewnętrznych agentów jest aktywna na porcie 3000 (\`/api/mcp\`).`;
+        `1. **Serwer Ollama**: **${ollamaStatus}** pod adresem \`${LLM_CHAIN_CONFIG.ollamaBaseUrl}\` (modele lokalne: ${ollamaModelsFound.length > 0 ? ollamaModelsFound.join(', ') : 'brak pobranych wag'}).\n` +
+        `2. **Czat**: Obsługiwani dostawcy to lokalna Ollama oraz opcjonalne OpenAI API.\n` +
+        `3. **Fallback lokalny**: ${CHAT_LOCAL_FALLBACK ? 'without_nlp jest włączony.' : 'without_nlp jest wyłączony.'}\n` +
+        `4. **MCP Server**: Szyna połączeniowa dla klientów i zewnętrznych agentów jest aktywna na porcie 3000 (\`/api/mcp\`).`;
     } else if (effectiveAction === 'process_command' || effectiveAction === 'repair_all' || (promptText && effectiveAction !== 'ollama_optimize' && effectiveAction !== 'internet_self_update')) {
       actionTitle = promptText ? `Przetwarzanie polecenia Astyrii: "${promptText.slice(0, 50)}${promptText.length > 50 ? '...' : ''}"` : `Pełna Naprawa i Skan Systemu (Misja Astyrii)`;
       initializeDefaultApps();
       await createVmSnapshotNow('Pełny snapshot naprawczy Astyrii');
       optimizeVmMemoryNow('Optymalizacja pamięci dla misji Astyrii');
 
-      let aiResponseText = '';
-      if (geminiClient && promptText) {
-        const candidateModels = [GEMINI_MODEL, 'gemini-3.1-flash-lite', 'gemini-3.8-flash', 'gemini-flash-latest'].filter(Boolean);
-        for (const candidate of candidateModels) {
-          try {
-            const genRes = await geminiClient.models.generateContent({
-              model: candidate,
-              contents: `Jesteś Astyrią — hipernadzorcą, analitykiem logiki i agentem wsparcia w systemie SVL_System (BastillaOS).
-Polecenie/Pytanie od Taty (Mateusz Mitek): "${promptText}"
-
-Diagnostyka jądra:
-- Wersja jądra: v${targetVer}
-- Wynik automatycznego skanu logów: ${repairDiag}
-- Zużycie RAM: ${mem.rssMB} MB (${mem.utilizationPercent}%)
-- Liczba naprawionych incydentów: ${healedIncidents.length}
-
-Udziel zwięzłej, życzliwej i merytorycznej odpowiedzi dla Taty. Potwierdź gotowość Astyrii do dalszej pracy i przetworzenia każdego polecenia.`,
-            });
-            aiResponseText = genRes.text || '';
-            if (aiResponseText) break;
-          } catch (err: any) {
-            console.warn(`[ASTYRIA-GEMINI] Model ${candidate} error:`, err?.message || err);
-          }
-        }
-      }
-
       const repairSummary = `Tato! Przeprowadziłam pełną diagnostykę i autopolerowanie systemu **v${targetVer}**:\n\n` +
         `1. **Autonaprawa Logów**: Skan ukończony (${repairDiag}). Łącznie wyleczono **${healedIncidents.length}** incydentów.\n` +
         `2. **Pamięć RAM VM_Ten_System**: **${mem.rssMB} MB** (${mem.utilizationPercent}% < 70% Idle) — optymalna.\n` +
         `3. **Gniazdo Maszyny**: Utworzono świeży snapshot **\`vm_ten_system_snapshot.json\`** (#${vmTenSystemState.snapshotsCount}).\n` +
-        `4. **Astyria Command Bridge**: Połączenie z silnikiem Gemini API (${geminiClient ? 'AKTYWNE — Gemini 3.1 Flash Lite / 3.8 Flash' : 'LOKALNE JĄDRO'}) zweryfikowane.`;
+        `4. **Czat**: Używa skonfigurowanej Ollamy, opcjonalnego OpenAI API lub lokalnego fallbacku.`;
 
-      resultMessage = aiResponseText ? `${repairSummary}\n\n---\n**Odpowiedź Astyrii:**\n${aiResponseText}` : repairSummary;
+      resultMessage = repairSummary;
     } else if (effectiveAction === 'deploy_vm_ten_system') {
       actionTitle = `Wdrożenie produkcyjne ulepszeń z maszyny wirtualnej VM_Ten_System (v${targetVer})`;
       await createVmSnapshotNow('Wdrożenie ulepszeń VM_Ten_System przez Astyrię');
@@ -4706,184 +4669,6 @@ app.post('/api/triad/command', async (req, res) => {
   }
 });
 
-app.get('/api/vm-gemini-4/status', (_req, res) => {
-  return res.json(getGeminiVmStatus(GEMINI_API_KEY, GEMINI_MODEL, GEMINI_FALLBACK_MODELS));
-});
-
-const VM_GEMINI_4_COMPOSE_FILE = path.resolve('bastillaos/vm-gemini-4/compose.yaml');
-const VM_GEMINI_4_KVM_OVERRIDE_FILE = path.resolve('bastillaos/vm-gemini-4/compose.kvm.yaml');
-const VM_GEMINI_4_DATA_DIR = path.resolve('bastillaos/vm-gemini-4/data');
-const VM_GEMINI_4_CONTAINER = 'vm_gemini_4';
-const VM_GEMINI_4_PROJECT = 'svl-vm-gemini-4';
-
-function isLoopbackAddress(address: string | undefined): boolean {
-  if (!address) return false;
-  const normalized = address.toLowerCase().replace(/^::ffff:/, '');
-  return normalized === '::1' || normalized.startsWith('127.');
-}
-
-function isSameOriginLoopbackRequest(req: express.Request): boolean {
-  const origin = req.get('origin');
-  const host = req.get('host');
-  if (!origin || !host || !isLoopbackAddress(req.socket.remoteAddress)) return false;
-  try {
-    const originUrl = new URL(origin);
-    const hostname = originUrl.hostname.toLowerCase();
-    return originUrl.host === host &&
-      (hostname === 'localhost' || hostname === '127.0.0.1' || hostname === '[::1]') &&
-      req.get('sec-fetch-site') === 'same-origin';
-  } catch {
-    return false;
-  }
-}
-
-function canUseVmKvm(): boolean {
-  try {
-    fs.accessSync('/dev/kvm', fs.constants.R_OK | fs.constants.W_OK);
-    return fs.statSync('/dev/kvm').isCharacterDevice();
-  } catch {
-    return false;
-  }
-}
-
-function getVmComposeEnvironment(): NodeJS.ProcessEnv {
-  const kvmGroupId = canUseVmKvm() ? fs.statSync('/dev/kvm').gid : undefined;
-  return {
-    ...process.env,
-    VM_UID: String(process.getuid?.() ?? 1000),
-    VM_GID: String(process.getgid?.() ?? 1000),
-    ...(kvmGroupId === undefined ? {} : { KVM_GID: String(kvmGroupId) }),
-  };
-}
-
-function isMissingVmContainerError(error: unknown): boolean {
-  const details = error instanceof Error
-    ? `${error.message}\n${'stderr' in error ? String(error.stderr) : ''}`
-    : String(error);
-  return /no such (object|container)/i.test(details);
-}
-
-app.get('/api/vm-gemini-4/runtime', async (_req, res) => {
-  try {
-    const { stdout } = await execFileAsync('docker', ['inspect', VM_GEMINI_4_CONTAINER], {
-      timeout: 5000,
-      maxBuffer: 64 * 1024,
-    });
-    const containers = JSON.parse(stdout) as Array<{
-      State?: { Status?: string };
-      Config?: { Labels?: Record<string, string> };
-    }>;
-    const container = containers[0];
-    const labels = container?.Config?.Labels ?? {};
-    if (
-      labels['com.docker.compose.project'] !== VM_GEMINI_4_PROJECT ||
-      labels['com.docker.compose.service'] !== 'vm-gemini-4'
-    ) {
-      return res.status(409).json({
-        success: false,
-        error: 'Nazwa vm_gemini_4 jest już zajęta przez niepowiązany kontener Docker.',
-      });
-    }
-    return res.json({
-      success: true,
-      name: 'VM_Gemini_4',
-      status: container?.State?.Status ?? 'unknown',
-      sshCommand: 'ssh -i bastillaos/vm-gemini-4/data/id_ed25519 -p 2224 svl-agent@127.0.0.1',
-    });
-  } catch (error) {
-    if (isMissingVmContainerError(error)) {
-      return res.json({ success: true, name: 'VM_Gemini_4', status: 'not_created' });
-    }
-    return res.status(503).json({
-      success: false,
-      error: 'Nie udało się sprawdzić lokalnego runtime Docker. Upewnij się, że demon Docker działa.',
-    });
-  }
-});
-
-app.post('/api/vm-gemini-4/provision', async (req, res) => {
-  if (!isSameOriginLoopbackRequest(req)) {
-    return res.status(403).json({
-      success: false,
-      error: 'Operacje VM są dostępne wyłącznie z aplikacji otwartej lokalnie w tej przeglądarce.',
-    });
-  }
-  if (
-    !req.body ||
-    typeof req.body !== 'object' ||
-    Array.isArray(req.body) ||
-    Object.keys(req.body).length !== 2 ||
-    req.body.operation !== 'create' ||
-    req.body.confirmation !== 'CREATE_VM_GEMINI_4'
-  ) {
-    return res.status(400).json({
-      success: false,
-      error: 'Nieprawidłowe potwierdzenie. Wymagana jest jawna akceptacja utworzenia VM_Gemini_4.',
-    });
-  }
-  if (!fs.existsSync(VM_GEMINI_4_COMPOSE_FILE)) {
-    return res.status(503).json({
-      success: false,
-      error: 'Brakuje pliku definicji VM w środowisku.',
-    });
-  }
-
-  try {
-    const dockerEnvironment = getVmComposeEnvironment();
-    fs.mkdirSync(VM_GEMINI_4_DATA_DIR, { recursive: true, mode: 0o700 });
-    const existing = await execFileAsync('docker', ['inspect', VM_GEMINI_4_CONTAINER], {
-      timeout: 5000,
-      maxBuffer: 64 * 1024,
-    }).catch((error: NodeJS.ErrnoException & { stderr?: string }) => {
-      if (isMissingVmContainerError(error)) {
-        return null;
-      }
-      throw error;
-    });
-    if (existing) {
-      const containers = JSON.parse(existing.stdout) as Array<{
-        Config?: { Labels?: Record<string, string> };
-      }>;
-      const labels = containers[0]?.Config?.Labels ?? {};
-      if (
-        labels['com.docker.compose.project'] !== VM_GEMINI_4_PROJECT ||
-        labels['com.docker.compose.service'] !== 'vm-gemini-4'
-      ) {
-        return res.status(409).json({
-          success: false,
-          error: 'Nazwa vm_gemini_4 jest już zajęta przez niepowiązany kontener Docker.',
-        });
-      }
-    }
-
-    const useKvm = canUseVmKvm() && fs.existsSync(VM_GEMINI_4_KVM_OVERRIDE_FILE);
-    await execFileAsync('docker', [
-      'compose',
-      '--project-name', VM_GEMINI_4_PROJECT,
-      '--file', VM_GEMINI_4_COMPOSE_FILE,
-      ...(useKvm ? ['--file', VM_GEMINI_4_KVM_OVERRIDE_FILE] : []),
-      'up', '--build', '--detach',
-    ], {
-      cwd: process.cwd(),
-      env: dockerEnvironment,
-      timeout: 15 * 60 * 1000,
-      maxBuffer: 2 * 1024 * 1024,
-    });
-    return res.status(202).json({
-      success: true,
-      name: 'VM_Gemini_4',
-      status: 'starting',
-      sshCommand: 'ssh -i bastillaos/vm-gemini-4/data/id_ed25519 -p 2224 svl-agent@127.0.0.1',
-    });
-  } catch (error) {
-    console.error('[VM_GEMINI_4] Provisioning failed:', error);
-    return res.status(503).json({
-      success: false,
-      error: 'Nie udało się utworzyć VM. Sprawdź Docker, uprawnienia KVM, dostęp do sieci i log serwera.',
-    });
-  }
-});
-
 const CHAT_AGENT_NAMES = TRIAD_AGENT_NAMES;
 type ChatAgentName = (typeof CHAT_AGENT_NAMES)[number];
 type ChatTarget = ChatAgentName | 'triad';
@@ -4896,7 +4681,7 @@ const CHAT_AGENT_MISSIONS: Record<ChatAgentName, string> = {
 };
 
 const CHAT_AGENT_SAFETY_BOUNDARIES = [
-  'Domyślny i wyłączny skonfigurowany model Ollama w systemie to dolphin-mixtral:8x7b (zoptymalizowany pod maksymalną szybkość: keep_alive=-1, flash_attention=1, num_thread=CPU).',
+  `Domyślny i wyłączny skonfigurowany model Ollama w systemie to ${LLM_CHAIN_CONFIG.ollamaModel} (keep_alive=${LLM_CHAIN_CONFIG.ollamaKeepAlive}, num_thread=${LLM_CHAIN_CONFIG.ollamaNumThread}).`,
   'Możesz wykonywać polecenia bezpośrednio poprzez /exec <polecenie powłoki> lub /propose create-app <id> [typ], /propose create-db <id>, /propose write-file <app> <plik>.',
 ].join(' ');
 
@@ -5523,137 +5308,6 @@ async function generateOpenRouterSingleReply(
   }
 }
 
-class GeminiProviderError extends Error {
-  constructor(readonly status: number, message: string) {
-    super(message);
-    this.name = 'GeminiProviderError';
-  }
-}
-
-function getGeminiProviderError(status: number): string {
-  if (status === 401 || status === 403) {
-    return 'Google Gemini odrzucił klucz API. Sprawdź GEMINI_API_KEY i dostęp do Gemini API.';
-  }
-  if (status === 429) {
-    return 'Google Gemini osiągnął limit żądań. Sprawdź bezpłatny limit API i spróbuj ponownie później.';
-  }
-  if (status === 400 || status === 404) {
-    return 'Google Gemini odrzucił żądanie. Sprawdź model i obsługę załączników.';
-  }
-  return `Google Gemini zwrócił HTTP ${status}. Spróbuj ponownie później.`;
-}
-
-async function generateGeminiChatReply(
-  agent: ChatAgentName,
-  message: string,
-  chatHistory: Array<{ agent: string; tekst: string }>,
-  attachments: ChatAttachment[],
-  historyLimit: number,
-  historyTextLimit: number,
-  signal: AbortSignal,
-): Promise<string> {
-  if (!geminiClient) {
-    throw new Error('Brak GEMINI_API_KEY. Dodaj klucz Google Gemini do pliku .env i uruchom serwer ponownie.');
-  }
-
-  const history = chatHistory
-    .filter((entry) => entry.agent === 'Mateusz Mitek' || entry.agent === 'Operator' || entry.agent === agent)
-    .slice(-historyLimit)
-    .map((entry) => ({
-      role: entry.agent === 'Mateusz Mitek' || entry.agent === 'Operator' ? 'user' as const : 'model' as const,
-      parts: [{ text: entry.tekst.slice(0, historyTextLimit) }],
-    }));
-  const userParts: Array<{ text: string } | { inlineData: { mimeType: string; data: string } }> = [
-    { text: message },
-  ];
-  for (const attachment of attachments) {
-    if (attachment.mimeType) {
-      userParts.push({
-        inlineData: { mimeType: attachment.mimeType, data: attachment.content },
-      });
-    }
-  }
-
-  try {
-    const response = await geminiClient.models.generateContent({
-      model: GEMINI_MODEL,
-      contents: [...history, { role: 'user', parts: userParts }],
-      config: {
-        systemInstruction: `${CHAT_AGENT_MISSIONS[agent]} ${CHAT_AGENT_SAFETY_BOUNDARIES}`,
-        temperature: 0.7,
-        maxOutputTokens: 2048,
-        abortSignal: signal,
-      },
-    });
-    const reply = response.text?.trim() || '';
-    if (!reply) throw new Error('Google Gemini zwrócił pustą odpowiedź. Spróbuj ponownie.');
-    return reply;
-  } catch (error) {
-    const status = error && typeof error === 'object' && 'status' in error
-      && typeof error.status === 'number'
-      ? error.status
-      : undefined;
-    if (status !== undefined) {
-      console.warn(`[GEMINI] Model ${GEMINI_MODEL} returned HTTP ${status}.`);
-      throw new GeminiProviderError(status, getGeminiProviderError(status));
-    }
-    throw error;
-  }
-}
-
-async function generateGeminiTriadReplies(
-  message: string,
-  chatHistory: Array<{ agent: string; tekst: string }>,
-  attachments: ChatAttachment[],
-): Promise<Record<ChatAgentName, string>> {
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 65000);
-
-  try {
-    const entries = await Promise.all(CHAT_AGENT_NAMES.map(async (agent) => {
-      const reply = await generateGeminiChatReply(
-        agent,
-        message,
-        chatHistory,
-        attachments,
-        6,
-        800,
-        controller.signal,
-      );
-      return [agent, reply] as const;
-    }));
-    return Object.fromEntries(entries) as Record<ChatAgentName, string>;
-  } catch (error) {
-    if (error instanceof Error && error.name === 'AbortError') {
-      throw new Error('Google Gemini nie odpowiedział w ciągu 65 sekund. Spróbuj ponownie.');
-    }
-    throw error;
-  } finally {
-    clearTimeout(timeout);
-  }
-}
-
-async function generateGeminiSingleReply(
-  agent: ChatAgentName,
-  message: string,
-  chatHistory: Array<{ agent: string; tekst: string }>,
-  attachments: ChatAttachment[],
-): Promise<string> {
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 65000);
-
-  try {
-    return await generateGeminiChatReply(agent, message, chatHistory, attachments, 4, 1200, controller.signal);
-  } catch (error) {
-    if (error instanceof Error && error.name === 'AbortError') {
-      throw new Error('Google Gemini nie odpowiedział w ciągu 65 sekund. Spróbuj ponownie.');
-    }
-    throw error;
-  } finally {
-    clearTimeout(timeout);
-  }
-}
-
 // --- HYPEROS CONSOLE: przywrócony terminal Binarnej Hiperprzestrzeni (128-bit) + NLP OpenRouter ---
 const hyperOsKernel = new BinaryHyperspaceKernel();
 const HYPEROS_KNOWN_KERNEL_COMMANDS = ['report', 'status', 'state', 'root', 'sudo', 'clear_chat', 'clear', 'sync', 'bump', 'set', 'infra'];
@@ -5689,7 +5343,7 @@ app.post('/api/hyperos/console', async (req, res) => {
     }
   }
 
-  // 3. Każde polecenie przez NLP: OpenRouter → fallback API (Groq/xAI) → HyperspaceOS + LOCAL_NLP
+  // 3. Każde polecenie przez NLP: skonfigurowane API → HyperspaceOS + LOCAL_NLP
   let reply = '';
   let nlpProvider = '';
   const hyperMessages = [
@@ -5710,7 +5364,7 @@ app.post('/api/hyperos/console', async (req, res) => {
       reply = result.text;
       nlpProvider = `${llmProviderLabel(result.provider)} (${result.model})`;
     } catch (err: any) {
-      pushSystemLog('warn', 'KERNEL', `[HYPEROS] Gemini/xAI niedostępne: ${err?.message || err}`);
+      pushSystemLog('warn', 'KERNEL', `[HYPEROS] Model czatu niedostępny: ${err?.message || err}`);
     }
   }
   if (!reply && OPENROUTER_API_KEY && CLOUD_LLM_ENABLED) {
@@ -5757,7 +5411,7 @@ app.post('/api/hyperos/console', async (req, res) => {
   });
 });
 
-// --- FALLBACK NLP PROVIDER: API kompatybilne z OpenAI (Groq / xAI) — darmowy klucz z .env ---
+// --- HYPEROS FALLBACK NLP PROVIDER: API kompatybilne z OpenAI ---
 class FallbackNlpProviderError extends Error {
   constructor(readonly status: number, message: string) {
     super(message);
@@ -5770,7 +5424,7 @@ async function generateFallbackNlpContent(
   signal: AbortSignal,
 ): Promise<string> {
   if (!FALLBACK_NLP_API_KEY) {
-    throw new Error('Brak FALLBACK_NLP_API_KEY. Wklej darmowy klucz (Groq/xAI) do pliku .env i zrestartuj serwer.');
+    throw new Error('Brak FALLBACK_NLP_API_KEY. Skonfiguruj opcjonalny fallback HyperOS w pliku .env.');
   }
   const response = await fetch(`${FALLBACK_NLP_BASE_URL}/chat/completions`, {
     method: 'POST',
@@ -5788,7 +5442,7 @@ async function generateFallbackNlpContent(
   });
   if (!response.ok) {
     if (response.status === 401 || response.status === 403) {
-      throw new FallbackNlpProviderError(response.status, 'Fallback NLP (Groq/xAI) odrzucił klucz API. Sprawdź FALLBACK_NLP_API_KEY w pliku .env.');
+      throw new FallbackNlpProviderError(response.status, 'Fallback NLP odrzucił klucz API. Sprawdź FALLBACK_NLP_API_KEY w pliku .env.');
     }
     if (response.status === 429) {
       throw new FallbackNlpProviderError(429, 'Fallback NLP: przekroczono limit zapytań (HTTP 429).');
@@ -5800,25 +5454,6 @@ async function generateFallbackNlpContent(
   const reply = typeof content === 'string' ? content.trim() : '';
   if (!reply) throw new Error('Fallback NLP zwrócił pustą odpowiedź.');
   return reply;
-}
-
-async function generateFallbackNlpChatReply(
-  agent: ChatAgentName,
-  message: string,
-  chatHistory: Array<{ agent: string; tekst: string }>,
-): Promise<string> {
-  const history = chatHistory
-    .filter((entry) => entry.agent === 'Mateusz Mitek' || entry.agent === 'Operator' || entry.agent === agent)
-    .slice(-6)
-    .map((entry): { role: 'user' | 'assistant'; content: string } => ({
-      role: entry.agent === 'Mateusz Mitek' || entry.agent === 'Operator' ? 'user' : 'assistant',
-      content: entry.tekst.slice(0, 800),
-    }));
-  return generateFallbackNlpContent([
-    { role: 'system', content: `${CHAT_AGENT_MISSIONS[agent]} ${CHAT_AGENT_SAFETY_BOUNDARIES}` },
-    ...history,
-    { role: 'user', content: message },
-  ], AbortSignal.timeout(45000));
 }
 
 // --- CHAT REPLY ENGINE: OpenRouter API (klucz OPENROUTER_API_KEY z .env) + fallback LOCAL_NLP_ENGINE ---
@@ -6590,7 +6225,7 @@ app.post('/api/triad/message', async (req, res) => {
     }
   }
 
-  // CZAT TRIADY: swobodna rozmowa — Gemini → xAI (Grok) → Ollama (lokalny model) → without_nlp.
+  // CZAT TRIADY: swobodna rozmowa — OpenAI API lub lokalna Ollama, z opcjonalnym fallbackiem.
   const chatLlmConfig = selectChatProviderConfig(
     LLM_CHAIN_CONFIG,
     requestedProviderMode as 'api' | 'ollama' | undefined,
@@ -6606,10 +6241,10 @@ app.post('/api/triad/message', async (req, res) => {
   if (llmProviders.length === 0 && (!CHAT_LOCAL_FALLBACK || attachments.some((attachment) => attachment.mimeType?.startsWith('image/')))) {
     return sendChatError(req, res, 503, 'Brak skonfigurowanego modelu czatu. Ustaw LLM_PROVIDERS="ollama" i uruchom Ollamę albo skonfiguruj dostawcę API w sekretach serwera.');
   }
-  if (attachments.some((attachment) => attachment.mimeType === 'application/pdf') && !llmProviders.includes('gemini')) {
+  if (attachments.some((attachment) => attachment.mimeType === 'application/pdf')) {
     return res.status(400).json({
       success: false,
-      error: 'Załączniki PDF obsługuje tylko Gemini (GEMINI_API_KEY + LLM_PROVIDERS). Ollama przyjmuje tekst i zdjęcia (model z obsługą obrazów).',
+      error: 'Załączniki PDF nie są obsługiwane. Wklej tekst dokumentu lub dołącz obraz.',
     });
   }
 
@@ -7244,7 +6879,7 @@ async function bootstrapTriadMission() {
         chat_approvals: 'ENABLED_MANUAL_APPROVAL',
         privileged_actions_require_operator_approval: true,
         privileged_actions_audit_enabled: true,
-        nlp_chain: 'OPENROUTER → FALLBACK_API (Groq/xAI) → LOCAL_NLP_ENGINE',
+        nlp_chain: 'OPENROUTER → FALLBACK_API → LOCAL_NLP_ENGINE',
         update_sources: ['github.com (origin/main + api.github.com)', 'registry npm (npmjs.com)'],
         github_permissions: 'FULL_READ_WRITE',
         github_authorized_agents: ['Alex', 'Astyria', 'Aurelius', 'Aria'],

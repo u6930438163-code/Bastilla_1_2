@@ -1,0 +1,23 @@
+[
+  {
+    "name": "raw_socket_listener.py",
+    "hash": "e37a51d6bea47b17f7ff65bda9986ac0cf36bc7fecc5179e378d6463359845a7",
+    "target": "Nowy_system/kernel/raw_socket_listener.py",
+    "deployedAt": "2026-11-07T01:23:12.137Z",
+    "origin": "auto-background"
+  },
+  {
+    "name": "theory_validator.py",
+    "hash": "98f923acc4d397aaa437c2d994a94a66984a3a5d27115a696a93b3f9a2b15fb1",
+    "target": "Nowy_system/kernel/theory_validator.py",
+    "deployedAt": "2026-11-07T01:23:12.137Z",
+    "origin": "auto-background"
+  },
+  {
+    "name": "vm_ten_sys.sh",
+    "hash": "66ef5086f9ee044d10dfec91951026b044a9d3f29bb81f3b98beac72aba8293f",
+    "target": "Nowy_system/vm_ten_sys.sh",
+    "deployedAt": "2026-11-07T01:23:12.138Z",
+    "origin": "auto-background"
+  }
+]

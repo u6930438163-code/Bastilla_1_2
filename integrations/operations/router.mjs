@@ -57,7 +57,7 @@ export function makeLogsSnapshot(entries, filter = 'all') {
   return { counts, logs, sampled: recent.length, source: 'server-runtime-logs' };
 }
 
-export async function probeOllama({ baseUrl, configuredModel, providers, fallbackModels, localFallback, keepAlive }, fetchImpl = fetch) {
+export async function probeOllama({ baseUrl, configuredModel, providers, localFallback, keepAlive }, fetchImpl = fetch) {
   const base = String(baseUrl || 'http://127.0.0.1:11434').replace(/\/+$/, '');
   const get = async path => {
     const response = await fetchImpl(base + path, { signal: AbortSignal.timeout(3500), redirect: 'error' });
@@ -95,7 +95,6 @@ export async function probeOllama({ baseUrl, configuredModel, providers, fallbac
     runningModels,
     installedModels,
     configuredProviders: Array.isArray(providers) ? providers : [],
-    fallbackModels: Array.isArray(fallbackModels) ? fallbackModels : [],
     localFallback: Boolean(localFallback),
     keepAlive: String(keepAlive || ''),
     error: online ? null : 'Ollama API nie odpowiada. Sprawdź usługę i połączenie sieciowe.',

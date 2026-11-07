@@ -117,14 +117,14 @@ export const BastillaOS2View: React.FC<BastillaOS2ViewProps> = ({
   const [runningAction, setRunningAction] = useState(false);
   const [cancelingId, setCancelingId] = useState<string | null>(null);
 
-  // Live integrations status (Gemini, Ollama, MCP)
+  // Live integrations status (Ollama, MCP)
   const [integrationStatus, setIntegrationStatus] = useState<SystemIntegrationStatus>({
-    aiProvider: 'Google Gemini → Ollama (dolphin-mixtral:8x7b)',
-    aiChain: ['Google Gemini'],
+    aiProvider: 'Ollama (lokalnie)',
+    aiChain: ['Ollama'],
     ollamaConnected: false,
-    ollamaConfiguredModel: 'dolphin-mixtral:8x7b',
+    ollamaConfiguredModel: 'wizard-vicuna-uncensored:13b',
     ollamaModelsCount: 0,
-    ollamaDetail: 'Model docelowy: dolphin-mixtral:8x7b · sprawdzanie lokalnego serwera…',
+    ollamaDetail: 'Model docelowy: wizard-vicuna-uncensored:13b · sprawdzanie lokalnego serwera…',
     mcpReachable: false,
     mcpToolsCount: 0,
   });
@@ -187,8 +187,8 @@ export const BastillaOS2View: React.FC<BastillaOS2ViewProps> = ({
         }),
       ]);
 
-      let aiProvider = 'Google Gemini';
-      let aiChain: string[] = ['Google Gemini'];
+      let aiProvider = 'Ollama (lokalnie)';
+      let aiChain: string[] = ['Ollama'];
       if (aiRes.status === 'fulfilled' && aiRes.value.ok) {
         const aiData = await aiRes.value.json();
         aiProvider = aiData.provider || aiProvider;
@@ -196,9 +196,9 @@ export const BastillaOS2View: React.FC<BastillaOS2ViewProps> = ({
       }
 
       let ollamaConnected = false;
-      let ollamaConfiguredModel = 'dolphin-mixtral:8x7b';
+      let ollamaConfiguredModel = 'wizard-vicuna-uncensored:13b';
       let ollamaModelsCount = 0;
-      let ollamaDetail = 'Model docelowy: dolphin-mixtral:8x7b (uruchom lokalnie: npm run setup:ollama)';
+      let ollamaDetail = 'Model docelowy: wizard-vicuna-uncensored:13b (uruchom lokalnie: npm run setup:ollama)';
       if (ollamaRes.status === 'fulfilled') {
         const ollamaData = await ollamaRes.value.json().catch(() => ({}));
         ollamaConnected = Boolean(ollamaData.connected);
@@ -411,7 +411,7 @@ export const BastillaOS2View: React.FC<BastillaOS2ViewProps> = ({
                 </span>
               </div>
               <p className="text-xs text-[#736758]">
-                Pulpit operacyjny Bastilla OS 2 · Agenci Aria, Alex, Astyria i Aurelius · Gemini + MCP + Weryfikacja Ollamy
+                Pulpit operacyjny Bastilla OS 2 · Agenci Aria, Alex, Astyria i Aurelius · Ollama + MCP
               </p>
             </div>
           </div>
@@ -479,7 +479,7 @@ export const BastillaOS2View: React.FC<BastillaOS2ViewProps> = ({
 
           <div className="p-4 rounded-xl bg-white border border-[#E6DCB8] shadow-xs flex flex-col justify-between">
             <div className="flex items-center justify-between text-xs text-[#736758]">
-              <span className="font-semibold uppercase tracking-wider">Gemini & Ollama</span>
+              <span className="font-semibold uppercase tracking-wider">Ollama</span>
               <span className={`px-2 py-0.5 rounded text-[10px] font-semibold border ${
                 integrationStatus.ollamaConnected
                   ? 'bg-emerald-50 text-emerald-800 border-emerald-200'
@@ -536,7 +536,7 @@ export const BastillaOS2View: React.FC<BastillaOS2ViewProps> = ({
           </div>
         </section>
 
-        {/* Ollama Model Manager (dolphin-mixtral:8x7b exclusive setup & pruning) */}
+        {/* Ollama Model Manager */}
         <div className="rounded-xl overflow-hidden border border-slate-800 shadow-sm">
           <OllamaModelManager />
         </div>
@@ -546,7 +546,7 @@ export const BastillaOS2View: React.FC<BastillaOS2ViewProps> = ({
           {[
             {
               name: 'Aria',
-              role: 'Modele AI, Gemini, Ollama & MCP',
+              role: 'Modele AI, Ollama & MCP',
               desc: 'Trasowanie modeli językowych, diagnostyka Ollamy bez atrap i mostek MCP.',
               badge: 'AI & MCP',
             },

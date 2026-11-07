@@ -4,8 +4,6 @@
  */
 const LABELS = Object.freeze({
   openai: 'OpenAI',
-  gemini: 'Google Gemini',
-  xai: 'xAI',
   ollama: 'Ollama',
 });
 const AGENTS = new Set(['Alex', 'Astyria', 'Aurelius', 'si_1']);

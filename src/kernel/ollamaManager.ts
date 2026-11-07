@@ -1,6 +1,6 @@
 /**
  * Zarządzanie modelami lokalnej usługi Ollama:
- * - pobieranie wybranego modelu (domyślnie dolphin-mixtral:8x7b),
+ * - pobieranie wybranego modelu (domyślnie wizard-vicuna-uncensored:13b),
  * - usuwanie wszystkich pozostałych modeli z lokalnej Ollamy,
  * - rozgrzewka i uruchomienie modelu w pamięci (keep_alive).
  *
@@ -8,7 +8,7 @@
  * jednostkowo i nigdy nie symuluje połączenia, gdy serwer Ollama nie odpowiada.
  */
 
-export const DEFAULT_EXCLUSIVE_OLLAMA_MODEL = 'dolphin-mixtral:8x7b';
+export const DEFAULT_EXCLUSIVE_OLLAMA_MODEL = 'wizard-vicuna-uncensored:13b';
 
 export interface OllamaTagModel {
   name: string;

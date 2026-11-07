@@ -4,7 +4,7 @@ import { configuredProviders, type LlmChainConfig } from './llmChain.ts';
 export type ChatProviderMode = 'api' | 'ollama';
 
 export function resolveDefaultChatProviderMode(
-  availableProviders: Array<'gemini' | 'xai' | 'openai' | 'ollama'> = [],
+  availableProviders: Array<'openai' | 'ollama'> = [],
 ): ChatProviderMode {
   if (availableProviders.includes('ollama')) return 'ollama';
   if (availableProviders.includes('openai')) return 'api';

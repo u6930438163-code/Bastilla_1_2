@@ -8,7 +8,6 @@
     "dev": "node --import tsx server.ts",
     "start": "node --import tsx server.ts",
     "maintenance": "node scripts/maintenance.mjs",
-    "check:gemini": "node scripts/check-gemini.mjs",
     "check:api": "node scripts/check-bastilla-api.mjs",
     "check:workers": "node scripts/check-live-chat-workers.mjs",
     "check:librechat": "node scripts/check-librechat.mjs",
@@ -28,7 +27,6 @@
     "setup:all": "node scripts/setup-all.mjs"
   },
   "dependencies": {
-    "@google/genai": "^2.30.0",
     "@react-three/drei": "^10.7.9",
     "@react-three/fiber": "^9.8.2",
     "@tailwindcss/vite": "^4.3.3",

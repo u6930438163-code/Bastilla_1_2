@@ -363,7 +363,7 @@ export function normalizeDataStore(raw: any): DataStore {
   for (const legacyModelKey of ['dialogue_engine', 'ai_provider', 'ai_model', 'live_ai_engine']) {
     delete config[legacyModelKey];
   }
-  if (typeof config.mode === 'string' && /ollama|gemini/i.test(config.mode)) {
+  if (typeof config.mode === 'string' && /ollama/i.test(config.mode)) {
     config.mode = INITIAL_DATA_STORE.config.mode;
   }
 

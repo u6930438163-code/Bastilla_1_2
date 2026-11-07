@@ -40,7 +40,7 @@ Misja obejmuje audyt, finalizację, stabilizację i wdrożenie projektów w nast
 ### Aria — Administratorka Integracji i AI Services
 - **Mandat**: Integracja łączników AI, protokołu MCP, webhooków GitHub i rejestrów pakietów.
 - **Działania**:
-  1. Obsługa łańcucha modeli (Google Gemini → xAI Grok → lokalny Ollama) z graceful degradation.
+  1. Obsługa modeli OpenAI API i lokalnej Ollamy z lokalnym fallbackiem.
   2. Stabilizacja serwera MCP (`/api/mcp`) dla ChatGPT i zewnętrznych agentów.
   3. Konfiguracja automatycznych powiadomień o stanie repozytoriów.
 

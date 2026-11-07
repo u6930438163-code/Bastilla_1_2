@@ -86,19 +86,14 @@ installed as a native system component by the `bastillaos-system` package:
   on the engine view (`http://127.0.0.1:3000/?view=without_nlp`).
 - The local API keeps serving `GET /api/without_nlp/status` and
   `POST /api/without_nlp/analyze`.
-- Engine selection: by default only local Ollama answers
-  (`LLM_PROVIDERS="ollama"`, `OLLAMA_MODEL="llama3.2-vision:11b"` selects the
-  vision-capable model); cloud APIs and without_nlp are off, and a model failure returns an
-  error instead of a substitute reply. `LLM_PROVIDERS="gemini,xai,ollama"`
-  restores the cloud chain and `CHAT_LOCAL_FALLBACK="on"` re-enables
-  without_nlp as the last resort.
-- Triad chat (`POST /api/triad/message`) is free conversation with the Triad:
-  Google Gemini answers first (`GEMINI_API_KEY`, primary model plus
-  `GEMINI_FALLBACK_MODELS`), xAI Grok is the fallback (`XAI_API_KEY`; when
-  `XAI_MODEL` is rejected the server picks a current Grok model from
-  `/v1/models`). Each agent falls back independently. Without keys or when
-  both APIs fail, a local Ollama model answers (`OLLAMA_MODEL`), and only
-  then without_nlp answers locally and deterministically.
+- Engine selection: chat uses local Ollama and optional OpenAI API
+  (`LLM_PROVIDERS="openai,ollama"`). Without `OPENAI_CHAT_API_KEY`, OpenAI is
+  skipped. `CHAT_LOCAL_FALLBACK="on"` enables deterministic without_nlp replies
+  after provider failures; otherwise the chat reports the error.
+- Triad chat (`POST /api/triad/message`) is free conversation with the Triad.
+  Each agent uses the configured Ollama or OpenAI API provider; local without_nlp
+  is an explicit fallback. The server does not silently switch between provider
+  modes selected by the operator.
   `bash scripts/setup-ollama.sh` installs Ollama and pulls `llama3.2-vision:11b` by
   default (pass a model tag to select another), tunes the Ollama server (flash
   attention, q8_0 KV cache, keep-alive, parallel requests when memory allows),

@@ -6,7 +6,7 @@ Integracja w `Bastilla_1_2` używa **osobnego klucza czatu** z konta OpenAI API 
 
 1. W sekcji **Secrets** hostingu / Codespaces / wdrożenia AI Studio ustaw `OPENAI_CHAT_API_KEY` jako **sekret serwera**. Nie wpisuj klucza do czatu, GitHub, `VITE_*`, dokumentacji ani plików śledzonych przez Git.
 2. Ustaw `OPENAI_CHAT_MODEL=gpt-4o`; jeśli konto nie obsługuje tego modelu, ustaw model rzeczywiście dostępny w jego API. Nie zakładaj, że aktywny klucz oznacza uprawnienia do każdego modelu.
-3. W konfiguracji serwera ustaw `LLM_PROVIDERS=openai,gemini,ollama,xai` (albo `openai` aby świadomie korzystać wyłącznie z OpenAI). Brak `OPENAI_CHAT_API_KEY` powoduje pominięcie dostawcy. OpenAI jest pierwsze na liście, ale tylko jeśli tak skonfigurowano kolejność.
+3. W konfiguracji serwera ustaw `LLM_PROVIDERS=openai,ollama` (albo `openai`, aby świadomie korzystać wyłącznie z OpenAI). Brak `OPENAI_CHAT_API_KEY` powoduje pominięcie dostawcy.
 4. Uruchom ponownie backend Bastilla, aby odczytał sekret z otoczenia. Na głównym czacie wybierz **API**, a nie **Ollama**, i wyślij krótki test do Aureliusa.
 5. Sprawdź w odpowiedzi/logach identyfikator dostawcy `openai` oraz nazwę modelu. Nie drukuj tokenu, `.env.local` ani nagłówka Authorization. Błędy 401/403 oznaczają problem uwierzytelnienia/uprawnień; 404 może oznaczać niedostępność modelu; 429 oznacza limit; odpowiedź 200 z prawidłową treścią potwierdza wywołanie modelu.
 

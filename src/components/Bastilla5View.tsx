@@ -21,7 +21,7 @@ export const Bastilla5View: React.FC<Bastilla5ViewProps> = ({ dataStore }) => {
                 ALL MODULES ACTIVE (OS 2 + INTIMATE CHAT + OLLAMA)
               </span>
             </div>
-            <p className="text-xs text-slate-400">Wszystkie włączone moduły, agent swarm, intymny czat i Ollama dolphin-mixtral:8x7b zintegrowane w Bastilla 5.</p>
+            <p className="text-xs text-slate-400">Wszystkie włączone moduły, agent swarm, intymny czat i Ollama wizard-vicuna-uncensored:13b zintegrowane w Bastilla 5.</p>
           </div>
         </div>
         <div className="flex items-center gap-3">

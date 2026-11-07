@@ -52,8 +52,8 @@ test('does not allow model configuration to return through save or config action
 
   const incomingStore = {
     config: {
-      mode: 'Google-Gemini-Production',
-      dialogue_engine: 'Gemini',
+      mode: 'Legacy-Ollama-Production',
+      dialogue_engine: 'legacy remote model',
       live_ai_engine: 'remote model',
     },
     update_history: [],

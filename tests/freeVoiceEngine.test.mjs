@@ -3,10 +3,8 @@ import assert from 'node:assert/strict';
 import { freeVoiceEngineLabel, summarizeFreeVoiceEngines } from '../src/lib/freeVoiceEngine.mjs';
 
 test('Głos AI identifies the actual provider and model for each agent', () => {
-  assert.equal(freeVoiceEngineLabel('gemini:gemini-3.8-flash'), 'Google Gemini · gemini-3.8-flash');
   assert.equal(freeVoiceEngineLabel('openai:gpt-4o'), 'OpenAI · gpt-4o');
   assert.equal(freeVoiceEngineLabel('ollama:qwen3:14b'), 'Ollama · qwen3:14b');
-  assert.equal(freeVoiceEngineLabel('xai:grok-3-mini'), 'xAI · grok-3-mini');
   assert.equal(summarizeFreeVoiceEngines({
     Aurelius: 'openai:gpt-4o', si_1: 'ollama:qwen3:14b',
   }, ['Aurelius','si_1']), 'Aurelius: OpenAI · gpt-4o | Aria: Ollama · qwen3:14b');

@@ -46,6 +46,7 @@ import { isChatSystemChange } from './kernel/chatChanges';
 import type { ChatSystemChange } from './kernel/chatChanges';
 
 const LOCAL_STORAGE_KEY = 'svl_kernel_datastore_v9_0_0_chat_sync';
+const FACTORY_RESET_MESSAGE = 'Przywrócono ustawienia fabryczne. Właściwe profile modelu będą używane po ponownym uruchomieniu serwera.';
 
 export default function App() {
   const [preparedChatDraft, setPreparedChatDraft] = useState<{ id: number; text: string; agent: 'triad' | 'Alex' | 'Astyria' | 'Aurelius' | 'si_1' } | null>(null);
@@ -86,6 +87,7 @@ export default function App() {
   const terminalPendingRef = useRef(0);
   const [agentError, setAgentError] = useState<string | null>(null);
   const [chatSystemChange, setChatSystemChange] = useState<ChatSystemChange | null>(null);
+  const [factoryResetNotice, setFactoryResetNotice] = useState<string | null>(null);
 
   // Expose navigation to window for internal component linking
   useEffect(() => {
@@ -629,35 +631,6 @@ export default function App() {
     }
   };
 
-  const handleProvisionGeminiVm = async (): Promise<{ status: string; sshCommand: string }> => {
-    const response = await fetch('/api/vm-gemini-4/provision', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        operation: 'create',
-        confirmation: 'CREATE_VM_GEMINI_4',
-      }),
-    });
-    const result: unknown = await response.json();
-    if (
-      !response.ok ||
-      !result ||
-      typeof result !== 'object' ||
-      !('success' in result) ||
-      result.success !== true ||
-      !('status' in result) ||
-      typeof result.status !== 'string' ||
-      !('sshCommand' in result) ||
-      typeof result.sshCommand !== 'string'
-    ) {
-      const error = result && typeof result === 'object' && 'error' in result && typeof result.error === 'string'
-        ? result.error
-        : `Nie udało się utworzyć VM (HTTP ${response.status}).`;
-      throw new Error(error);
-    }
-    return { status: result.status, sshCommand: result.sshCommand };
-  };
-
   const handleClearHistory = async () => {
     setDataStore((prev) => ({
       ...prev,
@@ -683,6 +656,36 @@ export default function App() {
     }
   };
 
+  const handleFactoryReset = async () => {
+    const confirmed = window.confirm('Przywrócić ustawienia fabryczne modelu i konfiguracji lokalnej?');
+    if (!confirmed) return;
+
+    setIsAgentLoading(true);
+    setFactoryResetNotice(null);
+    try {
+      const response = await fetch('/api/system/factory-reset', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+      });
+      const payload = await response.json().catch(() => null) as { error?: string; message?: string } | null;
+      if (!response.ok) {
+        throw new Error(payload?.error || 'Nie udało się przywrócić ustawień fabrycznych.');
+      }
+
+      const resetStore = normalizeDataStore(INITIAL_DATA_STORE);
+      setDataStore(resetStore);
+      localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(resetStore));
+      setFactoryResetNotice(payload?.message || FACTORY_RESET_MESSAGE);
+      setActiveTab('home');
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Nie udało się przywrócić ustawień fabrycznych.';
+      setAgentError(message);
+      setFactoryResetNotice(message);
+    } finally {
+      setIsAgentLoading(false);
+    }
+  };
+
   return (
     <ErrorBoundary>
       <div className="app-shell flex h-dvh max-h-dvh min-w-0 max-w-full flex-col overflow-hidden bg-[#050b18] font-sans text-slate-100 selection:bg-cyan-400/30 selection:text-cyan-100">
@@ -691,10 +694,29 @@ export default function App() {
           <span className={workspaceLive ? 'bastilla-workspace-sync-dot is-live' : 'bastilla-workspace-sync-dot'} />
           <span className="font-semibold">{workspaceLive ? 'WORKSPACE · SSE' : 'WORKSPACE · ODSWIEZANIE 4s'}</span>
           <span className="bastilla-workspace-sync-detail">{workspaceLive ? 'Czat · terminal · jądro: synchronizacja zdarzeń' : 'Czat · terminal · jądro: automatyczne odświeżanie'}</span>
-          <button type="button" onClick={() => setActiveTab(activeTab === 'comms' ? 'terminal' : 'comms')}>
-            {activeTab === 'comms' ? 'Otwórz terminal' : 'Otwórz czat'}
-          </button>
+          <div className="ml-auto flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => setActiveTab(activeTab === 'comms' ? 'terminal' : 'comms')}
+              className="rounded border border-slate-700 bg-slate-900/70 px-2 py-1 text-[10px] font-medium text-slate-200 transition hover:border-cyan-500 hover:text-cyan-100"
+            >
+              {activeTab === 'comms' ? 'Otwórz terminal' : 'Otwórz czat'}
+            </button>
+            <button
+              type="button"
+              onClick={handleFactoryReset}
+              className="rounded border border-amber-700/80 bg-amber-500/10 px-2 py-1 text-[10px] font-medium text-amber-100 transition hover:border-amber-500 hover:bg-amber-500/20"
+            >
+              Ustawienia fabryczne
+            </button>
+          </div>
         </div>
+
+        {factoryResetNotice && (
+          <div className="border-b border-amber-500/40 bg-amber-500/10 px-3 py-2 text-[11px] text-amber-100">
+            {factoryResetNotice}
+          </div>
+        )}
 
         {(isAgentLoading || terminalBusy) && activeTab !== 'comms' && (
           <div className="px-3 py-2 shrink-0">
@@ -720,7 +742,6 @@ export default function App() {
               dataStore={dataStore}
               onNavigate={setActiveTab}
               onSendMessage={handleSendMessage}
-              onProvisionGeminiVm={handleProvisionGeminiVm}
             />
           )}
 

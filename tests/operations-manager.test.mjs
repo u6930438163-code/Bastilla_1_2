@@ -47,7 +47,7 @@ test('Ollama status is grounded in tags/ps and shows RAM/VRAM without pretending
   const fakeFetch = async (url) => ({ ok: true, json: async () => responses[new URL(url).pathname] });
   const baseConfig = {
     baseUrl: 'http://127.0.0.1:11434', configuredModel: 'qwen:14b',
-    providers: ['ollama', 'gemini'], fallbackModels: ['gemini-3.8-flash'],
+    providers: ['ollama'],
     localFallback: false, keepAlive: '24h',
   };
   const result = await probeOllama(baseConfig, fakeFetch);
@@ -56,7 +56,7 @@ test('Ollama status is grounded in tags/ps and shows RAM/VRAM without pretending
   assert.equal(result.runningModels[0].estimatedRamBytes, 6e9);
   assert.equal(result.runningModels[0].vramBytes, 8e9);
   assert.equal(result.installedModels[0].name, 'qwen:14b');
-  assert.deepEqual(result.configuredProviders, ['ollama', 'gemini']);
+  assert.deepEqual(result.configuredProviders, ['ollama']);
   const wrongModel = await probeOllama({ ...baseConfig, configuredModel: 'other:7b' }, fakeFetch);
   assert.equal(wrongModel.modelLoaded, false);
 });

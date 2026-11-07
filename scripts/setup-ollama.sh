@@ -41,8 +41,8 @@ if [[ "$ready" != true ]]; then
   exit 1
 fi
 
-model="${1:-${OLLAMA_MODEL:-dolphin-mixtral:8x7b}}"
-if [[ "$model" == 'auto' || -z "$model" ]]; then model='dolphin-mixtral:8x7b'; fi
+model="${1:-${OLLAMA_MODEL:-wizard-vicuna-uncensored:13b}}"
+if [[ "$model" == 'auto' || -z "$model" ]]; then model='wizard-vicuna-uncensored:13b'; fi
 
 printf 'Pobieranie modelu docelowego: %s\n' "$model"
 OLLAMA_HOST=127.0.0.1:11434 ollama pull "$model"

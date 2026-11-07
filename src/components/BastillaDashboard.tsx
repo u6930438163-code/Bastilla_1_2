@@ -24,7 +24,6 @@ import {
 import { TabId } from './Navigation';
 import { DataStore } from '../kernel/svlKernel';
 import { AgentProtocolRequest } from '../kernel/agentProtocol';
-import { GeminiVmStatus } from '../kernel/geminiVm';
 import { FormattedMessage } from './FormattedMessage';
 import {
   CHAT_ATTACHMENT_ACCEPT,
@@ -43,14 +42,12 @@ interface BastillaDashboardProps {
     agent: AgentProtocolRequest['agent'],
     attachments?: ChatAttachment[],
   ) => Promise<void>;
-  onProvisionGeminiVm: () => Promise<{ status: string; sshCommand: string }>;
 }
 
 interface BastillaStatus {
   systemVersion: string;
   appCount: number | null;
   continuousMission: boolean | null;
-  geminiVm: GeminiVmStatus | null;
   error: string | null;
 }
 
@@ -81,7 +78,6 @@ export const BastillaDashboard: React.FC<BastillaDashboardProps> = ({
   dataStore,
   onNavigate,
   onSendMessage,
-  onProvisionGeminiVm,
 }) => {
   const [terminalInput, setTerminalInput] = useState('');
   const [chatAttachments, setChatAttachments] = useState<ChatAttachment[]>([]);
@@ -89,15 +85,10 @@ export const BastillaDashboard: React.FC<BastillaDashboardProps> = ({
   const [selectedChatAgent, setSelectedChatAgent] = useState<AgentProtocolRequest['agent']>('triad');
   const [isTerminalLoading, setIsTerminalLoading] = useState(false);
   const [terminalError, setTerminalError] = useState<string | null>(null);
-  const [vmApprovalPending, setVmApprovalPending] = useState(false);
-  const [vmProvisioning, setVmProvisioning] = useState(false);
-  const [vmProvisionResult, setVmProvisionResult] = useState<{ status: string; sshCommand: string } | null>(null);
-  const [vmProvisionError, setVmProvisionError] = useState<string | null>(null);
   const [status, setStatus] = useState<BastillaStatus>({
     systemVersion: 'SVL Kernel',
     appCount: null,
     continuousMission: null,
-    geminiVm: null,
     error: null,
   });
 
@@ -105,18 +96,17 @@ export const BastillaDashboard: React.FC<BastillaDashboardProps> = ({
     let active = true;
     const refreshStatus = async () => {
       try {
-        const [infrastructureResponse, missionResponse, appsResponse, geminiVmResponse] = await Promise.all([
+        const [infrastructureResponse, missionResponse, appsResponse] = await Promise.all([
           fetch('/api/infrastructure/status', { cache: 'no-store' }),
           fetch('/api/astyria/mission-status', { cache: 'no-store' }),
           fetch('/api/apps/list', { cache: 'no-store' }),
-          fetch('/api/vm-gemini-4/status', { cache: 'no-store' }),
         ]);
-        const responses = [infrastructureResponse, missionResponse, appsResponse, geminiVmResponse];
+        const responses = [infrastructureResponse, missionResponse, appsResponse];
         const failedResponse = responses.find((response) => !response.ok);
         if (failedResponse) {
           throw new Error(`Status API: HTTP ${failedResponse.status}`);
         }
-        const [infrastructure, mission, apps, geminiVm] = await Promise.all(
+        const [infrastructure, mission, apps] = await Promise.all(
           responses.map((response) => response.json())
         );
         if (!active) return;
@@ -126,7 +116,6 @@ export const BastillaDashboard: React.FC<BastillaDashboardProps> = ({
           continuousMission: typeof mission.continuousMissionEnabled === 'boolean'
             ? mission.continuousMissionEnabled
             : null,
-          geminiVm: geminiVm as GeminiVmStatus,
           error: null,
         });
       } catch (error) {
@@ -158,14 +147,6 @@ export const BastillaDashboard: React.FC<BastillaDashboardProps> = ({
         .normalize('NFD')
         .replace(/[\u0300-\u036f]/g, '')
         .toLocaleLowerCase('pl-PL');
-      if (
-        /\b(utworz|stworz|zbuduj|przygotuj)\b/.test(normalizedCommand) &&
-        /\b(vm_gemini_4|maszyne wirtualna|maszyny wirtualnej|maszyny wirtualnej|maszyna wirtualna)\b/.test(normalizedCommand)
-      ) {
-        setVmApprovalPending(true);
-        setVmProvisionResult(null);
-        setVmProvisionError(null);
-      }
       setTerminalInput('');
       setChatAttachments([]);
       setAttachmentError(null);
@@ -196,21 +177,6 @@ export const BastillaDashboard: React.FC<BastillaDashboardProps> = ({
       setChatAttachments(validation.attachments);
     } catch (error) {
       setAttachmentError(error instanceof Error ? error.message : 'Nie udało się odczytać wybranego pliku.');
-    }
-  };
-
-  const handleApproveVmCreation = async () => {
-    if (vmProvisioning) return;
-    setVmProvisioning(true);
-    setVmProvisionError(null);
-    try {
-      const result = await onProvisionGeminiVm();
-      setVmProvisionResult(result);
-      setVmApprovalPending(false);
-    } catch (error) {
-      setVmProvisionError(error instanceof Error ? error.message : 'Nie udało się utworzyć VM.');
-    } finally {
-      setVmProvisioning(false);
     }
   };
 
@@ -245,50 +211,6 @@ export const BastillaDashboard: React.FC<BastillaDashboardProps> = ({
               ))}
               {isTerminalLoading && <p role="status" className="animate-pulse text-[10px] font-mono text-cyan-300">Agenci przygotowują odpowiedź…</p>}
               {terminalError && <p role="alert" className="text-[10px] text-rose-300">{terminalError}</p>}
-              {vmApprovalPending && (
-                <section aria-labelledby="vm-approval-title" className="rounded-xl border border-amber-300/40 bg-amber-950/30 p-3">
-                  <h3 id="vm-approval-title" className="text-xs font-bold text-amber-100">
-                    Potwierdź utworzenie VM_Gemini_4
-                  </h3>
-                  <p className="mt-2 text-[10px] leading-relaxed text-amber-100/80">
-                    Ta jednorazowa operacja zbuduje lokalny runtime QEMU z pakietów Debian, pobierze oficjalny obraz Debian 13 Cloud i sprawdzi jego sumę SHA-512, a następnie uruchomi VM: 2 vCPU, 2 GiB RAM i dysk 20 GiB.
-                  </p>
-                  <p className="mt-1 text-[10px] leading-relaxed text-amber-100/80">
-                    Wymaga działającego Dockera i KVM. Dane oraz nowy klucz SSH zostaną zapisane w `bastillaos/vm-gemini-4/data`; SSH będzie dostępne tylko lokalnie na porcie 2224. Klucz API Gemini nie zostanie skopiowany do VM. Nie przyznaje to agentom powłoki ani uprawnień root do hosta.
-                  </p>
-                  <div className="mt-3 flex flex-wrap gap-2">
-                    <button
-                      type="button"
-                      onClick={() => void handleApproveVmCreation()}
-                      disabled={vmProvisioning}
-                      className="rounded-lg border border-amber-300/40 bg-amber-500/20 px-3 py-2 text-[10px] font-bold text-amber-100 hover:bg-amber-500/30 disabled:cursor-wait disabled:opacity-50"
-                    >
-                      {vmProvisioning ? 'Budowanie runtime i uruchamianie VM…' : 'Zatwierdzam: utwórz VM'}
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setVmApprovalPending(false)}
-                      disabled={vmProvisioning}
-                      className="rounded-lg border border-slate-500/30 px-3 py-2 text-[10px] text-slate-300 hover:bg-slate-800 disabled:opacity-50"
-                    >
-                      Anuluj
-                    </button>
-                  </div>
-                  {vmProvisionError && <p role="alert" className="mt-2 text-[10px] text-rose-300">{vmProvisionError}</p>}
-                </section>
-              )}
-              {vmProvisionResult && (
-                <section role="status" className="rounded-xl border border-emerald-300/30 bg-emerald-950/30 p-3">
-                  <h3 className="text-xs font-bold text-emerald-100">VM_Gemini_4: {vmProvisionResult.status}</h3>
-                  <p className="mt-1 text-[10px] text-emerald-100/80">
-                    Po uruchomieniu gościa połączysz się lokalnie poleceniem:
-                  </p>
-                  <code className="mt-2 block overflow-x-auto rounded bg-slate-950 p-2 text-[10px] text-emerald-200">{vmProvisionResult.sshCommand}</code>
-                  <p className="mt-1 text-[10px] text-slate-400">
-                    Klucz SSH znajduje się w katalogu danych VM. W razie problemów sprawdź `docker logs vm_gemini_4`.
-                  </p>
-                </section>
-              )}
             </div>
             <form onSubmit={handleTerminalSubmit} className="border-t border-blue-200/10 bg-[#081326] p-3">
               <label htmlFor="hyperspace-command" className="mb-2 block text-[9px] font-mono tracking-wider text-blue-200/50">WIADOMOŚĆ · maksymalnie 2000 znaków</label>

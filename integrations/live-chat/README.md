@@ -30,7 +30,7 @@ Each original agent runtime must supply an adapter module that exports:
       return { text: actualAgentReply };
     }
 
-The adapter is deliberately not bundled. There is no built-in Gemini, Ollama, Copilot, static-response or mock fallback. A worker is not online until it sends a real authenticated heartbeat.
+The adapter is deliberately not bundled. There is no built-in hosted-model, static-response or mock fallback. A worker is not online until it sends a real authenticated heartbeat.
 
 Set BASTILLA_LIVE_CHAT_AGENT, BASTILLA_AGENT_ADAPTER, BASTILLA_LIVE_CHAT_BASE_URL and BASTILLA_LIVE_CHAT_WORKER_TOKEN for each worker, then run integrations/live-chat/worker-runner.mjs. If an original agent exposes an authenticated HTTPS endpoint, integrations/live-chat/http-agent-adapter.mjs can call it using BASTILLA_AGENT_ENDPOINT and BASTILLA_AGENT_API_KEY. Its optional idle mode posts mode=idle and forwards any returned text as an unsolicited message. Otherwise provide a custom adapter for that original runtime. A systemd template and scripts/install-live-chat-workers.sh are included for hosts that run the four adapters as separate services.
 

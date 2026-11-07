@@ -48,7 +48,7 @@ export const AstyriaMissionView: React.FC<AstyriaMissionViewProps> = ({
     {
       timestamp: new Date().toLocaleTimeString('pl-PL'),
       title: 'Wdrożenie Ulepszeń z Maszyny Wirtualnej VM_Ten_System (v8.1.0-VM_Ten_System)',
-      desc: 'Astyria jest podłączona do przetwarzania poleceń z integracją Gemini API oraz automatycznym leczeniem jądra.',
+      desc: 'Astyria przetwarza polecenia przez lokalne usługi Bastilla i raportuje stan automatycznej diagnostyki jądra.',
       type: 'success',
     },
   ]);
@@ -568,7 +568,7 @@ export const AstyriaMissionView: React.FC<AstyriaMissionViewProps> = ({
             <Terminal className="w-4 h-4 text-cyan-400" />
             <span>KONSOLA DYSPOZYCJI I POLECEŃ DLA ASTYRII // HIPERNADZORCA</span>
           </div>
-          <span className="text-[10px] text-emerald-400 font-mono">POŁĄCZENIE GEMINI API + AUTONAPRAWA</span>
+          <span className="text-[10px] text-emerald-400 font-mono">LOKALNA DIAGNOSTYKA + AUTONAPRAWA</span>
         </div>
 
         <form onSubmit={handleMissionSubmit} className="flex flex-col space-y-3">
@@ -590,7 +590,7 @@ export const AstyriaMissionView: React.FC<AstyriaMissionViewProps> = ({
             >
               <option value="repair_all">Pełna naprawa i autodiagnoza</option>
               <option value="finish_all_github_projects">Misja: Dokończenie projektów we wszystkich repozytoriach GitHub</option>
-              <option value="repair_ollama_and_llm">Napraw Ollama &amp; Silniki LLM (Ollama + Gemini)</option>
+              <option value="repair_ollama_and_llm">Napraw Ollama i lokalny czat</option>
               <option value="deep_scan">Odczytowy skan logów i telemetrii</option>
               <option value="vm_firewall_audit">Raport stanu zapory VM</option>
               <option value="vm_snapshot_now">Utwórz snapshot VM_Ten_System</option>

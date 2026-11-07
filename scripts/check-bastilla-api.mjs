@@ -23,7 +23,6 @@ const checks = [
   ['/api/ai/status', d => typeof d.protocol === 'string'],
   ['/api/agents/background/status', d => d.monitoring === true && !!d.agents],
   ['/api/ollama/models', d => typeof d.connected === 'boolean'],
-  ['/api/vm-gemini-4/status', d => !!d && typeof d === 'object'],
 ];
 let failures = 0;
 for (const [path, valid] of checks) {

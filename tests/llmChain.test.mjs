@@ -4,8 +4,6 @@ import {
   LlmChainError,
   configuredProviders,
   generateWithChain,
-  pickXaiChatModel,
-  resetXaiModelCache,
   resetOllamaModelCache,
   pickOllamaChatModel,
   parseKeepAlive,
@@ -17,9 +15,6 @@ const json = (status, body) => new Response(JSON.stringify(body), {
   status,
   headers: { 'Content-Type': 'application/json' },
 });
-const geminiOk = (text) => json(200, { candidates: [{ content: { parts: [{ text }] } }] });
-const xaiOk = (text) => json(200, { choices: [{ message: { content: text } }] });
-
 function mockFetch(routes) {
   const calls = [];
   const impl = async (url, init = {}) => {
@@ -44,142 +39,19 @@ const request = {
   message: 'Co myślisz o muzyce Chopina?',
 };
 
-test('Gemini odpowiada jako pierwszy, z historią i instrukcją systemową', async () => {
-  const { impl, calls } = mockFetch([
-    [/generativelanguage.*gemini-a:generateContent/, { respond: () => geminiOk('Chopin to poezja fortepianu.') }],
-  ]);
-  const result = await generateWithChain(
-    { geminiApiKey: 'g', geminiModel: 'gemini-a', xaiApiKey: 'x', fetchImpl: impl },
-    request,
-  );
-  assert.equal(result.provider, 'gemini');
-  assert.equal(result.model, 'gemini-a');
-  assert.equal(result.text, 'Chopin to poezja fortepianu.');
-  assert.equal(calls.length, 1);
-  assert.equal(calls[0].headers['x-goog-api-key'], 'g');
-  assert.equal(calls[0].body.systemInstruction.parts[0].text, 'Jesteś Astyrią.');
-  assert.deepEqual(calls[0].body.contents.map((c) => c.role), ['user', 'model', 'user']);
-  assert.equal(calls[0].body.contents[2].parts[0].text, request.message);
-});
-
-test('Gemini vision receives the original image bytes and not filename-derived content', async () => {
-  const imageRequest = {
-    ...request,
-    message: 'Co widać na zdjęciach?',
-    attachments: [
-      { name: 'pierwsze.png', mimeType: 'image/png', content: 'iVBORw0KGgoAAAANSUhEUg==' },
-      { name: 'drugie.webp', mimeType: 'image/webp', content: 'UklGRgAAAABXRUJQ' },
-      { name: 'trzecie.jpg', mimeType: 'image/jpeg', content: '/9j/4AAQSkZJRg==' },
-    ],
-  };
-  const { impl, calls } = mockFetch([
-    [/generativelanguage.*gemini-a:generateContent/, { respond: () => geminiOk('Na zdjęciach są różne obiekty.') }],
-  ]);
-  const result = await generateWithChain({
-    providers: ['gemini'],
-    geminiApiKey: 'test-key',
-    geminiModel: 'gemini-a',
-    fetchImpl: impl,
-  }, imageRequest);
-
-  assert.equal(result.provider, 'gemini');
-  const parts = calls[0].body.contents.at(-1).parts;
-  assert.equal(parts[0].text, imageRequest.message);
-  assert.deepEqual(parts.slice(1), imageRequest.attachments.map(({ mimeType, content }) => ({
-    inlineData: { mimeType, data: content },
-  })));
-  assert.equal(JSON.stringify(calls[0].body).includes('pierwsze.png'), false);
-  assert.equal(calls.length, 1, 'Gemini-only configuration does not contact Ollama or another provider.');
-});
-
-test('limit Gemini (429) przełącza na model zapasowy Gemini', async () => {
-  const { impl } = mockFetch([
-    [/gemini-a:generateContent/, { respond: () => json(429, { error: 'quota' }) }],
-    [/gemini-b:generateContent/, { respond: () => geminiOk('Odpowiedź z modelu zapasowego.') }],
-  ]);
-  const result = await generateWithChain(
-    { geminiApiKey: 'g', geminiModel: 'gemini-a', geminiFallbackModels: 'gemini-b', fetchImpl: impl },
-    request,
-  );
-  assert.equal(result.provider, 'gemini');
-  assert.equal(result.model, 'gemini-b');
-});
-
-test('awaria Gemini przełącza na xAI', async () => {
-  resetXaiModelCache();
-  const { impl, calls } = mockFetch([
-    [/generativelanguage/, { respond: () => json(403, { error: 'bad key' }) }],
-    [/api\.x\.ai\/v1\/chat\/completions/, { respond: () => xaiOk('Grok tu jest.') }],
-  ]);
-  const result = await generateWithChain(
-    { geminiApiKey: 'g', geminiModel: 'gemini-a', xaiApiKey: 'x', xaiModel: 'grok-test', fetchImpl: impl },
-    request,
-  );
-  assert.equal(result.provider, 'xai');
-  assert.equal(result.model, 'grok-test');
-  assert.equal(result.text, 'Grok tu jest.');
-  assert.equal(result.failures.length, 1);
-  assert.match(result.failures[0], /klucz API odrzucony/);
-  const xaiCall = calls.find((call) => call.url.includes('x.ai'));
-  assert.equal(xaiCall.headers.Authorization, 'Bearer x');
-  assert.deepEqual(xaiCall.body.messages.map((m) => m.role), ['system', 'user', 'assistant', 'user']);
-});
-
-test('wycofany model xAI → automatyczny dobór z /v1/models', async () => {
-  resetXaiModelCache();
-  const { impl } = mockFetch([
-    [/chat\/completions/, {
-      when: (body) => body.model === 'grok-old',
-      respond: () => json(404, { error: 'The model grok-old does not exist' }),
-    }],
-    [/\/v1\/models$/, {
-      respond: () => json(200, { data: [{ id: 'grok-imagine-image' }, { id: 'grok-9' }, { id: 'grok-9-fast' }] }),
-    }],
-    [/chat\/completions/, {
-      when: (body) => body.model === 'grok-9-fast',
-      respond: () => xaiOk('Nowy model działa.'),
-    }],
-  ]);
-  const result = await generateWithChain({ xaiApiKey: 'x', xaiModel: 'grok-old', fetchImpl: impl }, request);
-  assert.equal(result.provider, 'xai');
-  assert.equal(result.model, 'grok-9-fast');
-});
-
-test('brak kluczy i awaria wszystkich dostawców kończą się LlmChainError', async () => {
-  await assert.rejects(generateWithChain({}, request), LlmChainError);
-  const { impl } = mockFetch([
-    [/generativelanguage/, { respond: () => json(500, {}) }],
-    [/x\.ai/, { respond: () => json(429, {}) }],
-  ]);
-  await assert.rejects(
-    generateWithChain({ geminiApiKey: 'g', geminiModel: 'gemini-a', xaiApiKey: 'x', xaiModel: 'grok', fetchImpl: impl }, request),
-    (error) => error instanceof LlmChainError && error.failures.length === 2,
-  );
-});
-
-test('kolejność dostawców i wybór modelu Grok', () => {
-  assert.deepEqual(configuredProviders({ geminiApiKey: 'g', xaiApiKey: 'x' }), ['gemini', 'xai']);
-  assert.deepEqual(configuredProviders({ xaiApiKey: 'x' }), ['xai']);
-  assert.deepEqual(configuredProviders({ geminiApiKey: '  ' }), []);
-  assert.equal(pickXaiChatModel(['grok-2-image', 'grok-vision-beta']), null);
-  assert.equal(pickXaiChatModel(['grok-4', 'grok-4-fast', 'grok-imagine-video']), 'grok-4-fast');
-});
-
 const ollamaOk = (content) => json(200, { message: { role: 'assistant', content } });
 
-test('awaria Gemini i xAI → lokalny model Ollama', async () => {
+test('Ollama odpowiada i usuwa bloki rozumowania', async () => {
   const { impl, calls } = mockFetch([
-    [/generativelanguage/, { respond: () => json(429, {}) }],
-    [/x\.ai/, { respond: () => json(500, {}) }],
     [/127\.0\.0\.1:11434\/api\/chat/, { respond: () => ollamaOk('<think>rozważam</think>Lokalna Astyria odpowiada.') }],
   ]);
   const result = await generateWithChain({
-    geminiApiKey: 'g', geminiModel: 'gemini-a', xaiApiKey: 'x', xaiModel: 'grok', ollamaModel: 'gemma4:e4b', fetchImpl: impl,
+    providers: ['ollama'], ollamaModel: 'gemma4:e4b', fetchImpl: impl,
   }, request);
   assert.equal(result.provider, 'ollama');
   assert.equal(result.model, 'gemma4:e4b');
   assert.equal(result.text, 'Lokalna Astyria odpowiada.');
-  assert.equal(result.failures.length, 2);
+  assert.equal(result.failures.length, 0);
   const call = calls.find((c) => c.url.includes('11434'));
   assert.equal(call.body.stream, false);
   assert.equal(call.body.think, false);
@@ -221,13 +93,13 @@ test('Ollama HTTP 500 includes provider details', async () => {
 });
 
 test('kolejność z Ollamą i usuwanie bloków rozumowania', () => {
-  assert.deepEqual(configuredProviders({ geminiApiKey: 'g', xaiApiKey: 'x', ollamaModel: 'm' }), ['gemini', 'xai', 'ollama']);
+  assert.deepEqual(configuredProviders({ providers: ['ollama'], ollamaModel: 'm' }), ['ollama']);
   assert.deepEqual(configuredProviders({ ollamaModel: 'm' }), ['ollama']);
   assert.equal(stripThinking('<think>a\nb</think>\nOdpowiedź'), 'Odpowiedź');
   assert.equal(stripThinking('bez myślenia'), 'bez myślenia');
 });
 
-test('tylko Ollama: Gemini i xAI pomijane mimo kluczy, model wykryty z /api/tags', async () => {
+test('Ollama wykrywa skonfigurowany model z /api/tags', async () => {
   resetOllamaModelCache();
   const { impl, calls } = mockFetch([
     [/api\/tags/, { respond: () => json(200, { models: [
@@ -237,12 +109,11 @@ test('tylko Ollama: Gemini i xAI pomijane mimo kluczy, model wykryty z /api/tags
     ] }) }],
     [/api\/chat/, { respond: (body) => ollamaOk(`Odpowiada ${body.model}.`) }],
   ]);
-  const config = { providers: ['ollama'], geminiApiKey: 'g', xaiApiKey: 'x', ollamaModel: 'auto', fetchImpl: impl };
+  const config = { providers: ['ollama'], ollamaModel: 'auto', fetchImpl: impl };
   assert.deepEqual(configuredProviders(config), ['ollama']);
   const result = await generateWithChain(config, request);
   assert.equal(result.provider, 'ollama');
   assert.equal(result.model, 'qwen3.5:4b');
-  assert.ok(calls.every((call) => !/generativelanguage|x\.ai/.test(call.url)));
   await generateWithChain(config, request);
   assert.equal(calls.filter((call) => call.url.includes('/api/tags')).length, 1, 'model wykrywany raz (cache)');
 });
@@ -262,7 +133,7 @@ test('Ollama: keep_alive, num_ctx i num_thread trafiają do żądania', async ()
   await generateWithChain({ providers: ['ollama'], ollamaModel: 'm', ollamaNumThread: 4, fetchImpl: impl }, request);
   const body = calls[0].body;
   assert.equal(body.keep_alive, '24h');
-  assert.equal(body.options.num_ctx, 4096);
+  assert.equal(body.options.num_ctx, 2048);
   assert.equal(body.options.num_thread, 4);
   assert.equal(body.options.num_predict, 3072);
   const custom = mockFetch([[/api\/chat/, { respond: () => ollamaOk('ok') }]]);

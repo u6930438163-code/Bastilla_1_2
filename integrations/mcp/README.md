@@ -1,6 +1,6 @@
 # BastillaOS MCP bridge (local Ollama)
 
-This optional bridge exposes a **read-only** subset of the existing BastillaOS API as MCP tools. It makes no OpenAI/Gemini API calls and does not alter the main application.
+This optional bridge exposes a **read-only** subset of the existing BastillaOS API as MCP tools. It makes no hosted model API calls and does not alter the main application.
 
 ## Start
 
@@ -25,7 +25,6 @@ By default the MCP endpoint is `http://127.0.0.1:8000/mcp` and the BastillaOS AP
 
 - `ollama_status`: GET /api/ollama/models; reports provider reachability independently of MCP transport state
 - `agents_status`: GET /api/agents/background/status
-- `vm_status`: reads VM configuration/runtime status
 - `agent_command`: optional limited diagnostics through POST /api/triad/command; disabled by default
 
 No shell access, arbitrary commands, file writes, or model cloud API keys are required.
