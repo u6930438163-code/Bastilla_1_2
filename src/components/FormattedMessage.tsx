@@ -565,7 +565,7 @@ const BlockMath: React.FC<{ math: string }> = ({ math }) => {
           WZÓR MATEMATYCZNY (LATEX)
         </span>
         <div className="flex items-center gap-2">
-        {code.split("\\n").length > 12 && <button type="button" onClick={() => setExpanded(v => !v)} className="rounded-md border border-slate-600 px-2 py-1 text-slate-200 hover:bg-slate-700">{expanded ? "Zwiń" : "Rozwiń"}</button>}
+        {code.split("\n").length > 12 && <button type="button" onClick={() => setExpanded(v => !v)} className="rounded-md border border-slate-600 px-2 py-1 text-slate-200 hover:bg-slate-700">{expanded ? "Zwiń" : "Rozwiń"}</button>}
         <button
           onClick={handleCopy}
           className="flex items-center gap-1 px-2 py-0.5 rounded bg-slate-900 hover:bg-slate-800 text-slate-300 border border-slate-800 transition cursor-pointer"
@@ -621,18 +621,23 @@ const CodeBlock: React.FC<{ language: string; code: string }> = ({ language, cod
         <div className="flex items-center gap-1.5">
           <Terminal className="w-3 h-3 text-cyan-400" />
           <span className="font-semibold text-cyan-100">{language || 'Kod / tekst'}</span>
-          <span className="text-[10px] text-slate-400">{code.split("\\n").length} linii</span>
+          <span className="text-[10px] text-slate-400">{code.split("\n").length} linii</span>
         </div>
-        <button
-          onClick={handleCopy}
-          className="flex items-center gap-1 px-1.5 py-0.5 rounded hover:bg-slate-800 text-slate-400 hover:text-slate-200 transition cursor-pointer"
-        >
-          {copied ? <Check className="w-3 h-3 text-emerald-400" /> : <Copy className="w-3 h-3" />}
-          <span>{copied ? 'Skopiowano' : 'Kopiuj'}</span>
-        </button>
+        <div className="flex items-center gap-2">
+          {code.split('\n').length > 12 && (
+            <button type="button" onClick={() => setExpanded(value => !value)}
+              className="rounded-md border border-slate-600 px-2 py-1 text-slate-200 hover:bg-slate-700">
+              {expanded ? 'Zwiń' : 'Rozwiń'}
+            </button>
+          )}
+          <button type="button" onClick={handleCopy}
+            className="flex items-center gap-1 rounded-md border border-slate-600 px-2 py-1 text-slate-200 hover:bg-slate-700">
+            {copied ? <Check className="w-3 h-3 text-emerald-400" /> : <Copy className="w-3 h-3" />}
+            <span>{copied ? 'Skopiowano' : 'Kopiuj'}</span>
+          </button>
         </div>
       </div>
-      <pre className={`p-3 sm:p-4 max-w-full overflow-x-auto overscroll-x-contain text-slate-100 leading-relaxed text-[12px] sm:text-[13px] font-mono whitespace-pre ${!expanded && code.split("\\n").length > 12 ? "max-h-72" : ""}`} tabIndex={0}>
+      <pre className={`p-3 sm:p-4 max-w-full overflow-x-auto overscroll-x-contain text-slate-100 leading-relaxed text-[12px] sm:text-[13px] font-mono whitespace-pre ${!expanded && code.split("\n").length > 12 ? "max-h-72" : ""}`} tabIndex={0}>
         <code>{code}</code>
       </pre>
       <div className="px-3 py-1.5 border-t border-slate-800 text-[10px] text-slate-500">Kod z wiadomości agenta · nie został wykonany</div>
