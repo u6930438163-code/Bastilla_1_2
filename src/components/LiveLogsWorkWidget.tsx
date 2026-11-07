@@ -69,7 +69,11 @@ export function LiveLogsWorkWidget({
         if (response.status === 401 || response.status === 403 || response.status === 503) {
           if (!disposed) {
             setStatus('locked');
-            setError('Wymagana aktywna sesja operatora Bastilla LIVE. Zaloguj się w panelu menedżera zadań.');
+            setSnapshot(null);
+            setLastUpdated('');
+            setError(response.status === 503
+              ? 'Usługa logów jest niedostępna (HTTP 503). Sprawdź backend i konfigurację serwera.'
+              : 'Brak autoryzacji do odczytu logów (HTTP ' + response.status + '). Sprawdź sesję aplikacji i uprawnienia API.');
           }
           return;
         }
@@ -119,7 +123,7 @@ export function LiveLogsWorkWidget({
       <FileText size={16} className="text-cyan-300"/>
       <strong className="flex-1 text-sm">Logi serwera · LIVE</strong>
       <span role="status" className={'text-xs ' + (status === 'ready' && enabled ? 'text-emerald-300' : 'text-amber-300')}>
-        {!enabled ? 'Wstrzymano' : status === 'ready' ? 'Połączono' : status === 'locked' ? 'Wymagane logowanie' : status === 'error' ? 'Błąd połączenia' : 'Łączenie…'}
+        {!enabled ? 'Wstrzymano' : status === 'ready' ? 'Połączono' : status === 'locked' ? 'Brak dostępu do API' : status === 'error' ? 'Błąd połączenia' : 'Łączenie…'}
       </span>
     </header>
     <div className="flex flex-wrap gap-2">
@@ -149,7 +153,7 @@ export function LiveLogsWorkWidget({
       value={search} onChange={e => setSearch(e.target.value)} maxLength={120}
       className="w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-xs text-slate-100"/>
     <div className="max-h-96 space-y-2 overflow-y-auto" aria-live="off">
-      {!snapshot && <p className="p-3 text-xs text-slate-400">Brak potwierdzonych logów. Wymagana sesja operatora.</p>}
+      {!snapshot && <p className="p-3 text-xs text-slate-400">Brak potwierdzonych logów. Sprawdź połączenie i uprawnienia API.</p>}
       {snapshot && entries.length === 0 && <p className="p-3 text-xs text-slate-400">Brak wpisów pasujących do filtra.</p>}
       {entries.map((log, index) => {
         const key = log.id + '-' + index;
