@@ -202,7 +202,7 @@ function RichCard({ raw, onPrompt, onPreparePrompt, onOpenTerminal }: { raw: str
  */
 export function WorkChatMessage({ content, onPrompt, onPreparePrompt, onOpenTerminal }: WorkChatMessageProps) {
   const segments: React.ReactNode[] = [];
-  const regex = /```bastilla-ui\s*\n([\s\S]*?)```/gi;
+  const regex = /```[ \t]*(?:bastilla-ui|bastilla_ui)[ \t]*(?:\r?\n|[ \t]+)([\s\S]*?)```/gi;
   let last = 0, match: RegExpExecArray | null, i = 0;
   while ((match = regex.exec(content)) !== null) {
     if (match.index > last) segments.push(<FormattedMessage key={'text-' + i} content={content.slice(last, match.index)}/>);
